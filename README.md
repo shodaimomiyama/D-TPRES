@@ -21,17 +21,17 @@ The system enables data owners to encrypt and store data on Arweave while allowi
 
 ## Key Features
 
-### = Threshold Proxy Re-Encryption (TPRE)
+### Threshold Proxy Re-Encryption (TPRE)
 - Uses Umbral PRE library for cryptographic operations
 - k-of-n distributed secret sharing using Shamir's Secret Sharing
 - No single point of failure for key management
 
-### < Fully Decentralized
+### Fully Decentralized
 - **Permissionless**: EVM smart contracts define access conditions deterministically
 - **Stateless**: All processes are ephemeral and can be recreated
 - **Trustless**: Consensus unified across storage and access control layers
 
-### = Multi-Role WebAssembly Architecture
+### Multi-Role WebAssembly Architecture
 Single Rust codebase compiles to WebAssembly and runs on AO with different roles:
 - **Owner-Process (P<)**: Manages secret key shares and re-encryption key generation
 - **Holder-Process (H|)**: Stores key fragments and performs re-encryption  
