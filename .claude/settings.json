@@ -4,7 +4,7 @@
       "Bash(make lint)",
       "Bash(make test)",
       "Bash(make fmt)",
-      "Bash(git:*)",
+      "Bash(git:*)"
     ],
     "deny": []
   }
