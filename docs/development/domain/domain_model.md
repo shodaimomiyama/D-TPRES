@@ -16,10 +16,19 @@ D-TPRES（Deterministic Threshold Proxy Re-Encryption System）のドメイン�
 
 ### 適用範囲
 
-- **Arweave**: 不変ストレージ上での暗号データ管理
-- **AO Network**: WebAssembly分散実行環境でのプロセス管理
+- **Arweave**: 不変ストレージをKVSとして使用した暗号データ管理
+- **AO Network**: WebAssembly分散実行環境での独立プロセス管理
 - **EVM Smart Contracts**: 決定論的アクセス制御検証
 - **Browser**: クライアントサイド暗号化/復号化
+
+### データストレージアーキテクチャ
+
+D-TPRESは**Key-Value Store (KVS)中心設計**を採用します：
+
+- **プライマリキー**: Arweave Transaction ID (tx_id)
+- **データアクセス**: tx_idベースの直接アクセス
+- **リレーション管理**: アプリケーションレベルでの参照整合性
+- **スケーラビリティ**: 各AOプロセスが独立してArweaveにアクセス
 
 ### 主要な制約条件
 
@@ -30,6 +39,7 @@ D-TPRES（Deterministic Threshold Proxy Re-Encryption System）のドメイン�
 
 ### 設計方針
 
+
 1. **型安全性**: Rustの所有権システムと型システムを最大活用
 2. **ゼロコスト抽象化**: 実行時オーバーヘッドの最小化
 3. **暗号学的正当性**: 形式的検証可能な暗号プロトコル準拠
@@ -37,12 +47,17 @@ D-TPRES（Deterministic Threshold Proxy Re-Encryption System）のドメイン�
 
 ---
 
-## 2. エンティティ定義
+## 2. ドメインオブジェクト定義
 
-### EncryptedDataShare
+### 2.1 エンティティ (Entity)
+
+エンティティは**一意の識別子**を持ち、**ライフサイクル**を通じて**同一性**が保たれるオブジェクトです。属性が変更されても同じエンティティとして認識されます。
+
+#### EncryptedDataShare (Entity)
 
 ```yaml
 description: "Shamir Secret Sharingによる暗号化データの分散シェア"
+entity_rationale: "share_idによって一意に識別され、Arweave永続化やプロセス割り当てなどライフサイクルを持つ"
 attributes:
   - name: "share_id"
     type: "ShareId (UUID)"
@@ -90,10 +105,28 @@ relationships:
     description: "シェアは複数のプロセスに割り当て可能"
 ```
 
-### ReEncryptionCapsule
+#### EncryptedDataShare テーブル表現
+
+| 属性名 | 型 | 必須 | 説明 | 制約 |
+|--------|----|----|------|------|
+| share_id | ShareId (UUID) | ✓ | シェアの一意識別子 | UUID v4, グローバル一意性 |
+| data_id | DataId (UUID) | ✓ | 元データへの参照 | 外部キー制約 |
+| threshold_index | NonZeroU8 | ✓ | Shamirスキームにおけるインデックス (1-255) | 1 ≤ index ≤ n, 一意性制約 |
+| encrypted_fragment | SecretVec<u8> | ✓ | 暗号化された秘密断片 | 非空、zeroize対象 |
+| owner_public_key | PublicKey (X25519) | ✓ | データ所有者の公開鍵 | 暗号学的妥当性 |
+| created_at | SystemTime | ✓ | 作成タイムスタンプ | 単調増加 |
+| arweave_tx_id | Option<TxId> | - | Arweave永続化トランザクションID | 一度設定後は不変 |
+
+**関係性:**
+- **belongs_to** OriginalData (N:1) - 複数シェアが1つの元データに属する
+- **assigned_to** ProcessActor (N:M) - シェアは複数のプロセスに割り当て可能
+
+
+#### ReEncryptionCapsule (Entity)
 
 ```yaml
 description: "Umbral Proxy Re-Encryptionの暗号化カプセル"
+entity_rationale: "capsule_idによって一意に識別され、Original→ReEncryptedへの状態遷移ライフサイクルを持つ"
 attributes:
   - name: "capsule_id"
     type: "CapsuleId (UUID)"
@@ -132,10 +165,25 @@ relationships:
     description: "1つのカプセルから複数のcFragmentが派生"
 ```
 
-### ProcessActor
+#### ReEncryptionCapsule テーブル表現
+
+| 属性名 | 型 | 必須 | 説明 | 制約 |
+|--------|----|----|------|------|
+| capsule_id | CapsuleId (UUID) | ✓ | カプセルの一意識別子 | UUID v4 |
+| data_id | DataId | ✓ | 関連するデータID | 外部キー制約 |
+| capsule_bytes | Vec<u8> | ✓ | Umbral Capsuleのバイナリ表現 | Umbral仕様準拠 |
+| public_key | PublicKey | ✓ | 暗号化対象の公開鍵 | X25519楕円曲線 |
+| validation_hash | Blake3Hash | ✓ | 改竄検証用ハッシュ | Blake3アルゴリズム |
+| phase | CapsulePhase | ✓ | カプセルの処理段階 | 列挙型制約 |
+
+**関係性:**
+- **derives_from** EncryptedDataShare (1:N) - 1つのカプセルから複数のcFragmentが派生
+
+#### ProcessActor (Entity)
 
 ```yaml
 description: "AO分散実行環境における実行プロセス"
+entity_rationale: "process_idによって一意に識別され、オンライン状態変更や信頼度スコア更新などライフサイクルを持つ"
 attributes:
   - name: "process_id"
     type: "ProcessId (String)"
@@ -183,10 +231,27 @@ relationships:
     description: "プロセスは複数の再暗号化セッションに参加"
 ```
 
-### AccessProof
+#### ProcessActor テーブル表現
+
+| 属性名 | 型 | 必須 | 説明 | 制約 |
+|--------|----|----|------|------|
+| process_id | ProcessId (String) | ✓ | AOプロセスの一意識別子 | AO仕様準拠のID形式 |
+| role | ActorRole | ✓ | プロセスの役割 | Owner/Holder/Requesterのいずれか |
+| wasm_module_tx | TxId | ✓ | デプロイ済みWasmモジュールのトランザクションID | Arweave TxID形式 |
+| online_status | OnlineStatus | ✓ | プロセスのオンライン状態 | 列挙型制約 |
+| stake_amount | Option<u64> | - | ステーキング量（Phase2実装予定） | 非負整数 |
+| reputation_score | f32 | ✓ | 信頼度スコア | 0.0 ≤ score ≤ 1.0 |
+| last_heartbeat | SystemTime | ✓ | 最終生存確認時刻 | 単調増加 |
+
+**関係性:**
+- **manages** EncryptedDataShare (M:N) - Holderプロセスは複数のシェアを管理
+- **participates_in** ReEncryptionSession (M:N) - プロセスは複数の再暗号化セッションに参加
+
+#### AccessProof (Entity)
 
 ```yaml
 description: "EVM検証結果とオンチェーン証明"
+entity_rationale: "proof_idによって一意に識別され、有効期限管理やアクセス要求との関連付けライフサイクルを持つ"
 attributes:
   - name: "proof_id"
     type: "ProofId (UUID)"
@@ -229,6 +294,147 @@ relationships:
     cardinality: "1:1"
     description: "証明は1つのアクセス要求を認可"
 ```
+
+#### AccessProof テーブル表現
+
+| 属性名 | 型 | 必須 | 説明 | 制約 |
+|--------|----|----|------|------|
+| proof_id | ProofId (UUID) | ✓ | 証明の一意識別子 | UUID v4 |
+| requester_public_key | PublicKey | ✓ | アクセス要求者の公開鍵 | X25519楕円曲線 |
+| evm_block_height | u64 | ✓ | EVM検証ブロック高 | 非負整数 |
+| evm_transaction_hash | H256 | ✓ | EVM検証トランザクションハッシュ | 32バイトハッシュ |
+| verification_event_data | Vec<u8> | ✓ | 検証イベントのRAWデータ | 非空 |
+| elciao_attestation | Signature | ✓ | Elciaoによるアテステーション署名 | Ed25519署名 |
+| validity_period | TimePeriod | ✓ | 証明の有効期間 | 開始 < 終了 |
+
+**関係性:**
+- **authorizes** AccessRequest (1:1) - 証明は1つのアクセス要求を認可
+
+### 2.2 値オブジェクト (Value Object)
+
+値オブジェクトは**識別子を持たず**、**値の等価性**によって比較されるオブジェクトです。不変 (immutable) であり、属性の組み合わせが同じであれば同じオブジェクトとして扱われます。
+
+#### ShareId (Value Object)
+
+```yaml
+description: "暗号化データシェアの一意識別子"
+value_object_rationale: "UUID値そのものに意味があり、同じUUID値なら同じShareIdとして扱われる"
+attributes:
+  - name: "uuid"
+    type: "Uuid"
+    required: true
+    description: "UUID v4形式の識別子"
+    constraints: "RFC 4122準拠、グローバル一意性"
+invariants:
+  - "UUID形式の妥当性検証"
+  - "非null制約"
+```
+
+#### ShareId テーブル表現
+
+| 属性名 | 型 | 必須 | 説明 | 制約 |
+|--------|----|----|------|------|
+| uuid | Uuid | ✓ | UUID v4形式の識別子 | RFC 4122準拠、グローバル一意性 |
+
+#### PublicKey (Value Object)
+
+```yaml
+description: "X25519楕円曲線公開鍵"
+value_object_rationale: "32バイトの鍵データが同じであれば同じ公開鍵として扱われる"
+attributes:
+  - name: "key_bytes"
+    type: "[u8; 32]"
+    required: true
+    description: "X25519公開鍵のバイト表現"
+    constraints: "32バイト固定長、楕円曲線上の有効な点"
+invariants:
+  - "楕円曲線上の点の妥当性検証"
+  - "32バイト長制約"
+```
+
+#### PublicKey テーブル表現
+
+| 属性名 | 型 | 必須 | 説明 | 制約 |
+|--------|----|----|------|------|
+| key_bytes | [u8; 32] | ✓ | X25519公開鍵のバイト表現 | 32バイト固定長、楕円曲線上の有効な点 |
+
+#### Blake3Hash (Value Object)
+
+```yaml
+description: "Blake3ハッシュアルゴリズムによるハッシュ値"
+value_object_rationale: "32バイトのハッシュ値が同じであれば同じハッシュとして扱われる"
+attributes:
+  - name: "hash_bytes"
+    type: "[u8; 32]"
+    required: true
+    description: "Blake3ハッシュのバイト表現"
+    constraints: "32バイト固定長"
+invariants:
+  - "32バイト長制約"
+  - "非null制約"
+```
+
+#### Blake3Hash テーブル表現
+
+| 属性名 | 型 | 必須 | 説明 | 制約 |
+|--------|----|----|------|------|
+| hash_bytes | [u8; 32] | ✓ | Blake3ハッシュのバイト表現 | 32バイト固定長 |
+
+#### TimePeriod (Value Object)
+
+```yaml
+description: "時間範囲を表現する値オブジェクト"
+value_object_rationale: "開始時刻と終了時刻の組み合わせが同じであれば同じ期間として扱われる"
+attributes:
+  - name: "start"
+    type: "SystemTime"
+    required: true
+    description: "期間開始時刻"
+    constraints: "UTC時刻"
+  - name: "end"
+    type: "SystemTime"
+    required: true
+    description: "期間終了時刻"
+    constraints: "UTC時刻、start < end"
+invariants:
+  - "開始時刻 < 終了時刻"
+  - "両方の時刻が過去または未来の有効範囲内"
+```
+
+#### TimePeriod テーブル表現
+
+| 属性名 | 型 | 必須 | 説明 | 制約 |
+|--------|----|----|------|------|
+| start | SystemTime | ✓ | 期間開始時刻 | UTC時刻 |
+| end | SystemTime | ✓ | 期間終了時刻 | UTC時刻、start < end |
+
+#### Signature (Value Object)
+
+```yaml
+description: "Ed25519デジタル署名"
+value_object_rationale: "64バイトの署名データが同じであれば同じ署名として扱われる"
+attributes:
+  - name: "signature_bytes"
+    type: "[u8; 64]"
+    required: true
+    description: "Ed25519署名のバイト表現"
+    constraints: "64バイト固定長"
+  - name: "public_key"
+    type: "PublicKey"
+    required: true
+    description: "署名に使用された公開鍵"
+    constraints: "Ed25519公開鍵"
+invariants:
+  - "署名の暗号学的妥当性検証"
+  - "64バイト長制約"
+```
+
+#### Signature テーブル表現
+
+| 属性名 | 型 | 必須 | 説明 | 制約 |
+|--------|----|----|------|------|
+| signature_bytes | [u8; 64] | ✓ | Ed25519署名のバイト表現 | 64バイト固定長 |
+| public_key | PublicKey | ✓ | 署名に使用された公開鍵 | Ed25519公開鍵 |
 
 ---
 
@@ -328,12 +534,15 @@ validation: "状態遷移時に実行"
 
 ---
 
-## 4. 列挙型定義
+## 4. 列挙型定義 (Enum Value Objects)
 
-### ActorRole
+列挙型は特殊な値オブジェクトとして扱われ、有限の値セットを表現します。同じ列挙値であれば同じオブジェクトとして扱われます。
+
+#### ActorRole (Enum Value Object)
 
 ```yaml
 description: "プロセスアクターの役割定義"
+value_object_rationale: "役割名が同じであれば同じ役割として扱われ、役割による振る舞いが決定される"
 values:
   - value: "Owner"
     description: "データ所有者プロセス、秘密鍵管理と再暗号化鍵生成"
@@ -346,10 +555,19 @@ values:
     constraints: "アクセス権限要求者に対応"
 ```
 
-### OnlineStatus
+#### ActorRole 値一覧
+
+| 値 | 説明 | 制約 |
+|---|-----|------|
+| Owner | データ所有者プロセス、秘密鍵管理と再暗号化鍵生成 | 1プロセス/データ |
+| Holder | kFragment保持者、再暗号化実行 | n個プロセス、k個以上がオンライン必須 |
+| Requester | アクセス要求プロセス、cFragment収集 | アクセス権限要求者に対応 |
+
+#### OnlineStatus (Enum Value Object)
 
 ```yaml
 description: "プロセスのオンライン状態"
+value_object_rationale: "同じ状態名であれば同じオンライン状態として扱われ、状態による可用性判定が決定される"
 values:
   - value: "Online"
     description: "正常動作中、ハートビート正常"
@@ -362,10 +580,19 @@ values:
     constraints: "エラー率 > 5%"
 ```
 
-### CapsulePhase
+#### OnlineStatus 値一覧
+
+| 値 | 説明 | 制約 |
+|---|-----|------|
+| Online | 正常動作中、ハートビート正常 | 最終ハートビート < 5分 |
+| Offline | 停止状態、応答なし | 最終ハートビート > 15分 |
+| Degraded | 動作中だが性能低下 | エラー率 > 5% |
+
+#### CapsulePhase (Enum Value Object)
 
 ```yaml
 description: "再暗号化カプセルの処理段階"
+value_object_rationale: "同じフェーズ名であれば同じ処理段階として扱われ、処理可能な操作が決定される"
 values:
   - value: "Original"
     description: "元の暗号化状態"
@@ -375,10 +602,18 @@ values:
     constraints: "kFragment適用後"
 ```
 
-### TPREPhase
+#### CapsulePhase 値一覧
+
+| 値 | 説明 | 制約 |
+|---|-----|------|
+| Original | 元の暗号化状態 | 初期状態 |
+| ReEncrypted | 再暗号化済み状態 | kFragment適用後 |
+
+#### TPREPhase (Enum Value Object)
 
 ```yaml
 description: "Threshold Proxy Re-Encryptionの実行フェーズ"
+value_object_rationale: "同じフェーズ名であれば同じ実行段階として扱われ、フェーズ遷移ルールが決定される"
 values:
   - value: "KeyGeneration"
     description: "鍵生成フェーズ（Phase 0）"
@@ -397,9 +632,49 @@ values:
     constraints: "k個以上のcFragment必要"
 ```
 
+#### TPREPhase 値一覧
+
+| 値 | 説明 | 制約 |
+|---|-----|------|
+| KeyGeneration | 鍵生成フェーズ（Phase 0） | システム初期化時 |
+| SecretSharing | 秘密分散フェーズ（Phase 1） | Shamirスキーム適用 |
+| AccessVerification | アクセス検証フェーズ（Phase 2） | EVM検証必須 |
+| ReEncryption | 再暗号化フェーズ（Phase 3-4） | k-of-n Holder参加必須 |
+| Reconstruction | 秘密復元フェーズ（Phase 5） | k個以上のcFragment必要 |
+
 ---
 
-## 5. ライフサイクル管理
+## 5. ドメインオブジェクト分類まとめ
+
+### 5.1 設計判断基準
+
+| 判断基準 | Entity | Value Object |
+|----------|--------|-------------|
+| **識別子** | 一意のIDを持つ | IDを持たない |
+| **等価性** | IDによる同一性 | 値による等価性 |
+| **可変性** | 可変（ライフサイクル） | 不変 |
+| **永続化** | IDで追跡 | 値で再構築 |
+| **ビジネス意味** | 独立したビジネス概念 | 概念の属性や制約 |
+
+### 5.2 分類結果
+
+#### エンティティ
+- **EncryptedDataShare**: シェアのライフサイクル管理
+- **ReEncryptionCapsule**: 暗号化状態の遷移管理
+- **ProcessActor**: プロセスの状態変更管理
+- **AccessProof**: 証明の有効期限管理
+
+#### 値オブジェクト
+- **ShareId, CapsuleId, ProcessId, ProofId**: 識別子値
+- **PublicKey**: 暗号学的鍵値
+- **Blake3Hash**: ハッシュ値
+- **TimePeriod**: 時間範囲値
+- **Signature**: 署名値
+- **ActorRole, OnlineStatus, CapsulePhase, TPREPhase**: 列挙値
+
+---
+
+## 6. ライフサイクル管理
 
 ```yaml
 creation:
@@ -481,7 +756,7 @@ deletion:
 
 ---
 
-## 6. データ整合性ルール
+## 7. データ整合性ルール
 
 ```yaml
 constraints:
@@ -563,7 +838,7 @@ constraints:
 
 ---
 
-## 7. 拡張性考慮事項
+## 8. 拡張性考慮事項
 
 ```yaml
 future_considerations:
@@ -660,7 +935,7 @@ future_considerations:
 
 ---
 
-## 8. 用語集
+## 9. 用語集
 
 | 用語 | 定義 |
 |------|------|
@@ -674,15 +949,15 @@ future_considerations:
 
 ---
 
-## 9. 変更履歴
+## 10. 変更履歴
 
 | バージョン | 日付 | 変更内容 | 担当者 |
 |-----------|------|----------|--------|
-| 1.0.0 | 2025-06-01 | 初版作成、全セクション定義 | D-TPRES Development Team |
+| 1.0.0 | 2025-06-01 | 初版作成、全セクション定義 | Shodai Momiyama |
 
 ---
 
-## 10. 参考文献
+## 11. 参考文献
 
 - [Umbral Proxy Re-Encryption Specification](https://github.com/nucypher/umbral-pre)
 - [Shamir's Secret Sharing](https://en.wikipedia.org/wiki/Shamir%27s_Secret_Sharing)
