@@ -99,6 +99,48 @@ graph TB
   - 不変ストレージへの対応
   - エラーハンドリングとリトライ
 
+### 2.3 AOステートレス実行モデルへの対応
+
+AOプロセスは以下の特性を持つ実行環境で動作します：
+
+#### 実行環境の特性
+- **ステートレス実行**: 各メッセージは異なるCU（Compute Unit）で処理される可能性があり、メモリ状態は保持されない
+- **メッセージドリブン**: すべての処理はメッセージハンドラーとして実装され、メッセージ受信がトリガーとなる
+- **状態の非永続性**: メモリ上のEntityインスタンスは次回メッセージ処理時には存在しない
+
+#### 設計上の対応
+
+1. **ProcessEntityの管理**
+   - 各メッセージ処理の開始時にArweaveから復元
+   - プロセスのグローバル状態として扱い、メッセージ処理中は参照可能
+   - 変更は即座にArweaveに永続化
+
+2. **他Entityのライフサイクル**
+   - 必要に応じてオンデマンドでロード（Lazy Loading）
+   - メッセージコンテキストから必要なEntity IDを抽出
+   - 処理完了後は明示的な永続化
+
+3. **状態管理戦略**
+   ```rust
+   // メッセージハンドラーでの典型的なパターン
+   async fn handle_message(msg: Message) -> Result<Response> {
+       // 1. ProcessEntityを復元
+       let process = repository.find_process_by_id(ao.id).await?;
+       
+       // 2. メッセージから必要なEntityをロード
+       let entity = repository.find_by_id(msg.entity_id).await?;
+       
+       // 3. ビジネスロジック実行
+       let updated_entity = business_logic(process, entity)?;
+       
+       // 4. 変更を即座に永続化
+       repository.update(updated_entity).await?;
+       
+       // 5. レスポンス返却
+       Ok(response)
+   }
+   ```
+
 ## 3. PRD準拠のワークフロー
 
 ### 3.1 Phase 0-5 概要
@@ -170,6 +212,61 @@ AOプロセス間の通信はメッセージパッシングで実現：
 - イベントドリブンアーキテクチャ
 - 状態の一貫性保証
 
+### 4.3 メッセージ処理ライフサイクル
+
+AOのステートレス環境でのメッセージ処理とEntity/Repository操作の統合：
+
+```mermaid
+sequenceDiagram
+    participant M as Message
+    participant H as Handler
+    participant R as Repository
+    participant A as Arweave
+    participant E as Entity
+    
+    Note over M,E: メッセージ受信フェーズ
+    M->>H: receive message
+    H->>H: extract context (entity_id, action)
+    
+    Note over M,E: Entity復元フェーズ
+    H->>R: load ProcessEntity(ao.id)
+    R->>A: fetch from storage
+    A-->>R: serialized data
+    R->>E: deserialize
+    R-->>H: ProcessEntity instance
+    
+    Note over M,E: ビジネスロジック実行フェーズ
+    H->>R: load related entities
+    R->>A: fetch by IDs
+    A-->>R: entity data
+    R-->>H: Entity instances
+    H->>H: execute business logic
+    
+    Note over M,E: 永続化フェーズ
+    H->>R: save all changes
+    R->>E: serialize entities
+    R->>A: persist to storage
+    A-->>R: tx confirmation
+    
+    Note over M,E: レスポンスフェーズ
+    H-->>M: send response
+    Note over H: Memory cleared (next message may run on different CU)
+```
+
+#### 重要な考慮事項
+
+1. **トランザクション境界**
+   - 1メッセージ処理 = 1トランザクション
+   - 部分的な永続化は避け、全ての変更を一括で保存
+
+2. **エラーハンドリング**
+   - Entity復元失敗時の適切なエラーレスポンス
+   - 永続化失敗時のロールバック戦略
+
+3. **パフォーマンス最適化**
+   - 必要最小限のEntityのみロード
+   - バッチ読み込み・書き込みの活用
+
 ## 5. 普遍的プロセス設計
 
 ### 5.1 マルチロール対応
@@ -226,6 +323,60 @@ pub struct VersionedEntity<T> {
     pub created_at: u64,
 }
 ```
+
+### 6.3 ステートレス環境での永続化パターン
+
+#### ProcessEntityの特別な扱い
+
+ProcessEntityはプロセスの「グローバル状態」として特別に管理：
+
+```rust
+// メッセージハンドラーの開始時に必ず実行
+async fn initialize_handler_context() -> Result<HandlerContext> {
+    let process_repo = ProcessEntityRepository::new();
+    let process = process_repo.find_by_id(&ao.id)
+        .await?
+        .ok_or(Error::ProcessNotFound)?;
+    
+    Ok(HandlerContext {
+        process,
+        repositories: RepositoryContainer::new(),
+    })
+}
+```
+
+#### オンデマンドEntity管理
+
+他のEntityは必要に応じてロード：
+
+```rust
+// 例: ShareEntityの遅延ロード
+async fn handle_access_request(ctx: &HandlerContext, msg: Message) -> Result<()> {
+    // メッセージから必要な情報を抽出
+    let secret_id = msg.tags.get("Secret-Id")?;
+    
+    // 必要なShareEntityのみロード
+    let shares = ctx.repositories.share_repo
+        .find_by_secret_id(secret_id)
+        .await?;
+    
+    // ビジネスロジック実行
+    // ...
+    
+    // 変更があれば即座に永続化
+    for share in modified_shares {
+        ctx.repositories.share_repo.update(&share).await?;
+    }
+    
+    Ok(())
+}
+```
+
+#### 永続化の原則
+
+1. **Write-Through**: キャッシュを介さず直接Arweaveに書き込み
+2. **Immediate Persistence**: 状態変更は即座に永続化
+3. **Atomic Operations**: 関連する変更は一括で永続化
 
 ## 7. 設計原則
 
@@ -307,6 +458,82 @@ pub trait SomeEntityRepository {
 }
 ```
 
+### 8.3 AOメッセージハンドラーでの利用パターン
+
+#### 基本的なハンドラー構造
+
+```rust
+use ao_sdk::{Message, Response, ao};
+
+// メッセージハンドラーの登録
+pub fn register_handlers() {
+    // Phase 1: 秘密分割ハンドラー
+    Handlers::add("split-secret", 
+        Handlers::utils::hasMatchingTag("Action", "Split-Secret"),
+        handle_split_secret
+    );
+    
+    // Phase 2: アクセス要求ハンドラー
+    Handlers::add("access-request",
+        Handlers::utils::hasMatchingTag("Action", "Access-Request"),
+        handle_access_request
+    );
+}
+
+// ハンドラー実装例
+async fn handle_split_secret(msg: Message) -> Response {
+    // 1. コンテキスト初期化（ProcessEntity復元）
+    let ctx = match initialize_context().await {
+        Ok(ctx) => ctx,
+        Err(e) => return error_response(e),
+    };
+    
+    // 2. 入力検証
+    let secret_data = match extract_secret_data(&msg) {
+        Ok(data) => data,
+        Err(e) => return error_response(e),
+    };
+    
+    // 3. ビジネスロジック実行
+    let result = match split_secret_service(&ctx, secret_data).await {
+        Ok(result) => result,
+        Err(e) => return error_response(e),
+    };
+    
+    // 4. 結果の永続化（Service内で実行済み）
+    
+    // 5. レスポンス生成
+    success_response(result)
+}
+```
+
+#### Repository利用のベストプラクティス
+
+1. **Repository生成はハンドラー開始時に一度だけ**
+   ```rust
+   let repo_container = RepositoryContainer::new();
+   ```
+
+2. **必要なEntityのみロード**
+   ```rust
+   // ❌ 非効率
+   let all_shares = share_repo.find_all().await?;
+   
+   // ✅ 効率的
+   let shares = share_repo.find_by_secret_id(secret_id).await?;
+   ```
+
+3. **トランザクション的な更新**
+   ```rust
+   // 関連するEntityをまとめて更新
+   let mut updates = Vec::new();
+   updates.push(share_repo.update(&share));
+   updates.push(capsule_repo.update(&capsule));
+   
+   // 全て成功するか、全て失敗する
+   futures::try_join_all(updates).await?;
+   ```
+
 ## 9. まとめ
 
 D-TPRES domain層は以下の特徴を持つ設計となっています：
@@ -316,8 +543,18 @@ D-TPRES domain層は以下の特徴を持つ設計となっています：
 3. **AO Native**: AOプロセスの特性を活かした設計
 4. **普遍的設計**: 各プロセスがマルチロール対応
 5. **Arweave最適化**: 不変ストレージの特性を活用
+6. **ステートレス対応**: AOの実行モデルに適合した状態管理
 
 この設計により、保守性、拡張性、テスタビリティを兼ね備えた堅牢なシステムを実現します。
+
+### 重要な設計指針
+
+- **Entity**: データ保持に特化し、ビジネスロジックを含まない
+- **Repository**: CRUD操作とクエリに特化し、永続化の詳細を隠蔽
+- **Handler**: AOメッセージを受信し、Repository経由でEntityを操作
+- **Persistence**: すべての状態変更は即座にArweaveに永続化
+
+これらの指針に従うことで、AOのステートレス実行環境でも一貫性のある状態管理が可能となります。
 
 ---
 
