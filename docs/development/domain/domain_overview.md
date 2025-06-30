@@ -108,15 +108,17 @@ AOプロセスは以下の特性を持つ実行環境で動作します：
 - **メッセージドリブン**: すべての処理はメッセージハンドラーとして実装され、メッセージ受信がトリガーとなる
 - **状態の非永続性**: メモリ上のEntityインスタンスは次回メッセージ処理時には存在しない
 
+> 📘 **詳細な技術仕様**: AOの実行モデルの詳細については[AO Process Model and Stateless Execution](../ao/ao_process_model.md)を参照してください。
+
 #### 設計上の対応
 
 1. **ProcessEntityの管理**
-   - 各メッセージ処理の開始時にArweaveから復元
+   - 各メッセージ処理の開始時にProcessEntityインスタンスを生成し、Arweaveから状態データを読み込む
    - プロセスのグローバル状態として扱い、メッセージ処理中は参照可能
    - 変更は即座にArweaveに永続化
 
 2. **他Entityのライフサイクル**
-   - 必要に応じてオンデマンドでロード（Lazy Loading）
+   - 必要に応じてEntityインスタンスを生成し、オンデマンドで状態データをロード（Lazy Loading）
    - メッセージコンテキストから必要なEntity IDを抽出
    - 処理完了後は明示的な永続化
 
@@ -124,22 +126,112 @@ AOプロセスは以下の特性を持つ実行環境で動作します：
    ```rust
    // メッセージハンドラーでの典型的なパターン
    async fn handle_message(msg: Message) -> Result<Response> {
-       // 1. ProcessEntityを復元
+       // 1. ProcessEntityインスタンスを生成し、状態データを読み込む
        let process = repository.find_process_by_id(ao.id).await?;
        
-       // 2. メッセージから必要なEntityをロード
+       // 2. メッセージから必要なEntityのインスタンスを生成し、データをロード
        let entity = repository.find_by_id(msg.entity_id).await?;
        
        // 3. ビジネスロジック実行
        let updated_entity = business_logic(process, entity)?;
        
-       // 4. 変更を即座に永続化
+       // 4. 変更を即座にArweaveに永続化
        repository.update(updated_entity).await?;
        
        // 5. レスポンス返却
        Ok(response)
    }
    ```
+
+### 2.4 複数秘密管理とEntityロード戦略
+
+AOのステートレス環境で複数の秘密を効率的に管理するための設計戦略：
+
+#### AOの実行モデルの正確な理解
+
+1. **WASMモジュール**: 
+   - Rustプログラム全体が単一のWASMファイルにコンパイルされる
+   - ArweaveにデプロイされたWASMのtx_idをプロセスが参照
+   
+2. **実行時の動作**:
+   - メッセージごとにCUが割り当てられる
+   - CUがWASMモジュールをロードして実行
+   - Entity/Repositoryのインスタンスはコードから生成される
+   - 必要な状態データはRepository経由でArweaveから読み込む
+   
+3. **メモリライフサイクル**:
+   - インスタンス: メッセージ処理ごとに生成・破棄
+   - 状態データ: Arweaveに永続化
+   - コード: WASMとしてArweaveに保存
+
+#### メッセージコンテキストによるEntity特定
+
+1. **メッセージタグによる秘密の識別**
+   ```rust
+   // 全てのメッセージに秘密IDを含める
+   pub struct MessageContext {
+       pub action: String,          // "Split-Secret", "Access-Request" 等
+       pub secret_id: Option<String>,  // 対象となる秘密のID
+       pub entity_ids: Vec<String>,    // 関連するEntity ID群
+   }
+   ```
+
+2. **軽量な秘密インデックス**
+   ```rust
+   // ProcessEntityに軽量なインデックスを保持
+   pub struct SecretIndex {
+       pub secret_id: String,
+       pub status: SecretStatus,
+       pub entity_references: EntityReferences,
+       pub last_updated: u64,
+   }
+   
+   pub struct EntityReferences {
+       pub share_ids: Vec<String>,      // ShareEntity IDs
+       pub capsule_ids: Vec<String>,    // CapsuleEntity IDs
+       pub active_requests: Vec<String>, // AccessRequestEntity IDs
+   }
+   ```
+
+3. **遅延ロード（Lazy Loading）パターン**
+   ```rust
+   async fn load_entities_for_message(
+       ctx: &HandlerContext,
+       msg: &Message,
+   ) -> Result<EntityBundle> {
+       let secret_id = msg.tags.get("Secret-Id")?;
+       let action = msg.tags.get("Action")?;
+       
+       match action.as_str() {
+           "Access-Request" => {
+               // ShareとCapsuleの概要情報のみ必要
+               let index = ctx.process.secret_indices.get(secret_id)?;
+               Ok(EntityBundle::minimal(index))
+           },
+           "Re-Encrypt" => {
+               // 実際のShareとCapsuleデータが必要
+               let shares = load_shares(secret_id).await?;
+               let capsules = load_capsules(secret_id).await?;
+               Ok(EntityBundle::full(shares, capsules))
+           },
+           _ => Ok(EntityBundle::empty())
+       }
+   }
+   ```
+
+#### Entity管理の最適化フロー
+
+```mermaid
+flowchart LR
+    M[Message] --> MC[Message Context Extraction]
+    MC --> SI[Secret Index Lookup]
+    SI --> EL[Entity Loader]
+    EL --> |Minimal Load| ML[Metadata Only]
+    EL --> |Full Load| FL[Complete Entities]
+    ML --> BL[Business Logic]
+    FL --> BL
+    BL --> P[Persist Changes]
+```
 
 ## 3. PRD準拠のワークフロー
 
@@ -228,12 +320,13 @@ sequenceDiagram
     M->>H: receive message
     H->>H: extract context (entity_id, action)
     
-    Note over M,E: Entity復元フェーズ
+    Note over M,E: Entityインスタンス生成と状態復元フェーズ
+    H->>R: create ProcessEntityRepository instance
     H->>R: load ProcessEntity(ao.id)
-    R->>A: fetch from storage
-    A-->>R: serialized data
-    R->>E: deserialize
-    R-->>H: ProcessEntity instance
+    R->>A: fetch state data from storage
+    A-->>R: serialized state data
+    R->>E: create instance & deserialize data
+    R-->>H: ProcessEntity instance with state
     
     Note over M,E: ビジネスロジック実行フェーズ
     H->>R: load related entities
@@ -333,7 +426,10 @@ ProcessEntityはプロセスの「グローバル状態」として特別に管�
 ```rust
 // メッセージハンドラーの開始時に必ず実行
 async fn initialize_handler_context() -> Result<HandlerContext> {
+    // Repositoryインスタンスを生成
     let process_repo = ProcessEntityRepository::new();
+    
+    // ProcessEntityインスタンスを生成し、Arweaveから状態データを読み込む
     let process = process_repo.find_by_id(&ao.id)
         .await?
         .ok_or(Error::ProcessNotFound)?;
@@ -345,9 +441,14 @@ async fn initialize_handler_context() -> Result<HandlerContext> {
 }
 ```
 
+**重要な区別**:
+- **コード（WASM）**: Arweaveに保存され、tx_idで参照される実行可能なバイナリ
+- **インスタンス**: CU上でWASMコードから毎回生成されるオブジェクト
+- **状態データ**: Arweaveに永続化され、Repository経由で読み書きされる実際のデータ
+
 #### オンデマンドEntity管理
 
-他のEntityは必要に応じてロード：
+他のEntityは必要に応じてインスタンスを生成し、状態データをロード：
 
 ```rust
 // 例: ShareEntityの遅延ロード
@@ -355,7 +456,7 @@ async fn handle_access_request(ctx: &HandlerContext, msg: Message) -> Result<()>
     // メッセージから必要な情報を抽出
     let secret_id = msg.tags.get("Secret-Id")?;
     
-    // 必要なShareEntityのみロード
+    // ShareEntityインスタンスを生成し、必要な状態データのみロード
     let shares = ctx.repositories.share_repo
         .find_by_secret_id(secret_id)
         .await?;
@@ -372,11 +473,87 @@ async fn handle_access_request(ctx: &HandlerContext, msg: Message) -> Result<()>
 }
 ```
 
+#### 効率的なEntity管理パターン
+
+1. **Entity Bundle パターン**
+   ```rust
+   // 関連Entityをまとめて管理
+   pub struct EntityBundle {
+       pub shares: Option<Vec<ShareEntity>>,
+       pub capsules: Option<Vec<CapsuleEntity>>,
+       pub requests: Option<Vec<AccessRequestEntity>>,
+       pub loaded_at: u64,
+   }
+   
+   impl EntityBundle {
+       pub fn minimal(index: &SecretIndex) -> Self {
+           // メタデータのみを含む最小限のBundle
+           Self {
+               shares: None,
+               capsules: None,
+               requests: None,
+               loaded_at: current_timestamp(),
+           }
+       }
+       
+       pub fn full(shares: Vec<ShareEntity>, capsules: Vec<CapsuleEntity>) -> Self {
+           // 完全なEntityデータを含むBundle
+           Self {
+               shares: Some(shares),
+               capsules: Some(capsules),
+               requests: None,
+               loaded_at: current_timestamp(),
+           }
+       }
+   }
+   ```
+
+2. **メッセージスコープキャッシュ**
+   ```rust
+   pub struct MessageScopeCache {
+       entities: HashMap<String, Box<dyn Any>>,
+       
+       pub fn get_or_load<T: Entity>(
+           &mut self,
+           id: &str,
+           loader: impl Fn(&str) -> Result<T>
+       ) -> Result<&T> {
+           // メッセージ処理中のみ有効なキャッシュ
+           if !self.entities.contains_key(id) {
+               let entity = loader(id)?;
+               self.entities.insert(id.to_string(), Box::new(entity));
+           }
+           Ok(self.entities.get(id).unwrap().downcast_ref().unwrap())
+       }
+   }
+   ```
+
+3. **バッチロード最適化**
+   ```rust
+   // 関連Entityを一括ロード
+   async fn batch_load_for_secret(
+       repos: &RepositoryContainer,
+       secret_id: &str,
+   ) -> Result<SecretEntities> {
+       let (shares, capsules) = tokio::join!(
+           repos.share_repo.find_by_secret_id(secret_id),
+           repos.capsule_repo.find_by_secret_id(secret_id),
+       );
+       
+       Ok(SecretEntities {
+           shares: shares?,
+           capsules: capsules?,
+       })
+   }
+   ```
+
 #### 永続化の原則
 
 1. **Write-Through**: キャッシュを介さず直接Arweaveに書き込み
 2. **Immediate Persistence**: 状態変更は即座に永続化
 3. **Atomic Operations**: 関連する変更は一括で永続化
+4. **Selective Loading**: 必要なEntityのみをロード
+5. **Batch Operations**: 可能な限りバッチ処理で効率化
 
 ## 7. 設計原則
 
@@ -507,6 +684,61 @@ async fn handle_split_secret(msg: Message) -> Response {
 }
 ```
 
+#### スケーラブルなハンドラー実装
+
+```rust
+// 秘密の数に依存しないO(1)のEntity管理
+async fn handle_message_with_secret_context(msg: Message) -> Response {
+    // 1. 最小限のコンテキスト初期化
+    let process = load_process_entity_minimal().await?;
+    
+    // 2. メッセージから秘密IDを特定
+    let secret_id = extract_secret_id(&msg)?;
+    
+    // 3. 秘密固有のインデックスをロード
+    let secret_index = process.get_secret_index(secret_id)?;
+    
+    // 4. 必要なEntityのみロード
+    let entities = load_required_entities(&secret_index, &msg.action).await?;
+    
+    // 5. ビジネスロジック実行
+    let result = execute_business_logic(entities, msg)?;
+    
+    // 6. 変更の永続化
+    persist_changes(result).await?;
+    
+    Ok(Response::success())
+}
+
+// Entity選択的ロード戦略
+async fn load_required_entities(
+    index: &SecretIndex,
+    action: &str,
+) -> Result<EntityBundle> {
+    match action {
+        "Split-Secret" => {
+            // 新規作成のため既存Entityは不要
+            Ok(EntityBundle::empty())
+        },
+        "Access-Request" => {
+            // 秘密の存在確認のみ必要
+            Ok(EntityBundle::minimal(index))
+        },
+        "Distribute-KFrag" => {
+            // AccessRequestとShareの情報が必要
+            let request = load_access_request(index.active_requests.last()).await?;
+            Ok(EntityBundle::with_request(request))
+        },
+        "Re-Encrypt" => {
+            // 完全なShareとCapsuleデータが必要
+            let (shares, capsules) = batch_load_for_reencryption(index).await?;
+            Ok(EntityBundle::full(shares, capsules))
+        },
+        _ => Ok(EntityBundle::empty())
+    }
+}
+```
+
 #### Repository利用のベストプラクティス
 
 1. **Repository生成はハンドラー開始時に一度だけ**
@@ -534,6 +766,13 @@ async fn handle_split_secret(msg: Message) -> Response {
    futures::try_join_all(updates).await?;
    ```
 
+4. **メッセージコンテキストの活用**
+   ```rust
+   // メッセージタグから必要な情報を効率的に抽出
+   let ctx = MessageContext::from_tags(&msg.tags)?;
+   let entities = ctx.determine_required_entities();
+   ```
+
 ## 9. まとめ
 
 D-TPRES domain層は以下の特徴を持つ設計となっています：
@@ -554,7 +793,18 @@ D-TPRES domain層は以下の特徴を持つ設計となっています：
 - **Handler**: AOメッセージを受信し、Repository経由でEntityを操作
 - **Persistence**: すべての状態変更は即座にArweaveに永続化
 
+### AOの実行モデルに関する重要な理解
+
+- **インスタンスとデータの区別**: Entityインスタンスは毎回生成され、状態データはArweaveから読み込まれる
+- **WASMモジュール**: 全プロセスが同一のWASMコードを実行し、tx_idで参照
+- **ステートレス実行**: メッセージ処理間でメモリは保持されず、CUも異なる可能性がある
+
 これらの指針に従うことで、AOのステートレス実行環境でも一貫性のある状態管理が可能となります。
+
+---
+
+**関連ドキュメント**: 
+- [AOプロセスモデルとステートレス実行](../ao/ao_process_model.md) - AOの実行モデルの詳細な説明
 
 ---
 

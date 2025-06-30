@@ -26,6 +26,35 @@ author: "D-TPRES Development Team"
 - フィールド名: snake_case
 - 型名: PascalCase
 
+### 2.3 AOステートレス実行環境の考慮事項
+
+AOプロセスは各メッセージ処理で異なるCompute Unit（CU）で実行される可能性があり、以下の特性を考慮した設計が必要です：
+
+#### 実行環境の特性
+1. **インスタンスの非永続性**: Entityインスタンスはメッセージ処理ごとに生成され、処理終了時に破棄される
+2. **状態データの永続性**: すべての状態はArweaveに保存され、Repository経由で読み書きされる
+3. **コードとデータの分離**: WASMコード（tx_idで参照）とインスタンス、状態データは明確に区別される
+
+#### Entity設計への影響
+1. **軽量化の必要性**: 
+   - 頻繁にインスタンス化されるEntityは最小限のデータ構造にする
+   - 大きなデータ構造は別Entityに分離し、必要時のみロードする
+
+2. **インデックスパターン**:
+   - 完全なデータではなく、参照情報（ID、状態、更新日時）を保持
+   - 詳細データは別途SecretDetailsEntityなどで管理
+
+3. **メッセージコンテキスト対応**:
+   - メッセージから必要なEntity IDを効率的に抽出可能な設計
+   - 選択的なEntityロードをサポートする構造
+
+```rust
+// 重要な区別:
+// - コード（WASM）: Arweaveに保存され、tx_idで参照される実行可能なバイナリ
+// - インスタンス: CU上でWASMコードから毎回生成されるオブジェクト  
+// - 状態データ: Arweaveに永続化され、Repository経由で読み書きされる実際のデータ
+```
+
 ## 3. ProcessEntity - マルチロール対応プロセス
 
 ### 3.1 概要
@@ -91,43 +120,54 @@ pub struct OwnerData {
     /// オーナー公開鍵（skOに対応するpkO）
     pub owner_public_key: Vec<u8>,
     
-    /// 管理する秘密群
-    /// Key: 秘密ID, Value: 秘密管理データ
-    pub managed_secrets: HashMap<String, SecretManagementData>,
+    /// 管理する秘密のインデックス情報
+    /// Key: 秘密ID, Value: 軽量な秘密インデックス
+    /// 詳細情報はSecretDetailsEntityで別管理
+    pub secret_indices: HashMap<String, SecretIndex>,
     
     /// Owner固有設定
     /// 例: {"default_threshold": "3", "default_shares": "5"}
     pub owner_config: HashMap<String, String>,
 }
 
-/// 秘密管理データ - 1つの秘密に関する全管理情報
+/// 秘密インデックス - 軽量な秘密管理情報
+/// ProcessEntityに保持される最小限の情報
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SecretManagementData {
+pub struct SecretIndex {
     /// 秘密識別子
     pub secret_id: String,
     
-    /// 生成されたShareのID群（Phase 1で作成）
-    pub generated_shares: Vec<String>,
+    /// 秘密の状態
+    /// 値: "active", "archived", "expired"
+    pub status: String,
     
-    /// 生成されたCapsuleのID群（Phase 1で作成）
-    pub generated_capsules: Vec<String>,
+    /// Entity参照情報
+    pub entity_references: EntityReferences,
     
-    /// アクセス制御条件群
-    /// 例: ["erc20_balance_check", "nft_ownership_check"]
-    pub access_control_conditions: Vec<String>,
+    /// 最終更新日時
+    pub last_updated: u64,
     
-    /// 条件別の生成済みkFrag群（Phase 3で作成）
-    /// Key: アクセス制御条件, Value: RekeyFragmentEntity IDリスト
-    pub generated_kfrags_by_condition: HashMap<String, Vec<String>>,
-    
-    /// Shamir閾値（k）
+    /// Shamir閾値（k）- 頻繁に参照されるため保持
     pub shamir_threshold: u8,
     
-    /// Shamir総シェア数（n）
+    /// Shamir総シェア数（n）- 頻繁に参照されるため保持
     pub shamir_total_shares: u8,
+}
+
+/// Entity参照情報 - 関連EntityのIDのみを保持
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EntityReferences {
+    /// ShareEntity IDリスト
+    pub share_ids: Vec<String>,
     
-    /// 生成日時
-    pub created_at: u64,
+    /// CapsuleEntity IDリスト
+    pub capsule_ids: Vec<String>,
+    
+    /// アクティブなAccessRequestEntity IDリスト
+    pub active_requests: Vec<String>,
+    
+    /// SecretDetailsEntity ID（詳細情報への参照）
+    pub details_entity_id: String,
 }
 
 /// Holder機能データ - kFrag保持と再暗号化実行
@@ -219,14 +259,14 @@ pub struct PerformanceMetrics {
 ### 3.3 使用例
 
 ```rust
-// Phase 0: Owner-Processの生成
+// Phase 0: Owner-Processの生成（軽量化されたバージョン）
 let owner_process = ProcessEntity {
     process_id: "ao_process_001".to_string(),
     process_name: "AliceOwnerProcess".to_string(),
     active_roles: vec!["owner".to_string()],
     owner_data: Some(OwnerData {
         owner_public_key: vec![/* pkO bytes */],
-        managed_secrets: HashMap::new(),
+        secret_indices: HashMap::new(), // 秘密が追加されるまでは空
         owner_config: HashMap::from([
             ("default_threshold".to_string(), "3".to_string()),
             ("default_shares".to_string(), "5".to_string()),
@@ -251,6 +291,25 @@ let owner_process = ProcessEntity {
     updated_at: 1703001600,
     version: 1,
 };
+
+// Phase 1後: 秘密追加時のインデックス更新
+let secret_index = SecretIndex {
+    secret_id: "secret_001".to_string(),
+    status: "active".to_string(),
+    entity_references: EntityReferences {
+        share_ids: vec!["share_001_01".to_string(), /* ... */],
+        capsule_ids: vec!["capsule_001_01".to_string(), /* ... */],
+        active_requests: vec![],
+        details_entity_id: "secret_details_001".to_string(),
+    },
+    last_updated: 1703001700,
+    shamir_threshold: 3,
+    shamir_total_shares: 5,
+};
+
+// OwnerDataに秘密インデックスを追加
+owner_process.owner_data.as_mut().unwrap()
+    .secret_indices.insert("secret_001".to_string(), secret_index);
 ```
 
 ## 4. ShareEntity - Shamirデータシェア
@@ -327,6 +386,9 @@ let share = ShareEntity {
     last_accessed_at: None,
     version: 1,
 };
+
+// 軽量化されたProcessEntityではインデックスのみ更新
+// ShareEntity自体はRepository経由で別途永続化される
 ```
 
 ## 5. CapsuleEntity - PREカプセル
@@ -391,6 +453,9 @@ let capsule = CapsuleEntity {
     created_at: 1703001700,
     version: 1,
 };
+
+// ProcessEntityのインデックスにCapsule IDを追加
+// CapsuleEntity自体は必要時までArweaveに保存
 ```
 
 ## 6. AccessRequestEntity - アクセス要求
@@ -517,6 +582,9 @@ let access_request = AccessRequestEntity {
     timeout_at: 1703005350,
     version: 1,
 };
+
+// AOステートレス環境では、AccessRequestEntityは別途永続化
+// ProcessEntityのインデックスにアクティブな要求IDを追加
 ```
 
 ## 7. RekeyFragmentEntity - 再暗号化キーフラグメント
@@ -717,17 +785,135 @@ let reencryption = ReencryptionEntity {
 };
 ```
 
-## 9. Entity関連図
+## 9. SecretDetailsEntity - 秘密管理詳細情報
+
+### 9.1 概要
+秘密に関する詳細な管理情報を保持するEntity。ProcessEntityの軽量化のため、頻繁にアクセスされない詳細情報を分離して管理する。
+
+### 9.2 詳細定義
+
+```rust
+/// 秘密管理詳細エンティティ - 1つの秘密に関する詳細情報
+/// 
+/// ProcessEntityから分離され、必要時のみロードされる
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SecretDetailsEntity {
+    /// 詳細エンティティ識別子
+    pub details_id: String,
+    
+    /// 関連する秘密識別子
+    pub secret_id: String,
+    
+    /// アクセス制御条件群
+    /// 例: ["erc20_balance_check", "nft_ownership_check"]
+    pub access_control_conditions: Vec<String>,
+    
+    /// 条件別の生成済みkFrag群（Phase 3で作成）
+    /// Key: アクセス制御条件, Value: RekeyFragmentEntity IDリスト
+    pub generated_kfrags_by_condition: HashMap<String, Vec<String>>,
+    
+    /// アクセス履歴
+    pub access_history: Vec<AccessRecord>,
+    
+    /// 秘密のメタデータ
+    pub metadata: HashMap<String, String>,
+    
+    /// 秘密の説明
+    pub description: Option<String>,
+    
+    /// 有効期限
+    pub expires_at: Option<u64>,
+    
+    /// 生成日時
+    pub created_at: u64,
+    
+    /// 最終更新日時
+    pub updated_at: u64,
+    
+    /// バージョン
+    pub version: u64,
+}
+
+/// アクセス記録
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AccessRecord {
+    /// アクセス要求ID
+    pub request_id: String,
+    
+    /// アクセス者プロセスID
+    pub accessor_process_id: String,
+    
+    /// アクセス日時
+    pub accessed_at: u64,
+    
+    /// アクセス結果
+    /// 値: "granted", "denied", "expired"
+    pub result: String,
+    
+    /// 使用されたアクセス制御条件
+    pub condition_used: String,
+}
+```
+
+### 9.3 使用例
+
+```rust
+// Phase 1: 秘密分割時にSecretDetailsEntityを作成
+let secret_details = SecretDetailsEntity {
+    details_id: "secret_details_001".to_string(),
+    secret_id: "secret_001".to_string(),
+    access_control_conditions: vec![
+        "erc20_balance_check".to_string(),
+        "nft_ownership_check".to_string(),
+    ],
+    generated_kfrags_by_condition: HashMap::new(),
+    access_history: vec![],
+    metadata: HashMap::from([
+        ("encryption_algorithm".to_string(), "AES-256-GCM".to_string()),
+        ("data_type".to_string(), "document".to_string()),
+    ]),
+    description: Some("Confidential financial report Q4 2023".to_string()),
+    expires_at: Some(1735689600), // 2025-01-01
+    created_at: 1703001700,
+    updated_at: 1703001700,
+    version: 1,
+};
+
+// メッセージハンドラーでの選択的ロード
+async fn handle_access_request(ctx: &HandlerContext, msg: Message) -> Result<()> {
+    let secret_id = msg.tags.get("Secret-Id")?;
+    
+    // まずProcessEntityのインデックスを確認
+    let index = ctx.process.owner_data.as_ref()
+        .and_then(|od| od.secret_indices.get(secret_id))
+        .ok_or(Error::SecretNotFound)?;
+    
+    // アクセス制御条件の確認が必要な場合のみ詳細をロード
+    if msg.tags.get("Action")? == "Verify-Conditions" {
+        let details = ctx.repositories.secret_details_repo
+            .find_by_id(&index.details_entity_id)
+            .await?;
+        
+        // アクセス制御条件の検証処理
+        // ...
+    }
+    
+    Ok(())
+}
+```
+
+## 10. Entity関連図
 
 ```mermaid
 graph TB
     subgraph "Phase 0: Process Spawn"
-        PE[ProcessEntity]
+        PE[ProcessEntity<br/>with SecretIndex]
     end
     
     subgraph "Phase 1: Secret Sharing"
         SE[ShareEntity]
         CE[CapsuleEntity]
+        SDE[SecretDetailsEntity]
     end
     
     subgraph "Phase 2: Access Request"
@@ -742,19 +928,22 @@ graph TB
         RE[ReencryptionEntity]
     end
     
+    PE -->|references| SDE
     PE -->|creates| SE
     PE -->|creates| CE
     PE -->|initiates| ARE
     ARE -->|triggers| RFE
     RFE -->|enables| RE
     
+    SDE -.->|tracks| SE
+    SDE -.->|tracks| CE
     SE -.->|referenced by| RE
     CE -.->|used in| RE
 ```
 
-## 10. 実装ガイドライン
+## 11. 実装ガイドライン
 
-### 10.1 Entityの実装規約
+### 11.1 Entityの実装規約
 
 ```rust
 // ✅ 正しい実装例
@@ -781,7 +970,7 @@ impl MyEntity {
 }
 ```
 
-### 10.2 シリアライゼーション
+### 11.2 シリアライゼーション
 
 全てのEntityは以下の形式でシリアライズ可能：
 
@@ -797,7 +986,7 @@ let bytes = bincode::serialize(&entity)?;
 let entity: ProcessEntity = bincode::deserialize(&bytes)?;
 ```
 
-### 10.3 フィールド命名規約
+### 11.3 フィールド命名規約
 
 | フィールド型 | 命名パターン | 例 |
 |------------|------------|---|
@@ -808,7 +997,219 @@ let entity: ProcessEntity = bincode::deserialize(&bytes)?;
 | 公開鍵 | `{owner}_public_key` | `owner_public_key` |
 | データ | `{type}_data` | `kfrag_data`, `cfrag_data` |
 
-## 11. まとめ
+### 11.4 AOステートレス環境でのEntity管理パターン
+
+#### EntityBundle パターン
+関連するEntityを効率的に管理するためのバンドルパターン：
+
+```rust
+/// Entity管理用バンドル - メッセージ処理中のEntity群を管理
+pub struct EntityBundle {
+    /// ShareEntityリスト（選択的ロード）
+    pub shares: Option<Vec<ShareEntity>>,
+    
+    /// CapsuleEntityリスト（選択的ロード）
+    pub capsules: Option<Vec<CapsuleEntity>>,
+    
+    /// AccessRequestEntityリスト
+    pub requests: Option<Vec<AccessRequestEntity>>,
+    
+    /// SecretDetailsEntity（必要時のみ）
+    pub secret_details: Option<SecretDetailsEntity>,
+    
+    /// ロードされた時刻
+    pub loaded_at: u64,
+}
+
+impl EntityBundle {
+    /// 最小限のBundle（メタデータのみ）
+    pub fn minimal(index: &SecretIndex) -> Self {
+        Self {
+            shares: None,
+            capsules: None,
+            requests: None,
+            secret_details: None,
+            loaded_at: current_timestamp(),
+        }
+    }
+    
+    /// 完全なBundle（全Entityデータ）
+    pub fn full(
+        shares: Vec<ShareEntity>,
+        capsules: Vec<CapsuleEntity>,
+        details: SecretDetailsEntity,
+    ) -> Self {
+        Self {
+            shares: Some(shares),
+            capsules: Some(capsules),
+            requests: None,
+            secret_details: Some(details),
+            loaded_at: current_timestamp(),
+        }
+    }
+    
+    /// アクション別の選択的Bundle生成
+    pub async fn for_action(
+        repos: &RepositoryContainer,
+        index: &SecretIndex,
+        action: &str,
+    ) -> Result<Self> {
+        match action {
+            "Split-Secret" => Ok(Self::minimal(index)),
+            "Access-Request" => {
+                // 秘密の詳細情報のみ必要
+                let details = repos.secret_details_repo
+                    .find_by_id(&index.details_entity_id)
+                    .await?;
+                Ok(Self {
+                    secret_details: Some(details),
+                    ..Self::minimal(index)
+                })
+            },
+            "Re-Encrypt" => {
+                // ShareとCapsuleの完全データが必要
+                let (shares, capsules) = tokio::join!(
+                    repos.share_repo.find_by_ids(&index.entity_references.share_ids),
+                    repos.capsule_repo.find_by_ids(&index.entity_references.capsule_ids),
+                );
+                Ok(Self::full(shares?, capsules?, details))
+            },
+            _ => Ok(Self::minimal(index))
+        }
+    }
+}
+```
+
+#### MessageContext パターン
+メッセージから必要なEntityを特定するためのコンテキスト：
+
+```rust
+/// メッセージコンテキスト - AOメッセージから抽出した情報
+pub struct MessageContext {
+    /// アクション種別
+    pub action: String,
+    
+    /// 対象秘密ID
+    pub secret_id: Option<String>,
+    
+    /// 関連EntityのID群
+    pub entity_ids: Vec<String>,
+    
+    /// メッセージタグ
+    pub tags: HashMap<String, String>,
+}
+
+impl MessageContext {
+    /// メッセージからコンテキストを抽出
+    pub fn from_message(msg: &Message) -> Result<Self> {
+        Ok(Self {
+            action: msg.tags.get("Action")
+                .ok_or(Error::MissingAction)?
+                .to_string(),
+            secret_id: msg.tags.get("Secret-Id")
+                .map(|s| s.to_string()),
+            entity_ids: msg.tags.get("Entity-Ids")
+                .map(|s| s.split(',').map(|id| id.to_string()).collect())
+                .unwrap_or_default(),
+            tags: msg.tags.clone(),
+        })
+    }
+    
+    /// 必要なEntityタイプを判定
+    pub fn required_entities(&self) -> Vec<EntityType> {
+        match self.action.as_str() {
+            "Split-Secret" => vec![EntityType::ProcessEntity],
+            "Access-Request" => vec![
+                EntityType::ProcessEntity,
+                EntityType::SecretDetailsEntity,
+            ],
+            "Distribute-KFrag" => vec![
+                EntityType::ProcessEntity,
+                EntityType::AccessRequestEntity,
+                EntityType::SecretDetailsEntity,
+            ],
+            "Re-Encrypt" => vec![
+                EntityType::ProcessEntity,
+                EntityType::ShareEntity,
+                EntityType::CapsuleEntity,
+                EntityType::RekeyFragmentEntity,
+            ],
+            _ => vec![EntityType::ProcessEntity],
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum EntityType {
+    ProcessEntity,
+    ShareEntity,
+    CapsuleEntity,
+    AccessRequestEntity,
+    RekeyFragmentEntity,
+    ReencryptionEntity,
+    SecretDetailsEntity,
+}
+```
+
+#### 使用例：効率的なメッセージハンドラー
+
+```rust
+/// AOメッセージハンドラーの実装例
+async fn handle_message(msg: Message) -> Response {
+    // 1. コンテキスト抽出
+    let context = match MessageContext::from_message(&msg) {
+        Ok(ctx) => ctx,
+        Err(e) => return error_response(e),
+    };
+    
+    // 2. HandlerContext初期化（ProcessEntityは常にロード）
+    let mut handler_ctx = match initialize_handler_context().await {
+        Ok(ctx) => ctx,
+        Err(e) => return error_response(e),
+    };
+    
+    // 3. 秘密インデックスの取得（秘密関連の操作の場合）
+    let secret_index = if let Some(secret_id) = &context.secret_id {
+        match get_secret_index(&handler_ctx.process, secret_id) {
+            Some(index) => index,
+            None => return error_response(Error::SecretNotFound),
+        }
+    } else {
+        return handle_non_secret_action(&handler_ctx, &context).await;
+    };
+    
+    // 4. 必要なEntityのみロード
+    let entity_bundle = match EntityBundle::for_action(
+        &handler_ctx.repositories,
+        &secret_index,
+        &context.action,
+    ).await {
+        Ok(bundle) => bundle,
+        Err(e) => return error_response(e),
+    };
+    
+    // 5. アクション別のビジネスロジック実行
+    let result = match context.action.as_str() {
+        "Split-Secret" => split_secret_service(&handler_ctx, &context).await,
+        "Access-Request" => access_request_service(&handler_ctx, &entity_bundle).await,
+        "Re-Encrypt" => reencrypt_service(&handler_ctx, &entity_bundle).await,
+        _ => Err(Error::UnknownAction),
+    };
+    
+    // 6. 結果に応じたレスポンス生成
+    match result {
+        Ok(data) => success_response(data),
+        Err(e) => error_response(e),
+    }
+}
+
+fn get_secret_index(process: &ProcessEntity, secret_id: &str) -> Option<&SecretIndex> {
+    process.owner_data.as_ref()
+        .and_then(|od| od.secret_indices.get(secret_id))
+}
+```
+
+## 12. まとめ
 
 D-TPRESのEntity設計は以下の特徴を持ちます：
 
@@ -817,11 +1218,21 @@ D-TPRESのEntity設計は以下の特徴を持ちます：
 3. **型安全性**: 厳密な型定義による安全性確保
 4. **シリアライズ対応**: JSON/バイナリ形式での永続化
 5. **トレーサビリティ**: 全Entityにタイムスタンプとバージョン
+6. **AOステートレス対応**: 
+   - ProcessEntityの軽量化（SecretIndexによる参照管理）
+   - SecretDetailsEntityによる詳細情報の分離
+   - EntityBundleによる効率的なロード戦略
+   - MessageContextによる必要Entity判定
 
-これらのEntityは、Repository層を通じてArweaveに永続化され、D-TPRESシステムの状態を完全に表現します。
+これらのEntityは、Repository層を通じてArweaveに永続化され、AOのステートレス実行環境でも効率的に動作します。メッセージ処理ごとにインスタンスが生成される特性を考慮し、必要最小限のデータ構造と選択的なロードパターンにより、スケーラブルな秘密管理を実現します。
 
 ---
 
 **Document Status**: Entity Design Specification  
-**Version**: 1.0  
+**Version**: 2.0  
+**Updates**: 
+- AOステートレス実行環境への対応（セクション2.3追加）
+- ProcessEntityの軽量化（SecretIndex導入）
+- SecretDetailsEntityの追加（セクション9）
+- EntityBundle/MessageContextパターンの追加（セクション11.4）
 **Next Steps**: Repository Interface設計の実装（repositories.md参照）
