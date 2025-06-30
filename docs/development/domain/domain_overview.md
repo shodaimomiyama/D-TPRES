@@ -99,6 +99,7 @@ graph TB
   - 不変ストレージへの対応
   - エラーハンドリングとリトライ
 
+<<<<<<< HEAD
 ### 2.3 AOステートレス実行モデルへの対応
 
 AOプロセスは以下の特性を持つ実行環境で動作します：
@@ -233,6 +234,8 @@ flowchart LR
     BL --> P[Persist Changes]
 ```
 
+=======
+>>>>>>> origin/development
 ## 3. PRD準拠のワークフロー
 
 ### 3.1 Phase 0-5 概要
@@ -304,6 +307,7 @@ AOプロセス間の通信はメッセージパッシングで実現：
 - イベントドリブンアーキテクチャ
 - 状態の一貫性保証
 
+<<<<<<< HEAD
 ### 4.3 メッセージ処理ライフサイクル
 
 AOのステートレス環境でのメッセージ処理とEntity/Repository操作の統合：
@@ -360,6 +364,8 @@ sequenceDiagram
    - 必要最小限のEntityのみロード
    - バッチ読み込み・書き込みの活用
 
+=======
+>>>>>>> origin/development
 ## 5. 普遍的プロセス設計
 
 ### 5.1 マルチロール対応
@@ -417,6 +423,7 @@ pub struct VersionedEntity<T> {
 }
 ```
 
+<<<<<<< HEAD
 ### 6.3 ステートレス環境での永続化パターン
 
 #### ProcessEntityの特別な扱い
@@ -555,6 +562,8 @@ async fn handle_access_request(ctx: &HandlerContext, msg: Message) -> Result<()>
 4. **Selective Loading**: 必要なEntityのみをロード
 5. **Batch Operations**: 可能な限りバッチ処理で効率化
 
+=======
+>>>>>>> origin/development
 ## 7. 設計原則
 
 ### 7.1 SOLID原則の適用
@@ -635,6 +644,7 @@ pub trait SomeEntityRepository {
 }
 ```
 
+<<<<<<< HEAD
 ### 8.3 AOメッセージハンドラーでの利用パターン
 
 #### 基本的なハンドラー構造
@@ -773,6 +783,8 @@ async fn load_required_entities(
    let entities = ctx.determine_required_entities();
    ```
 
+=======
+>>>>>>> origin/development
 ## 9. まとめ
 
 D-TPRES domain層は以下の特徴を持つ設計となっています：
@@ -782,6 +794,7 @@ D-TPRES domain層は以下の特徴を持つ設計となっています：
 3. **AO Native**: AOプロセスの特性を活かした設計
 4. **普遍的設計**: 各プロセスがマルチロール対応
 5. **Arweave最適化**: 不変ストレージの特性を活用
+<<<<<<< HEAD
 6. **ステートレス対応**: AOの実行モデルに適合した状態管理
 
 この設計により、保守性、拡張性、テスタビリティを兼ね備えた堅牢なシステムを実現します。
