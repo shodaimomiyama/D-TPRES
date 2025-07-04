@@ -27,6 +27,7 @@ author: "D-TPRES Development Team"
 - メソッド名: 動詞_前置詞_名詞 形式（例: `find_by_id`）
 - 非同期メソッド: 全て`async fn`として定義
 
+<<<<<<< HEAD
 ### 2.3 AOステートレス実行環境への対応
 
 AOプロセスは各メッセージ処理で異なるCompute Unit（CU）で実行される特性を考慮し、Repository設計には以下の対応が必要です：
@@ -71,6 +72,8 @@ AOプロセスは各メッセージ処理で異なるCompute Unit（CU）で実�
    - 大量データ処理時のストリーミング対応
    - 不要なデータ転送を避ける部分的な更新メソッド
 
+=======
+>>>>>>> origin/development
 ## 3. 基本Repository Trait
 
 ### 3.1 概要
@@ -183,6 +186,7 @@ where
     /// # 実装注意点
     /// - 削除済みエンティティは除外
     async fn count(&self) -> Result<usize, Self::Error>;
+<<<<<<< HEAD
     
     /// IDリストによるバッチ取得
     /// 
@@ -225,6 +229,8 @@ where
     /// - 楽観ロックチェック
     /// - トランザクション保証
     async fn update_batch(&self, entities: &[T]) -> Result<(), Self::Error>;
+=======
+>>>>>>> origin/development
 }
 ```
 
@@ -236,7 +242,11 @@ ProcessEntityのCRUD操作とプロセス固有のクエリ操作を定義。
 ### 4.2 詳細定義
 
 ```rust
+<<<<<<< HEAD
 use crate::domain::entity::{ProcessEntity, OwnerData, HolderData, RequesterData, PerformanceMetrics, SecretIndex};
+=======
+use crate::domain::entity::{ProcessEntity, OwnerData, HolderData, RequesterData, PerformanceMetrics};
+>>>>>>> origin/development
 
 /// ProcessEntityリポジトリインターフェース
 /// 
@@ -370,6 +380,7 @@ pub trait ProcessEntityRepository: Repository<ProcessEntity, String> {
         process_id: &str,
         requester_data: &RequesterData,
     ) -> Result<(), Self::Error>;
+<<<<<<< HEAD
     
     /// 秘密インデックス追加
     /// 
@@ -453,6 +464,8 @@ pub trait ProcessEntityRepository: Repository<ProcessEntity, String> {
         secret_id: &str,
         index: &SecretIndex,
     ) -> Result<(), Self::Error>;
+=======
+>>>>>>> origin/development
 }
 ```
 
@@ -1021,6 +1034,7 @@ pub trait ReencryptionEntityRepository: Repository<ReencryptionEntity, String> {
 }
 ```
 
+<<<<<<< HEAD
 ## 10. SecretDetailsEntityRepository Interface
 
 ### 10.1 概要
@@ -1150,6 +1164,11 @@ pub trait SecretDetailsEntityRepository: Repository<SecretDetailsEntity, String>
 ## 11. エラー処理設計
 
 ### 11.1 共通エラー型
+=======
+## 10. エラー処理設計
+
+### 10.1 共通エラー型
+>>>>>>> origin/development
 
 ```rust
 use thiserror::Error;
@@ -1191,9 +1210,15 @@ pub enum RepositoryError {
 }
 ```
 
+<<<<<<< HEAD
 ## 12. 実装ガイドライン
 
 ### 12.1 Repository実装の原則
+=======
+## 11. 実装ガイドライン
+
+### 11.1 Repository実装の原則
+>>>>>>> origin/development
 
 ```rust
 // ✅ 正しい実装例
@@ -1220,7 +1245,11 @@ impl ShareEntityRepository for ShareEntityRepositoryImpl {
 }
 ```
 
+<<<<<<< HEAD
 ### 12.2 トランザクション処理
+=======
+### 11.2 トランザクション処理
+>>>>>>> origin/development
 
 ```rust
 // Repository実装でのトランザクション例
@@ -1250,7 +1279,11 @@ impl<T> TransactionalRepository<T> {
 }
 ```
 
+<<<<<<< HEAD
 ### 12.3 ページネーション
+=======
+### 11.3 ページネーション
+>>>>>>> origin/development
 
 ```rust
 /// ページネーション用の共通構造体
@@ -1273,6 +1306,7 @@ pub trait PageableRepository<T, ID>: Repository<T, ID> {
 }
 ```
 
+<<<<<<< HEAD
 ### 12.4 AOステートレス環境での実装例
 
 ```rust
@@ -1388,6 +1422,11 @@ impl RepositoryContainer {
 ## 13. テスト戦略
 
 ### 13.1 Repositoryのモックテスト
+=======
+## 12. テスト戦略
+
+### 12.1 Repositoryのモックテスト
+>>>>>>> origin/development
 
 ```rust
 use mockall::*;
