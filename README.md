@@ -42,6 +42,12 @@ Single Rust codebase compiles to WebAssembly and runs on AO with different roles
 ![D-TPRES Concept Diagram](docs/images/D-TPRES_Concept.png)
 
 
+## Technical Documentation
+
+For detailed technical information about the AO platform integration:
+- [AO Process Model and Stateless Execution](docs/development/ao/ao_process_model.md)
+- [Domain Layer Architecture](docs/development/domain/domain_overview.md)
+
 ## Architecture
 
 ```mermaid
