@@ -27,6 +27,53 @@ author: "D-TPRES Development Team"
 - メソッド名: 動詞_前置詞_名詞 形式（例: `find_by_id`）
 - 非同期メソッド: 全て`async fn`として定義
 
+<<<<<<< HEAD
+### 2.3 AOステートレス実行環境への対応
+
+AOプロセスは各メッセージ処理で異なるCompute Unit（CU）で実行される特性を考慮し、Repository設計には以下の対応が必要です：
+
+#### 実行環境の特性への対応
+1. **状態の永続化前提**:
+   - すべてのEntity状態はArweaveに保存される前提で設計
+   - メモリ上のキャッシュに依存しない実装
+   - 各メッセージ処理でのEntity再構築を効率化
+
+2. **選択的ロード戦略**:
+   - 必要なEntityのみをロードする粒度の細かいメソッド
+   - バッチ操作による効率的な複数Entity取得
+   - 軽量なインデックス情報のみを返すメソッド
+
+3. **トランザクション境界の明確化**:
+   - 単一メッセージ処理内でのトランザクション完結
+   - 楽観的ロックによる同時実行制御
+   - バージョン管理による整合性保証
+
+#### Repository設計への影響
+1. **効率的なクエリメソッド**:
+   ```rust
+   // IDリストによるバッチ取得
+   async fn find_by_ids(&self, ids: &[String]) -> Result<Vec<T>, Self::Error>;
+   
+   // 軽量なメタデータのみ取得
+   async fn find_metadata_by_id(&self, id: &ID) -> Result<Option<EntityMetadata>, Self::Error>;
+   
+   // 条件付き選択的ロード
+   async fn find_with_options(&self, id: &ID, options: LoadOptions) -> Result<Option<T>, Self::Error>;
+   ```
+
+2. **メッセージコンテキスト対応**:
+   ```rust
+   // メッセージから必要なEntityを効率的に特定
+   async fn find_entities_for_message(&self, context: &MessageContext) -> Result<EntityBundle, Self::Error>;
+   ```
+
+3. **パフォーマンス最適化**:
+   - 頻繁にアクセスされるデータの効率的なインデックス管理
+   - 大量データ処理時のストリーミング対応
+   - 不要なデータ転送を避ける部分的な更新メソッド
+
+=======
+>>>>>>> origin/development
 ## 3. 基本Repository Trait
 
 ### 3.1 概要
@@ -139,6 +186,51 @@ where
     /// # 実装注意点
     /// - 削除済みエンティティは除外
     async fn count(&self) -> Result<usize, Self::Error>;
+<<<<<<< HEAD
+    
+    /// IDリストによるバッチ取得
+    /// 
+    /// # 引数
+    /// - `ids`: 取得対象のIDリスト
+    /// 
+    /// # 戻り値
+    /// - `Ok(Vec<T>)`: 見つかったエンティティのリスト
+    /// - `Err(Self::Error)`: 取得エラー
+    /// 
+    /// # 実装注意点
+    /// - 存在しないIDは結果に含めない
+    /// - 順序は保証されない
+    async fn find_by_ids(&self, ids: &[ID]) -> Result<Vec<T>, Self::Error>;
+    
+    /// バッチ作成
+    /// 
+    /// # 引数
+    /// - `entities`: 作成するエンティティのリスト
+    /// 
+    /// # 戻り値
+    /// - `Ok(())`: 全件作成成功
+    /// - `Err(Self::Error)`: 作成失敗（部分的な成功は許可しない）
+    /// 
+    /// # 実装注意点
+    /// - トランザクション内で実行
+    /// - 一つでも失敗したら全てロールバック
+    async fn create_batch(&self, entities: &[T]) -> Result<(), Self::Error>;
+    
+    /// バッチ更新
+    /// 
+    /// # 引数
+    /// - `entities`: 更新するエンティティのリスト
+    /// 
+    /// # 戻り値
+    /// - `Ok(())`: 全件更新成功
+    /// - `Err(Self::Error)`: 更新失敗
+    /// 
+    /// # 実装注意点
+    /// - 楽観ロックチェック
+    /// - トランザクション保証
+    async fn update_batch(&self, entities: &[T]) -> Result<(), Self::Error>;
+=======
+>>>>>>> origin/development
 }
 ```
 
@@ -150,7 +242,11 @@ ProcessEntityのCRUD操作とプロセス固有のクエリ操作を定義。
 ### 4.2 詳細定義
 
 ```rust
+<<<<<<< HEAD
+use crate::domain::entity::{ProcessEntity, OwnerData, HolderData, RequesterData, PerformanceMetrics, SecretIndex};
+=======
 use crate::domain::entity::{ProcessEntity, OwnerData, HolderData, RequesterData, PerformanceMetrics};
+>>>>>>> origin/development
 
 /// ProcessEntityリポジトリインターフェース
 /// 
@@ -284,6 +380,92 @@ pub trait ProcessEntityRepository: Repository<ProcessEntity, String> {
         process_id: &str,
         requester_data: &RequesterData,
     ) -> Result<(), Self::Error>;
+<<<<<<< HEAD
+    
+    /// 秘密インデックス追加
+    /// 
+    /// # 引数
+    /// - `process_id`: 対象プロセスID
+    /// - `secret_id`: 秘密識別子
+    /// - `index`: 追加する秘密インデックス
+    /// 
+    /// # 使用シーン
+    /// - Phase 1で新しい秘密を分割した後
+    /// 
+    /// # 実装注意点
+    /// - OwnerDataのsecret_indicesに追加
+    /// - 既存の秘密IDの場合は更新
+    async fn add_secret_index(
+        &self,
+        process_id: &str,
+        secret_id: &str,
+        index: &SecretIndex,
+    ) -> Result<(), Self::Error>;
+    
+    /// 秘密インデックス取得
+    /// 
+    /// # 引数
+    /// - `process_id`: 対象プロセスID
+    /// - `secret_id`: 秘密識別子
+    /// 
+    /// # 戻り値
+    /// 指定秘密のインデックス情報
+    /// 
+    /// # 使用シーン
+    /// - 秘密の存在確認
+    /// - 詳細Entity IDの取得
+    async fn get_secret_index(
+        &self,
+        process_id: &str,
+        secret_id: &str,
+    ) -> Result<Option<SecretIndex>, Self::Error>;
+    
+    /// 秘密インデックス一覧取得
+    /// 
+    /// # 引数
+    /// - `process_id`: 対象プロセスID
+    /// 
+    /// # 戻り値
+    /// プロセスが管理する全秘密のインデックス情報
+    /// 
+    /// # 使用シーン
+    /// - 管理秘密の一覧表示
+    /// - 統計情報の取得
+    async fn list_secret_indices(
+        &self,
+        process_id: &str,
+    ) -> Result<Vec<(String, SecretIndex)>, Self::Error>;
+    
+    /// アクティブな秘密インデックス取得
+    /// 
+    /// # 引数
+    /// - `process_id`: 対象プロセスID
+    /// 
+    /// # 戻り値
+    /// ステータスが"active"の秘密インデックスのみ
+    async fn list_active_secret_indices(
+        &self,
+        process_id: &str,
+    ) -> Result<Vec<(String, SecretIndex)>, Self::Error>;
+    
+    /// 秘密インデックス更新
+    /// 
+    /// # 引数
+    /// - `process_id`: 対象プロセスID
+    /// - `secret_id`: 秘密識別子
+    /// - `index`: 更新後のインデックス
+    /// 
+    /// # 使用シーン
+    /// - アクセス要求の追加/削除
+    /// - ステータス変更
+    async fn update_secret_index(
+        &self,
+        process_id: &str,
+        secret_id: &str,
+        index: &SecretIndex,
+    ) -> Result<(), Self::Error>;
+=======
+>>>>>>> origin/development
 }
 ```
 
@@ -852,9 +1034,141 @@ pub trait ReencryptionEntityRepository: Repository<ReencryptionEntity, String> {
 }
 ```
 
+<<<<<<< HEAD
+## 10. SecretDetailsEntityRepository Interface
+
+### 10.1 概要
+SecretDetailsEntityのCRUD操作と秘密管理詳細情報関連のクエリ操作を定義。
+
+### 10.2 詳細定義
+
+```rust
+use crate::domain::entity::{SecretDetailsEntity, AccessRecord};
+
+/// SecretDetailsEntityリポジトリインターフェース
+/// 
+/// 秘密管理詳細情報の永続化操作を提供
+#[async_trait]
+pub trait SecretDetailsEntityRepository: Repository<SecretDetailsEntity, String> {
+    /// 秘密ID別検索
+    /// 
+    /// # 引数
+    /// - `secret_id`: 秘密識別子
+    /// 
+    /// # 戻り値
+    /// 指定秘密の詳細情報
+    async fn find_by_secret_id(&self, secret_id: &str) -> Result<Option<SecretDetailsEntity>, Self::Error>;
+    
+    /// アクセス制御条件別検索
+    /// 
+    /// # 引数
+    /// - `condition`: アクセス制御条件
+    /// 
+    /// # 戻り値
+    /// 指定条件を持つ秘密詳細のリスト
+    async fn find_by_access_control_condition(
+        &self,
+        condition: &str,
+    ) -> Result<Vec<SecretDetailsEntity>, Self::Error>;
+    
+    /// 期限切れ秘密検索
+    /// 
+    /// # 引数
+    /// - `current_time`: 現在時刻（Unix timestamp）
+    /// 
+    /// # 戻り値
+    /// 期限切れの秘密詳細リスト
+    async fn find_expired_secrets(&self, current_time: u64) -> Result<Vec<SecretDetailsEntity>, Self::Error>;
+    
+    /// アクセス履歴追加
+    /// 
+    /// # 引数
+    /// - `details_id`: 詳細エンティティID
+    /// - `access_record`: 追加するアクセス記録
+    /// 
+    /// # 使用シーン
+    /// - Phase 2でアクセス要求が発生した際
+    /// - Phase 5で復号が完了した際
+    async fn add_access_record(
+        &self,
+        details_id: &str,
+        access_record: &AccessRecord,
+    ) -> Result<(), Self::Error>;
+    
+    /// kFrag群更新
+    /// 
+    /// # 引数
+    /// - `details_id`: 詳細エンティティID
+    /// - `condition`: アクセス制御条件
+    /// - `kfrag_ids`: kFragエンティティIDリスト
+    /// 
+    /// # 使用シーン
+    /// - Phase 3でkFragが生成・配布された際
+    async fn update_kfrags_for_condition(
+        &self,
+        details_id: &str,
+        condition: &str,
+        kfrag_ids: &[String],
+    ) -> Result<(), Self::Error>;
+    
+    /// メタデータ更新
+    /// 
+    /// # 引数
+    /// - `details_id`: 詳細エンティティID
+    /// - `metadata`: 新しいメタデータ
+    /// 
+    /// # 実装注意点
+    /// - 既存のメタデータにマージ
+    async fn update_metadata(
+        &self,
+        details_id: &str,
+        metadata: &HashMap<String, String>,
+    ) -> Result<(), Self::Error>;
+    
+    /// アクティブな秘密詳細取得
+    /// 
+    /// # 戻り値
+    /// 期限切れでない秘密詳細のリスト
+    /// 
+    /// # 使用シーン
+    /// - 定期的な状態確認
+    /// - 統計情報の取得
+    async fn find_active_details(&self) -> Result<Vec<SecretDetailsEntity>, Self::Error>;
+    
+    /// アクセス頻度別ランキング取得
+    /// 
+    /// # 引数
+    /// - `limit`: 取得する最大件数
+    /// - `time_range`: 集計期間（秒）
+    /// 
+    /// # 戻り値
+    /// アクセス頻度降順の秘密詳細リスト
+    async fn find_by_access_frequency_desc(
+        &self,
+        limit: usize,
+        time_range: u64,
+    ) -> Result<Vec<SecretDetailsEntity>, Self::Error>;
+    
+    /// 条件別kFrag統計取得
+    /// 
+    /// # 戻り値
+    /// 条件名とkFrag数のタプルリスト
+    /// 
+    /// # 使用シーン
+    /// - システム状態の監視
+    /// - リソース使用状況の把握
+    async fn get_kfrag_statistics(&self) -> Result<Vec<(String, usize)>, Self::Error>;
+}
+```
+
+## 11. エラー処理設計
+
+### 11.1 共通エラー型
+=======
 ## 10. エラー処理設計
 
 ### 10.1 共通エラー型
+>>>>>>> origin/development
 
 ```rust
 use thiserror::Error;
@@ -896,9 +1210,15 @@ pub enum RepositoryError {
 }
 ```
 
+<<<<<<< HEAD
+## 12. 実装ガイドライン
+
+### 12.1 Repository実装の原則
+=======
 ## 11. 実装ガイドライン
 
 ### 11.1 Repository実装の原則
+>>>>>>> origin/development
 
 ```rust
 // ✅ 正しい実装例
@@ -925,7 +1245,11 @@ impl ShareEntityRepository for ShareEntityRepositoryImpl {
 }
 ```
 
+<<<<<<< HEAD
+### 12.2 トランザクション処理
+=======
 ### 11.2 トランザクション処理
+>>>>>>> origin/development
 
 ```rust
 // Repository実装でのトランザクション例
@@ -955,7 +1279,11 @@ impl<T> TransactionalRepository<T> {
 }
 ```
 
+<<<<<<< HEAD
+### 12.3 ページネーション
+=======
 ### 11.3 ページネーション
+>>>>>>> origin/development
 
 ```rust
 /// ページネーション用の共通構造体
@@ -978,9 +1306,127 @@ pub trait PageableRepository<T, ID>: Repository<T, ID> {
 }
 ```
 
+<<<<<<< HEAD
+### 12.4 AOステートレス環境での実装例
+
+```rust
+use crate::domain::entity::{EntityBundle, MessageContext};
+
+/// AOメッセージハンドラーでのRepository使用例
+pub struct RepositoryContainer {
+    pub process_repo: Box<dyn ProcessEntityRepository>,
+    pub share_repo: Box<dyn ShareEntityRepository>,
+    pub capsule_repo: Box<dyn CapsuleEntityRepository>,
+    pub secret_details_repo: Box<dyn SecretDetailsEntityRepository>,
+    // 他のRepository...
+}
+
+impl RepositoryContainer {
+    /// メッセージコンテキストから必要なEntityを効率的にロード
+    pub async fn load_entities_for_message(
+        &self,
+        process_id: &str,
+        context: &MessageContext,
+    ) -> Result<EntityBundle, RepositoryError> {
+        // 1. ProcessEntityは常にロード（軽量化されたインデックス付き）
+        let process = self.process_repo
+            .find_by_id(process_id)
+            .await?
+            .ok_or(RepositoryError::NotFound { id: process_id.to_string() })?;
+        
+        // 2. 秘密が関連する場合、インデックスを取得
+        let secret_index = if let Some(secret_id) = &context.secret_id {
+            self.process_repo
+                .get_secret_index(process_id, secret_id)
+                .await?
+        } else {
+            None
+        };
+        
+        // 3. アクション別に必要なEntityのみロード
+        match context.action.as_str() {
+            "Split-Secret" => {
+                // 最小限のデータで処理可能
+                Ok(EntityBundle::minimal(secret_index.as_ref().unwrap()))
+            },
+            
+            "Access-Request" => {
+                // 秘密詳細情報のみ必要
+                if let Some(index) = secret_index {
+                    let details = self.secret_details_repo
+                        .find_by_id(&index.entity_references.details_entity_id)
+                        .await?;
+                    Ok(EntityBundle {
+                        secret_details: details,
+                        ..EntityBundle::minimal(&index)
+                    })
+                } else {
+                    Err(RepositoryError::ValidationError { 
+                        message: "Secret ID required for access request".to_string() 
+                    })
+                }
+            },
+            
+            "Re-Encrypt" => {
+                // ShareとCapsuleの完全データが必要
+                if let Some(index) = secret_index {
+                    // バッチ取得で効率化
+                    let (shares, capsules) = tokio::join!(
+                        self.share_repo.find_by_ids(&index.entity_references.share_ids),
+                        self.capsule_repo.find_by_ids(&index.entity_references.capsule_ids),
+                    );
+                    
+                    let details = self.secret_details_repo
+                        .find_by_id(&index.entity_references.details_entity_id)
+                        .await?;
+                    
+                    Ok(EntityBundle::full(shares?, capsules?, details.unwrap()))
+                } else {
+                    Err(RepositoryError::ValidationError { 
+                        message: "Secret ID required for re-encryption".to_string() 
+                    })
+                }
+            },
+            
+            _ => Ok(EntityBundle::empty()),
+        }
+    }
+    
+    /// 秘密インデックスの効率的な更新
+    pub async fn update_secret_status(
+        &self,
+        process_id: &str,
+        secret_id: &str,
+        new_status: &str,
+    ) -> Result<(), RepositoryError> {
+        // 1. 現在のインデックスを取得
+        let mut index = self.process_repo
+            .get_secret_index(process_id, secret_id)
+            .await?
+            .ok_or(RepositoryError::NotFound { id: secret_id.to_string() })?;
+        
+        // 2. ステータスを更新
+        index.status = new_status.to_string();
+        index.last_updated = current_timestamp();
+        
+        // 3. インデックスのみ更新（詳細Entityは触らない）
+        self.process_repo
+            .update_secret_index(process_id, secret_id, &index)
+            .await?;
+        
+        Ok(())
+    }
+}
+```
+
+## 13. テスト戦略
+
+### 13.1 Repositoryのモックテスト
+=======
 ## 12. テスト戦略
 
 ### 12.1 Repositoryのモックテスト
+>>>>>>> origin/development
 
 ```rust
 use mockall::*;
@@ -1014,7 +1460,7 @@ async fn test_find_process_by_name() {
 }
 ```
 
-## 13. まとめ
+## 14. まとめ
 
 D-TPRES Repository Interface設計は以下の特徴を持ちます：
 
@@ -1023,11 +1469,22 @@ D-TPRES Repository Interface設計は以下の特徴を持ちます：
 3. **非同期対応**: 全操作がasync/awaitに対応
 4. **テスタビリティ**: モック可能なinterface設計
 5. **拡張性**: 新しいクエリメソッドの追加が容易
+6. **AOステートレス対応**:
+   - 効率的なバッチ操作メソッド
+   - 軽量なインデックス管理（SecretIndex）
+   - 選択的なEntityロード戦略
+   - メッセージコンテキストベースの最適化
 
-これらのRepository Interfaceは、Infrastructure層で具体的に実装され、Arweaveストレージとの連携を提供します。
+これらのRepository Interfaceは、Infrastructure層で具体的に実装され、AOのステートレス実行環境でも効率的にArweaveストレージとの連携を提供します。特に、ProcessEntityの軽量化とSecretDetailsEntityRepositoryの追加により、大量の秘密を管理する場合でもスケーラブルな設計となっています。
 
 ---
 
 **Document Status**: Repository Interface Specification  
-**Version**: 1.0  
+**Version**: 2.0  
+**Updates**:
+- AOステートレス実行環境への対応（セクション2.3追加）
+- 基本Repository Traitにバッチ操作メソッド追加
+- ProcessEntityRepositoryにSecretIndex関連メソッド追加
+- SecretDetailsEntityRepositoryインターフェース追加（セクション10）
+- AOステートレス環境での実装例追加（セクション12.4）
 **Next Steps**: Repository Implementation設計（repository_implementations.md参照）
