@@ -26,6 +26,7 @@ author: "D-TPRES Development Team"
 - フィールド名: snake_case
 - 型名: PascalCase
 
+<<<<<<< HEAD
 ### 2.3 AOステートレス実行環境の考慮事項
 
 AOプロセスは各メッセージ処理で異なるCompute Unit（CU）で実行される可能性があり、以下の特性を考慮した設計が必要です：
@@ -55,6 +56,8 @@ AOプロセスは各メッセージ処理で異なるCompute Unit（CU）で実�
 // - 状態データ: Arweaveに永続化され、Repository経由で読み書きされる実際のデータ
 ```
 
+=======
+>>>>>>> origin/development
 ## 3. ProcessEntity - マルチロール対応プロセス
 
 ### 3.1 概要
@@ -120,16 +123,23 @@ pub struct OwnerData {
     /// オーナー公開鍵（skOに対応するpkO）
     pub owner_public_key: Vec<u8>,
     
+<<<<<<< HEAD
     /// 管理する秘密のインデックス情報
     /// Key: 秘密ID, Value: 軽量な秘密インデックス
     /// 詳細情報はSecretDetailsEntityで別管理
     pub secret_indices: HashMap<String, SecretIndex>,
+=======
+    /// 管理する秘密群
+    /// Key: 秘密ID, Value: 秘密管理データ
+    pub managed_secrets: HashMap<String, SecretManagementData>,
+>>>>>>> origin/development
     
     /// Owner固有設定
     /// 例: {"default_threshold": "3", "default_shares": "5"}
     pub owner_config: HashMap<String, String>,
 }
 
+<<<<<<< HEAD
 /// 秘密インデックス - 軽量な秘密管理情報
 /// ProcessEntityに保持される最小限の情報
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -168,6 +178,36 @@ pub struct EntityReferences {
     
     /// SecretDetailsEntity ID（詳細情報への参照）
     pub details_entity_id: String,
+=======
+/// 秘密管理データ - 1つの秘密に関する全管理情報
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SecretManagementData {
+    /// 秘密識別子
+    pub secret_id: String,
+    
+    /// 生成されたShareのID群（Phase 1で作成）
+    pub generated_shares: Vec<String>,
+    
+    /// 生成されたCapsuleのID群（Phase 1で作成）
+    pub generated_capsules: Vec<String>,
+    
+    /// アクセス制御条件群
+    /// 例: ["erc20_balance_check", "nft_ownership_check"]
+    pub access_control_conditions: Vec<String>,
+    
+    /// 条件別の生成済みkFrag群（Phase 3で作成）
+    /// Key: アクセス制御条件, Value: RekeyFragmentEntity IDリスト
+    pub generated_kfrags_by_condition: HashMap<String, Vec<String>>,
+    
+    /// Shamir閾値（k）
+    pub shamir_threshold: u8,
+    
+    /// Shamir総シェア数（n）
+    pub shamir_total_shares: u8,
+    
+    /// 生成日時
+    pub created_at: u64,
+>>>>>>> origin/development
 }
 
 /// Holder機能データ - kFrag保持と再暗号化実行
@@ -259,14 +299,22 @@ pub struct PerformanceMetrics {
 ### 3.3 使用例
 
 ```rust
+<<<<<<< HEAD
 // Phase 0: Owner-Processの生成（軽量化されたバージョン）
+=======
+// Phase 0: Owner-Processの生成
+>>>>>>> origin/development
 let owner_process = ProcessEntity {
     process_id: "ao_process_001".to_string(),
     process_name: "AliceOwnerProcess".to_string(),
     active_roles: vec!["owner".to_string()],
     owner_data: Some(OwnerData {
         owner_public_key: vec![/* pkO bytes */],
+<<<<<<< HEAD
         secret_indices: HashMap::new(), // 秘密が追加されるまでは空
+=======
+        managed_secrets: HashMap::new(),
+>>>>>>> origin/development
         owner_config: HashMap::from([
             ("default_threshold".to_string(), "3".to_string()),
             ("default_shares".to_string(), "5".to_string()),
@@ -291,6 +339,7 @@ let owner_process = ProcessEntity {
     updated_at: 1703001600,
     version: 1,
 };
+<<<<<<< HEAD
 
 // Phase 1後: 秘密追加時のインデックス更新
 let secret_index = SecretIndex {
@@ -310,6 +359,8 @@ let secret_index = SecretIndex {
 // OwnerDataに秘密インデックスを追加
 owner_process.owner_data.as_mut().unwrap()
     .secret_indices.insert("secret_001".to_string(), secret_index);
+=======
+>>>>>>> origin/development
 ```
 
 ## 4. ShareEntity - Shamirデータシェア
@@ -386,9 +437,12 @@ let share = ShareEntity {
     last_accessed_at: None,
     version: 1,
 };
+<<<<<<< HEAD
 
 // 軽量化されたProcessEntityではインデックスのみ更新
 // ShareEntity自体はRepository経由で別途永続化される
+=======
+>>>>>>> origin/development
 ```
 
 ## 5. CapsuleEntity - PREカプセル
@@ -453,9 +507,12 @@ let capsule = CapsuleEntity {
     created_at: 1703001700,
     version: 1,
 };
+<<<<<<< HEAD
 
 // ProcessEntityのインデックスにCapsule IDを追加
 // CapsuleEntity自体は必要時までArweaveに保存
+=======
+>>>>>>> origin/development
 ```
 
 ## 6. AccessRequestEntity - アクセス要求
@@ -582,9 +639,12 @@ let access_request = AccessRequestEntity {
     timeout_at: 1703005350,
     version: 1,
 };
+<<<<<<< HEAD
 
 // AOステートレス環境では、AccessRequestEntityは別途永続化
 // ProcessEntityのインデックスにアクティブな要求IDを追加
+=======
+>>>>>>> origin/development
 ```
 
 ## 7. RekeyFragmentEntity - 再暗号化キーフラグメント
@@ -785,6 +845,7 @@ let reencryption = ReencryptionEntity {
 };
 ```
 
+<<<<<<< HEAD
 ## 9. SecretDetailsEntity - 秘密管理詳細情報
 
 ### 9.1 概要
@@ -903,17 +964,27 @@ async fn handle_access_request(ctx: &HandlerContext, msg: Message) -> Result<()>
 ```
 
 ## 10. Entity関連図
+=======
+## 9. Entity関連図
+>>>>>>> origin/development
 
 ```mermaid
 graph TB
     subgraph "Phase 0: Process Spawn"
+<<<<<<< HEAD
         PE[ProcessEntity<br/>with SecretIndex]
+=======
+        PE[ProcessEntity]
+>>>>>>> origin/development
     end
     
     subgraph "Phase 1: Secret Sharing"
         SE[ShareEntity]
         CE[CapsuleEntity]
+<<<<<<< HEAD
         SDE[SecretDetailsEntity]
+=======
+>>>>>>> origin/development
     end
     
     subgraph "Phase 2: Access Request"
@@ -928,22 +999,34 @@ graph TB
         RE[ReencryptionEntity]
     end
     
+<<<<<<< HEAD
     PE -->|references| SDE
+=======
+>>>>>>> origin/development
     PE -->|creates| SE
     PE -->|creates| CE
     PE -->|initiates| ARE
     ARE -->|triggers| RFE
     RFE -->|enables| RE
     
+<<<<<<< HEAD
     SDE -.->|tracks| SE
     SDE -.->|tracks| CE
+=======
+>>>>>>> origin/development
     SE -.->|referenced by| RE
     CE -.->|used in| RE
 ```
 
+<<<<<<< HEAD
 ## 11. 実装ガイドライン
 
 ### 11.1 Entityの実装規約
+=======
+## 10. 実装ガイドライン
+
+### 10.1 Entityの実装規約
+>>>>>>> origin/development
 
 ```rust
 // ✅ 正しい実装例
@@ -970,7 +1053,11 @@ impl MyEntity {
 }
 ```
 
+<<<<<<< HEAD
 ### 11.2 シリアライゼーション
+=======
+### 10.2 シリアライゼーション
+>>>>>>> origin/development
 
 全てのEntityは以下の形式でシリアライズ可能：
 
@@ -986,7 +1073,11 @@ let bytes = bincode::serialize(&entity)?;
 let entity: ProcessEntity = bincode::deserialize(&bytes)?;
 ```
 
+<<<<<<< HEAD
 ### 11.3 フィールド命名規約
+=======
+### 10.3 フィールド命名規約
+>>>>>>> origin/development
 
 | フィールド型 | 命名パターン | 例 |
 |------------|------------|---|
@@ -997,6 +1088,7 @@ let entity: ProcessEntity = bincode::deserialize(&bytes)?;
 | 公開鍵 | `{owner}_public_key` | `owner_public_key` |
 | データ | `{type}_data` | `kfrag_data`, `cfrag_data` |
 
+<<<<<<< HEAD
 ### 11.4 AOステートレス環境でのEntity管理パターン
 
 #### EntityBundle パターン
