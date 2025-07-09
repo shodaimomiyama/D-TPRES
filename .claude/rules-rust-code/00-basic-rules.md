@@ -84,20 +84,34 @@ Change the source code. **Editing anything other than the target file is absolut
 ## Directory Structure
 
 ```text
-├── Cargo.toml
-├── config/
-├── docs/                    # Project documentation
-│   ├── PRD.md
-│   └── development/
-│       ├── status.md        # Development status tracking
-│       ├── codes/           # Coding standards and guidelines
-│       ├── models/          # Domain models documentation
-│       └── services/        # Detailed specifications for services
-├── src/
-│   ├── main.rs              # Application entry point
-│   ├── di.rs                # Dependency Injection (DI) setup
-│   ├── domain/              # Core business logic and rules (DDD Domain Layer)
-│       # Common type related logics
-└── tests/
-    └── integration/         # Integration tests
+D-TPRES/
+├── src/                    # AO WebAssembly (Rust)
+│   ├── main.rs
+│   ├── di.rs
+│   ├── processes/          # AO Process実装
+│   │   ├── owner.rs
+│   │   ├── holder.rs
+│   │   └── requester.rs
+│   └── crypto/             # 暗号化ユーティリティ
+│       ├── umbral.rs
+│       └── shamir.rs
+├── browser/                # ブラウザフロントエンド
+│   ├── packages/
+│   │   ├── core/          # 共通ライブラリ
+│   │   │   ├── crypto/    # WebCrypto + WASM統合
+│   │   │   ├── ao/        # AO通信ライブラリ
+│   │   │   └── types/     # 共通型定義
+│   │   ├── o-browser/     # データ所有者UI
+│   │   └── a-browser/     # アクセス者UI
+│   ├── shared/            # 共通コンポーネント
+│   └── package.json
+├── contracts/             # EVM Smart Contracts
+│   ├── src/
+│   │   └── VerifyAccess.sol
+│   └── package.json
+├── wasm/                  # WebAssembly ビルド成果物
+│   ├── umbral_wasm.js
+│   └── umbral_wasm.wasm
+├── scripts/              # ビルド・デプロイスクリプト
+└── docs/
 ```
