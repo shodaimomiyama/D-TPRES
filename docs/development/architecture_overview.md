@@ -12,28 +12,35 @@ D-TPRESは、Threshold Proxy Re-Encryption (TPRE) を用いた分散型鍵管理
 
 ```mermaid
 graph TB
-    subgraph "Browser Layer"
-        OB[O-Browser<br/>データ所有者UI]
-        AB[A-Browser<br/>アクセス者UI]
+    subgraph "External Systems"
+        subgraph "Browser Applications"
+            OB[O-Browser<br/>データ所有者UI]
+            AB[A-Browser<br/>アクセス者UI]
+        end
+        
+        subgraph "Storage & Blockchain"
+            AR[Arweave<br/>Immutable Storage]
+            EVM[EVM Networks<br/>Smart Contracts]
+        end
     end
     
-    subgraph "AO Layer (WebAssembly)"
-        subgraph "UseCase Layer"
-            subgraph "Role-based Handlers"
+    subgraph "AO Network (WebAssembly Runtime)"
+        subgraph "Application Layer"
+            subgraph "UseCase Handlers"
                 OH[Owner Handlers<br/>・Initialize-Owner<br/>・Split-Secret<br/>・Generate-ReKey]
                 HH[Holder Handlers<br/>・Store-KFrag<br/>・Perform-Reencryption<br/>・Send-CFrag]
                 RH[Requester Handlers<br/>・Access-Request<br/>・Collect-CFrag<br/>・Recover-Secret]
             end
+            
+            subgraph "Controller Components"
+                MH[MessageHandler<br/>処理統括]
+                MR[MessageRouter<br/>アクション振り分け]
+                MV[MessageValidator<br/>妥当性検証]
+                MC[MessageContextExtractor<br/>DTO変換]
+            end
         end
         
-        subgraph "Controller Layer"
-            MH[MessageHandler<br/>処理統括]
-            MR[MessageRouter<br/>アクション振り分け]
-            MV[MessageValidator<br/>妥当性検証]
-            MC[MessageContextExtractor<br/>DTO変換]
-        end
-        
-        subgraph "Service Layer"
+        subgraph "Business Layer"
             subgraph "Workflow Services"
                 WS1[AccessWorkflow]
                 WS2[RecoveryWorkflow]
@@ -55,22 +62,23 @@ graph TB
                 E4[AccessRequestEntity]
                 E5[RekeyFragmentEntity]
             end
-            subgraph "Repositories"
+            subgraph "Repository Interfaces"
                 R1[ProcessEntityRepository]
                 R2[ShareEntityRepository]
                 R3[CapsuleEntityRepository]
                 R4[AccessRequestEntityRepository]
             end
         end
-    end
-    
-    subgraph "Infrastructure"
-        subgraph "Repository Implementations"
-            RI[ArweaveRepositoryImpl<br/>ProcessEntityRepositoryImpl<br/>ShareEntityRepositoryImpl<br/>etc.]
+        
+        subgraph "Infrastructure Layer"
+            subgraph "Repository Implementations"
+                RI[ArweaveRepositoryImpl<br/>ProcessEntityRepositoryImpl<br/>ShareEntityRepositoryImpl<br/>etc.]
+            end
+            subgraph "External Adapters"
+                EL[elciao Bridge]
+                AC[ArweaveClient]
+            end
         end
-        AR[Arweave Storage]
-        EVM[EVM Smart Contract]
-        EL[elciao Bridge]
     end
     
     %% Browser to UseCase
@@ -104,26 +112,33 @@ graph TB
     CS3 --> E3
     CS4 --> E4
     
-    %% Service to Repository
+    %% Service to Repository Interfaces
     CS1 --> R1
     CS2 --> R2
     CS3 --> R3
     CS4 --> R4
     
-    %% Repository to Infrastructure
-    R1 --> RI
-    R2 --> RI
-    R3 --> RI
-    R4 --> RI
+    %% Repository Interfaces to Implementations (DIP)
+    R1 -.-> RI
+    R2 -.-> RI
+    R3 -.-> RI
+    R4 -.-> RI
     
     %% Infrastructure to External Systems
-    RI --> AR
+    RI --> AC
+    AC --> AR
     CS4 --> EL
     EL --> EVM
     
-    %% Inter-process communication
+    %% Inter-process communication within AO
     OH -.->|kFrag配布| HH
     RH -.->|cFrag要求| HH
+    
+    style "AO Network (WebAssembly Runtime)" fill:#e6f3ff,stroke:#0066cc,stroke-width:3px
+    style R1 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray: 5 5
+    style R2 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray: 5 5
+    style R3 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray: 5 5
+    style R4 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray: 5 5
 ```
 
 ### 1.2 暗号化フロー
