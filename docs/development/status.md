@@ -1,7 +1,7 @@
 ---
 title: "D-TPRES Development Status"
-version: "1.0.0"
-last_updated: "2025-06-01"
+version: "1.1.0"
+last_updated: "2025-07-09"
 author: "D-TPRES Development Team"
 status: "active"
 ---
@@ -49,28 +49,41 @@ status: "active"
 **進捗率**: 25% (仕様策定完了、実装部分着手)
 
 ### ステータス判定基準
-- **Plan**: サービスの詳細仕様が定義され、承認済みであること
-- **Implementation**: サービスが実装され、コードレビューが完了していること
-- **Integration Test**: 統合テストが実装され、カバレッジ70%以上でpassしていること
+- **Plan**: UseCase Handlers/Controllerの仕様が定義され、AOメッセージフロー・役割分離が明確化されていること
+- **Implementation**: UseCase Handlers/Controllerが実装され、AOメッセージ処理・バリデーション・DTOマッピングが完了していること
+- **Integration Test**: AOメッセージ処理フローの統合テストが実装され、役割別ハンドラーの分離が検証されていること
 
-| Service | Plan | Implementation | Integration Test | 備考 |
+### UseCase Handlers (役割別AOメッセージハンドラー)
+
+| Handler | Plan | Implementation | Integration Test | 備考 |
 | :------ | :--: | :------------: | :--------------: | :--- |
-| OwnerProcessService | ✅ | ⬜️ | ⬜️ | 秘密鍵管理・ReKey生成、SQLite永続化 |
-| HolderProcessService | ✅ | ⬜️ | ⬜️ | kFragment保持・再暗号化実行 |
-| RequesterProcessService | ✅ | ⬜️ | ⬜️ | cFragment収集・閾値達成判定 |
-| CryptographicService | 🟡 | ⬜️ | ⬜️ | Umbral-PRE実装、現在設計検討中 |
-| ThresholdSecretSharingService | 🟡 | ⬜️ | ⬜️ | Shamir実装、sssa crate統合予定 |
-| AccessControlService | ✅ | ⬜️ | ⬜️ | EVM検証・elciao連携 |
-| StorageService | 🟡 | ⬜️ | ⬜️ | ao-sqlite統合、Arweave永続化 |
-| ProcessDiscoveryService | ⬜️ | ⬜️ | ⬜️ | オンラインHolder発見・選出ロジック |
-| HeartbeatService | ⬜️ | ⬜️ | ⬜️ | プロセス生存監視、Phase1では簡易実装 |
-| ValidationService | ✅ | ⬜️ | ⬜️ | ビジネスルール検証・制約チェック |
+| **Owner Handlers** |
+| Initialize-Owner | ✅ | ⬜️ | ⬜️ | プロセス初期化、秘密鍵管理 |
+| Split-Secret | ✅ | ⬜️ | ⬜️ | Shamir秘密分割、Capsule生成 |
+| Generate-ReKey | ✅ | ⬜️ | ⬜️ | 再暗号化キー生成、kFrag配布 |
+| **Holder Handlers** |
+| Store-KFrag | ✅ | ⬜️ | ⬜️ | kFragment保管、ローカル永続化 |
+| Perform-Reencryption | ✅ | ⬜️ | ⬜️ | プロキシ再暗号化実行 |
+| Send-CFrag | ✅ | ⬜️ | ⬜️ | cFrag生成・Requesterへ送信 |
+| **Requester Handlers** |
+| Access-Request | ✅ | ⬜️ | ⬜️ | アクセス要求発行、EVM検証開始 |
+| Collect-CFrag | ✅ | ⬜️ | ⬜️ | cFragment収集、k-of-n判定 |
+| Recover-Secret | ✅ | ⬜️ | ⬜️ | 秘密復元、Shamir補間 |
+
+### Controller Components (メッセージ処理統制)
+
+| Component | Plan | Implementation | Integration Test | 備考 |
+| :-------- | :--: | :------------: | :--------------: | :--- |
+| MessageHandler | ✅ | ⬜️ | ⬜️ | AOメッセージ処理の統括・エラーハンドリング |
+| MessageRouter | ✅ | ⬜️ | ⬜️ | Action tagによるハンドラー振り分け |
+| MessageValidator | ✅ | ⬜️ | ⬜️ | メッセージ妥当性検証・セキュリティチェック |
+| MessageContextExtractor | ✅ | ⬜️ | ⬜️ | AOメッセージからDTO変換・型安全性確保 |
 
 ### 重要な注意点・課題
-- **Umbral-PRE統合**: Rust crate の WebAssembly 互換性確認が必要
-- **ao-sqlite制約**: AO環境でのSQLite制限事項の調査
-- **Elciao連携**: EVMイベント取得のレイテンシ・信頼性
-- **プロセス間通信**: AOメッセージパッシングの最適化
+- **AOステートレス実行**: 各メッセージ処理でのインスタンス再生成・状態復元
+- **役割分離**: プロセス初期化時の単一ロール割り当て・ハンドラー制限
+- **メッセージ検証**: 署名検証・タイムスタンプチェック・リプレイ防止
+- **WebAssembly制約**: 動的ディスパッチ最小化・メモリ効率最適化
 
 ---
 
@@ -79,26 +92,36 @@ status: "active"
 **進捗率**: 10% (設計段階、実装未着手)
 
 ### ステータス判定基準
-- **Plan**: インフラストラクチャの設計ドキュメントが存在し、レビュー済みであること
-- **Implementation**: インフラストラクチャが実装され、動作確認済みであること
-- **Test**: インフラストラクチャのテストが実装され、passしていること
+- **Plan**: Repository実装・External Adaptersの設計が完了し、Domain層のインターフェースとの整合性が検証されていること
+- **Implementation**: Repository実装がDomain層のインターフェースを実装し、Arweave/EVM/elciaoとの技術的統合が完了していること
+- **Test**: Repository実装のテストが完了し、Domain層インターフェースのモックとの置換可能性が検証されていること
+
+### Repository Implementations (Domain層インターフェースの実装)
 
 | Component | Plan | Implementation | Test | 備考 |
 | :-------- | :--: | :------------: | :--: | :--- |
-| ArweaveAdapter | 🟡 | ⬜️ | ⬜️ | データ永続化・取得、HTTP API統合 |
-| AOProcessAdapter | 🟡 | ⬜️ | ⬜️ | プロセス管理・メッセージング |
-| EVMProviderAdapter | ✅ | ⬜️ | ⬜️ | Web3接続・イベント監視 |
-| ElciaoAdapter | ✅ | ⬜️ | ⬜️ | ブリッジクライアント・署名検証 |
-| SqliteAdapter | 🟡 | ⬜️ | ⬜️ | ao-sqlite統合・トランザクション管理 |
-| CryptoAdapter | ⬜️ | ⬜️ | ⬜️ | umbral-pre・aes-gcm ラッパー |
-| NetworkAdapter | ⬜️ | ⬜️ | ⬜️ | HTTP/WebSocket通信・リトライ機構 |
-| ConfigurationManager | ⬜️ | ⬜️ | ⬜️ | 設定管理・環境変数 |
+| ProcessEntityRepositoryImpl | ✅ | ⬜️ | ⬜️ | ProcessEntityRepository実装、Arweaveタグベース検索 |
+| ShareEntityRepositoryImpl | ✅ | ⬜️ | ⬜️ | ShareEntityRepository実装、バージョニング対応 |
+| CapsuleEntityRepositoryImpl | ✅ | ⬜️ | ⬜️ | CapsuleEntityRepository実装、不変性保証 |
+| AccessRequestEntityRepositoryImpl | ✅ | ⬜️ | ⬜️ | AccessRequestEntityRepository実装、ステータス管理 |
+| RekeyFragmentEntityRepositoryImpl | ✅ | ⬜️ | ⬜️ | RekeyFragmentEntityRepository実装、分散管理 |
+| ArweaveRepositoryBase | 🟡 | ⬜️ | ⬜️ | 共通Arweave操作、タグビルダー・クエリ最適化 |
+
+### External Adapters (外部システム統合)
+
+| Component | Plan | Implementation | Test | 備考 |
+| :-------- | :--: | :------------: | :--: | :--- |
+| ArweaveClient | 🟡 | ⬜️ | ⬜️ | Arweave HTTP API統合、トランザクション管理 |
+| AOMessageAdapter | 🟡 | ⬜️ | ⬜️ | AOメッセージ送受信、非同期処理 |
+| ElciaoAdapter | ✅ | ⬜️ | ⬜️ | EVM-AO ブリッジ、ProofPackage検証 |
+| EVMProvider | ✅ | ⬜️ | ⬜️ | Web3プロバイダー、イベントリスナー |
+| LocalStorageAdapter | 🟡 | ⬜️ | ⬜️ | ao-sqlite統合、メッセージスコープキャッシュ |
 
 ### 重要な注意点・課題
-- **WebAssembly制約**: ネットワークI/O・ファイルシステムアクセス制限
-- **非同期処理**: WASI環境での非同期ランタイム制約
-- **エラーハンドリング**: 分散環境でのフォールトトレランス
-- **設定管理**: AO環境での動的設定変更対応
+- **依存性逆転原則**: Repository実装はDomain層インターフェースに完全準拠
+- **Arweave不変性**: 更新は新規トランザクション、バージョン管理必須
+- **AOステートレス**: メッセージ処理ごとの状態復元・永続化
+- **WebAssembly最適化**: 動的ディスパッチ回避、軽量初期化
 
 ---
 
@@ -186,13 +209,67 @@ status: "active"
 
 ## 7. 重要なマイルストーン
 
-### 🎯 Phase 1 (MVP) - 完了予定: 2025年7月末
-- [ ] **Week 1-2**: ドメイン層実装完了
-- [ ] **Week 3-4**: コアサービス実装完了  
-- [ ] **Week 5-6**: システム統合・テスト完了
-- [ ] **Week 7-8**: セキュリティ監査・デプロイ準備
+### 🧪 PoC Phase (段階的実装) - 完了予定: 2025年8月中旬
 
-### 🚀 Phase 2 (Production) - 完了予定: 2025年10月末  
+#### **PoC Phase 1: AO環境での秘密管理** (Week 1-2)
+**目的**: EVMとClientを除外し、AOとArweaveのみで秘密の分割・保管・復元を実装
+
+- [ ] **実装範囲**:
+  - [ ] Rust WebAssemblyでのAOプロセス実装
+    - [ ] Owner-Process: Shamir秘密分割、umbral-preでのkFrag生成
+    - [ ] Holder-Process: kFrag保管、プロキシ再暗号化（cFrag生成）
+    - [ ] Requester-Process: cFrag収集、秘密復元
+  - [ ] Arweaveストレージ統合（Capsule、暗号化シェア保存）
+  - [ ] AOプロセス間メッセージング実装
+
+- [ ] **検証項目**:
+  - [ ] umbral-preライブラリのAO/WebAssembly環境での動作確認
+  - [ ] k-of-n閾値暗号の正確性（3-of-5でのテスト）
+  - [ ] プロセス間通信の信頼性・レイテンシ測定
+  - [ ] Arweaveへのデータ永続化・取得の確認
+
+#### **PoC Phase 2: EVM統合** (Week 3-4)
+**目的**: スマートコントラクトによる決定論的アクセス制御を追加
+
+- [ ] **実装範囲**:
+  - [ ] VerifyAccessスマートコントラクト実装
+  - [ ] elciaoブリッジ統合（EVM→AO通信）
+  - [ ] ProofPkg生成・検証フロー実装
+  - [ ] アクセス条件の実装（トークン保有、時間制限、ホワイトリスト）
+
+- [ ] **検証項目**:
+  - [ ] EVM→AO通信の信頼性・整合性
+  - [ ] ガスコストの測定・最適化
+  - [ ] アクセス制御の正確性（許可/拒否ロジック）
+  - [ ] イベント監視・状態同期の確認
+
+#### **PoC Phase 3: Client統合** (Week 5-6)
+**目的**: ブラウザでの暗号処理とユーザーインターフェースを追加
+
+- [ ] **実装範囲**:
+  - [ ] O-Browser実装:
+    - [ ] WebCrypto APIによる鍵生成
+    - [ ] umbral-pre WebAssemblyでのデータ暗号化
+    - [ ] Capsule作成・Arweaveアップロード
+  - [ ] A-Browser実装:
+    - [ ] MetaMask統合（署名・トランザクション）
+    - [ ] アクセス要求・ProofPkg生成
+    - [ ] cFrag収集・復号処理
+  - [ ] 共通ライブラリ整備（暗号、AO通信、型定義）
+
+- [ ] **検証項目**:
+  - [ ] ブラウザでのWASMパフォーマンス（読み込み < 3秒）
+  - [ ] 暗号化処理時間（1MBファイル < 5秒）
+  - [ ] 秘密鍵の安全な管理（IndexedDB + AES-GCM）
+  - [ ] E2Eフロー全体の動作確認
+
+### 🎯 Phase 1 (MVP) - 完了予定: 2025年9月末
+- [ ] PoC結果を基にした本格実装
+- [ ] パフォーマンス最適化
+- [ ] セキュリティ強化
+- [ ] 基本的なUI/UX改善
+
+### 🚀 Phase 2 (Production) - 完了予定: 2025年12月末  
 - [ ] FHE統合・TEE対応
 - [ ] ステーキング・評判システム
 - [ ] 本格的セキュリティ監査
@@ -231,6 +308,7 @@ status: "active"
 
 | バージョン | 日付 | 変更内容 | 担当者 |
 |-----------|------|----------|--------|
+| 1.1.0 | 2025-07-09 | PoC実装計画を段階的アプローチに変更（AO環境→EVM統合→Client統合）、マイルストーン調整 | D-TPRES Development Team |
 | 1.0.0 | 2025-06-01 | 初版作成、全セクション定義・現状分析 | D-TPRES Development Team |
 
 ---
@@ -244,4 +322,4 @@ status: "active"
 
 ---
 
-*Last updated: 2025-06-01 by D-TPRES Development Team*
+*Last updated: 2025-07-09 by D-TPRES Development Team*
