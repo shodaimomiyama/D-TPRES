@@ -12,8 +12,8 @@ Working directory: `/` （ルートにいることを確認すること）
     - `make diff`を実行し差分詳細を得る
 2. **コードレビュー:**
     2-1. 以下のルールを踏まえて既存の変更をレビューします。ルールソースは以下の通り
-        - Rust Code: `.roo/rules-rust-code`
-        - Rust Test: `.roo/rules-rust-test`
+        - Rust Code: `.claude/rules-rust-code`
+        - Rust Test: `.claude/rules-rust-test`
     2-2. レビュー結果をユーザーに報告し、Switch mode の承認を得ます
 3. **実装ステータス更新:**
     - `docs/development/status.md` に今までの実装内容を反映して更新する
