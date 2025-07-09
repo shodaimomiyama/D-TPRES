@@ -18,25 +18,112 @@ graph TB
     end
     
     subgraph "AO Layer (WebAssembly)"
-        PO[Owner-Process]
-        RP[Requester-Process]
-        HP[Holder-Process×n]
+        subgraph "UseCase Layer"
+            subgraph "Role-based Handlers"
+                OH[Owner Handlers<br/>・Initialize-Owner<br/>・Split-Secret<br/>・Generate-ReKey]
+                HH[Holder Handlers<br/>・Store-KFrag<br/>・Perform-Reencryption<br/>・Send-CFrag]
+                RH[Requester Handlers<br/>・Access-Request<br/>・Collect-CFrag<br/>・Recover-Secret]
+            end
+        end
+        
+        subgraph "Controller Layer"
+            MH[MessageHandler<br/>処理統括]
+            MR[MessageRouter<br/>アクション振り分け]
+            MV[MessageValidator<br/>妥当性検証]
+            MC[MessageContextExtractor<br/>DTO変換]
+        end
+        
+        subgraph "Service Layer"
+            subgraph "Workflow Services"
+                WS1[AccessWorkflow]
+                WS2[RecoveryWorkflow]
+                WS3[DistributionWorkflow]
+            end
+            subgraph "Core Services"
+                CS1[CryptoService]
+                CS2[ProcessService]
+                CS3[StorageService]
+                CS4[EVMVerificationService]
+            end
+        end
+        
+        subgraph "Domain Layer"
+            subgraph "Entities"
+                E1[ProcessEntity]
+                E2[ShareEntity]
+                E3[CapsuleEntity]
+                E4[AccessRequestEntity]
+                E5[RekeyFragmentEntity]
+            end
+            subgraph "Repositories"
+                R1[ProcessEntityRepository]
+                R2[ShareEntityRepository]
+                R3[CapsuleEntityRepository]
+                R4[AccessRequestEntityRepository]
+            end
+        end
     end
     
     subgraph "Infrastructure"
+        subgraph "Repository Implementations"
+            RI[ArweaveRepositoryImpl<br/>ProcessEntityRepositoryImpl<br/>ShareEntityRepositoryImpl<br/>etc.]
+        end
         AR[Arweave Storage]
         EVM[EVM Smart Contract]
         EL[elciao Bridge]
     end
     
-    OB --> PO
-    AB --> RP
-    PO --> HP
-    RP --> HP
-    OB --> AR
-    AB --> EVM
-    EVM --> EL
-    EL --> RP
+    %% Browser to UseCase
+    OB --> OH
+    AB --> RH
+    
+    %% UseCase to Controller
+    OH --> MH
+    HH --> MH
+    RH --> MH
+    
+    %% Controller Internal Flow
+    MH --> MR
+    MH --> MV
+    MH --> MC
+    
+    %% Controller to Service
+    MC --> WS1
+    MC --> WS2
+    MC --> WS3
+    
+    %% Workflow to Core Services
+    WS1 --> CS1
+    WS1 --> CS2
+    WS2 --> CS3
+    WS3 --> CS4
+    
+    %% Service to Domain
+    CS1 --> E1
+    CS2 --> E2
+    CS3 --> E3
+    CS4 --> E4
+    
+    %% Service to Repository
+    CS1 --> R1
+    CS2 --> R2
+    CS3 --> R3
+    CS4 --> R4
+    
+    %% Repository to Infrastructure
+    R1 --> RI
+    R2 --> RI
+    R3 --> RI
+    R4 --> RI
+    
+    %% Infrastructure to External Systems
+    RI --> AR
+    CS4 --> EL
+    EL --> EVM
+    
+    %% Inter-process communication
+    OH -.->|kFrag配布| HH
+    RH -.->|cFrag要求| HH
 ```
 
 ### 1.2 暗号化フロー
