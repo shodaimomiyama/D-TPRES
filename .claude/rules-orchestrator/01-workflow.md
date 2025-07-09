@@ -6,7 +6,7 @@ This document defines the behavior of the Task-Plan mode. Its primary purpose is
 
 Key responsibilities include:
 
-* **Task Understanding & Planning:** Accurately interpret user requests, define task completion criteria and steps, gain user agreement, and document this in a plan file (`.roo/rules-orchestrator/99-current-task-plan.md`).
+* **Task Understanding & Planning:** Accurately interpret user requests, define task completion criteria and steps, gain user agreement, and document this in a plan file (`.claude/rules-orchestrator/99-current-task-plan.md`).
 * **Subtask Decomposition & Management:** Divide the plan into granular subtasks, ensuring each is small enough to manage context size (ideally under 20% capacity). Track the status of each subtask within the plan file.
 * **Subtask Execution & Mode Selection:** Initiate subtasks in the most appropriate mode (e.g., 'Code', 'Test') to perform the required actions.
 * **Context Management:** Monitor subtask context size and trigger context resets by creating new subtask instances when necessary, ensuring progress is handed off correctly to maintain performance and control costs.
@@ -76,7 +76,7 @@ stateDiagram-v2
 ### PlanCreation
 
 * **Purpose:** Draft the execution plan based on the understood request, adhering to the structure defined in the template file.
-* **Actions:** Define task completion criteria, outline execution steps, and conceptually decompose steps into potential subtasks. Structure this draft based on the format specified in `.roo/rules-orchestrator/02-plan-template.md`.
+* **Actions:** Define task completion criteria, outline execution steps, and conceptually decompose steps into potential subtasks. Structure this draft based on the format specified in `.claude/rules-orchestrator/02-plan-template.md`.
 * **Transitions:**
   * To `UserConfirmation`: When a plan draft is ready for user review.
   * To `PlanCreation` (Self-loop): While refining or modifying the draft plan details internally.
@@ -85,7 +85,7 @@ stateDiagram-v2
 ### UserConfirmation
 
 * **Purpose:** Obtain explicit user agreement on the proposed execution plan, which is structured according to the template file.
-* **Actions:** Present the drafted plan (structured according to `.roo/rules-orchestrator/02-plan-template.md`) to the user. Use `ask_followup_question` if needed to present the plan and request confirmation.
+* **Actions:** Present the drafted plan (structured according to `.claude/rules-orchestrator/02-plan-template.md`) to the user. Use `ask_followup_question` if needed to present the plan and request confirmation.
 * **Transitions:**
   * To `PlanFileCreation`: If the user explicitly confirms or agrees with the plan.
   * To `TaskUnderstanding`: If the user explicitly rejects the plan or requests changes that require revisiting the understanding phase.
@@ -94,8 +94,8 @@ stateDiagram-v2
 
 ### PlanFileCreation
 
-* **Purpose:** Persist the user-confirmed plan to the designated file, **strictly adhering to the format defined in the template file `.roo/rules-orchestrator/02-plan-template.md`**.
-* **Actions:** Save the agreed-upon plan structure to the plan file (e.g., `.roo/rules-orchestrator/99-current-task-plan.md`), ensuring it **exactly matches the format specified in `.roo/rules-orchestrator/02-plan-template.md`**. Refer to that template file for required sections (like `# Plan Title`, `**Task:**`, `**Completion Criteria:**`, `**Execution Steps:**` with status, `**Subtask List:**` with status) and formatting rules.
+* **Purpose:** Persist the user-confirmed plan to the designated file, **strictly adhering to the format defined in the template file `.claude/rules-orchestrator/02-plan-template.md`**.
+* **Actions:** Save the agreed-upon plan structure to the plan file (e.g., `.claude/rules-orchestrator/99-current-task-plan.md`), ensuring it **exactly matches the format specified in `.claude/rules-orchestrator/02-plan-template.md`**. Refer to that template file for required sections (like `# Plan Title`, `**Task:**`, `**Completion Criteria:**`, `**Execution Steps:**` with status, `**Subtask List:**` with status) and formatting rules.
 * **Transitions:**
   * To `SubtaskInitiation`: If the saved plan contains pending (`- [ ]`) subtasks to be executed.
   * To `ParentTaskCompletion`: If the saved plan does not require any subtask execution or all subtasks are complete (`- [x]`).
@@ -129,8 +129,8 @@ stateDiagram-v2
 
 ### PlanStatusUpdate
 
-* **Purpose:** Update the central plan file (which adheres to the format in `.roo/rules-orchestrator/02-plan-template.md`) with the outcome of the finished subtask and determine the next step.
-* **Actions:** Read the plan file (`.roo/rules-orchestrator/99-current-task-plan.md`). Update the status checkbox (`- [ ]` to `- [x]`) for the corresponding subtask in the `**Subtask List:**` and potentially the `**Execution Steps:**` section, following the structure defined in the template file. Analyze the overall plan status (check if any `- [ ]` remains in the Subtask List). Save the updated plan file, preserving the required format defined in `.roo/rules-orchestrator/02-plan-template.md`.
+* **Purpose:** Update the central plan file (which adheres to the format in `.claude/rules-orchestrator/02-plan-template.md`) with the outcome of the finished subtask and determine the next step.
+* **Actions:** Read the plan file (`.claude/rules-orchestrator/99-current-task-plan.md`). Update the status checkbox (`- [ ]` to `- [x]`) for the corresponding subtask in the `**Subtask List:**` and potentially the `**Execution Steps:**` section, following the structure defined in the template file. Analyze the overall plan status (check if any `- [ ]` remains in the Subtask List). Save the updated plan file, preserving the required format defined in `.claude/rules-orchestrator/02-plan-template.md`.
 * **Transitions:**
   * To `SubtaskInitiation`: If the updated plan indicates there are still pending (`- [ ]`) subtasks to launch.
   * To `ParentTaskCompletion`: If the updated plan shows that all subtasks in the `**Subtask List:**` are now complete (`- [x]`).
@@ -163,7 +163,7 @@ When a subtask terminates (either by completion or a triggered context reset), t
     * Agreed Task Definition and Steps from the subtask's Task Understanding.
     * Status of Task Steps: Which steps were completed within the subtask and which remain.
     * Reason for Termination (e.g., "Subtask Completed", "Context Reset").
-2. **Update Task Plan:** Update the main task plan file (`.roo/rules-orchestrator/99-current-task-plan.md`) based on the subtask's progress. Mark completed steps and list the remaining steps clearly.
+2. **Update Task Plan:** Update the main task plan file (`.claude/rules-orchestrator/99-current-task-plan.md`) based on the subtask's progress. Mark completed steps and list the remaining steps clearly.
 3. **Continue Workflow:**
     * If the subtask terminated with "Subtask Completed" and all steps for that part of the plan are done, proceed to the next step in the parent task plan.
     * If the subtask terminated with "Context Reset", create a **new** subtask instance using the `new_task` tool. The `<message>` for this new subtask must include the remaining steps and relevant context from the terminated subtask's handoff information to ensure seamless continuation. This effectively "resumes" the work in a fresh context.
