@@ -4,7 +4,10 @@
       "Bash(make lint)",
       "Bash(make test)",
       "Bash(make fmt)",
-      "Bash(git:*)"
+      "Bash(git:*)",
+      "Bash(find:*)",
+      "Bash(mkdir:*)",
+      "Bash(ls:*)"
     ],
     "deny": []
   }
