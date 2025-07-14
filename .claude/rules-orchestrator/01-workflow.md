@@ -180,62 +180,108 @@ stateDiagram-v2
 
 ## D-TPRES タスク計画ワークフロー例
 
-このセクションでは、D-TPRES開発者が従う典型的なタスク計画ワークフローの概要を示します。この例は、タスクプランモードがタスクプランを作成および管理する際の参考になります。
+このセクションでは、D-TPRES開発者が従う典型的なタスク計画ワークフローの概要を示します。AOステートレス実行モデルと実際のアーキテクチャに基づいています。
 
 1. **タスクの理解:**
     * 割り当てられたタスクの要件と目的を徹底的にレビューする
     * 要求者と曖昧な点を明確にする
-    * 実装が影響する暗号フェーズ（Phase 0-5）を特定する
+    * 実装が影響するライフサイクル（Process/Secret/Access）とプロセスロール（Owner/Holder/Requester）を特定する
+    * AOステートレス実行制約への影響を評価する
 
 2. **設計/仕様ドキュメントの更新:**
     * 設計ドキュメントや仕様に必要な変更を特定する
-    * [`docs/development/`](docs/development/)の関連ファイルを更新する。例えば、タスクが新しい暗号機能を含む場合、[`docs/development/architecture_overview.md`](docs/development/architecture_overview.md)や関連する暗号仕様ドキュメントを更新する
+    * [`docs/development/`](docs/development/)の関連ファイルを更新する
+    * 例：[`docs/development/architecture/architecture_overview.md`](docs/development/architecture/architecture_overview.md)でアーキテクチャ変更を記録
+    * 例：[`docs/development/lifecycle/`](docs/development/lifecycle/)でライフサイクル変更を更新
 
-3. **Cryptoレイヤー（`src/crypto/`）の分析:**
-    * [`src/crypto/`](src/crypto/)ディレクトリ内の既存の暗号実装を調査する
-    * Umbral操作、秘密分散、その他の暗号プリミティブの現在の実装を理解する
-    * 例えば、[`src/crypto/umbral.rs`](src/crypto/umbral.rs)でプロキシ再暗号化実装を確認する
+3. **UseCaseハンドラー（`src/usecase/handlers/`）の分析:**
+    * プロセスロール固有のハンドラーを調査する
+    * Owner: [`docs/development/usecase/owner/owner_handlers.md`](docs/development/usecase/owner/owner_handlers.md)
+    * Holder: [`docs/development/usecase/holder/holder_handlers.md`](docs/development/usecase/holder/holder_handlers.md)
+    * Requester: [`docs/development/usecase/requester/requester_handlers.md`](docs/development/usecase/requester/requester_handlers.md)
+    * AOメッセージ受信からController層への橋渡し機能を理解する
 
-4. **Domainレイヤー（`src/domain/`）の分析:**
-    * [`src/domain/`](src/domain/)ディレクトリ内の既存のエンティティとデータ転送オブジェクト（DTO）を調査する
-    * 現在の動作を理解し、タスクをサポートするために変更や新規追加が必要かを判断する
-    * 例えば、[`src/domain/entity/key.rs`](src/domain/entity/key.rs)で鍵管理エンティティを確認する
+4. **Controller Components（`src/controller/`）の分析:**
+    * [`docs/development/controller/controller_overview.md`](docs/development/controller/controller_overview.md)でController層の役割を確認
+    * MessageHandler: メッセージ処理統括
+    * MessageRouter: アクション振り分け
+    * MessageValidator: 妥当性検証
+    * MessageContextExtractor: DTO変換
+    * 各コンポーネントの連携フローを理解する
 
-5. **Infrastructureレイヤー（`src/infrastructure/`）の分析:**
-    * [`src/infrastructure/`](src/infrastructure/)ディレクトリ内のアダプタとその他のインフラストラクチャ関連の具体的な実装をレビューする
-    * 外部システムの統合方法と変更が必要かを理解する
-    * 例えば、[`src/infrastructure/adapter/arweave/adapter.rs`](src/infrastructure/adapter/arweave/adapter.rs)でArweaveストレージアダプタの実装を確認する
+5. **Service層（Workflow + Core）の分析:**
+    * Workflow Services: [`docs/development/service/workflow-service/workflow-service.md`](docs/development/service/workflow-service/workflow-service.md)
+      - AccessWorkflow, RecoveryWorkflow, DistributionWorkflow
+    * Core Services: [`docs/development/service/core-service/core-service.md`](docs/development/service/core-service/core-service.md)
+      - CryptoService, ProcessService, StorageService, EVMVerificationService
+    * サービス間の依存関係とワークフロー管理を理解する
 
-6. **UseCaseレイヤー（`src/usecase/`）の分析:**
-    * [`src/usecase/`](src/usecase/)ディレクトリ内のビジネスロジックを検査する
-    * ドメインオブジェクトがアプリケーション固有のタスクを達成するためにどのように調整されるかを理解する
-    * 例えば、[`src/usecase/handlers/owner_handler.rs`](src/usecase/handlers/owner_handler.rs)でOwner-Processのロジックを確認する
+6. **Domain Entities（`src/domain/entity/`）の分析:**
+    * [`docs/development/domain/entity/entities.md`](docs/development/domain/entity/entities.md)でエンティティ設計を確認
+    * ProcessEntity, ShareEntity, CapsuleEntity, AccessRequestEntity, RekeyFragmentEntity
+    * エンティティのライフサイクルとAOステートレス制約での永続化方法を理解する
 
-7. **Serviceレイヤー（`src/service/`）の分析:**
-    * [`src/service/`](src/service/)ディレクトリ内の入出力処理を調査する
-    * AOメッセージがどのように受信され、レスポンスがどのように形成されるかを理解する
-    * 例えば、[`src/service/workflow/phase_manager.rs`](src/service/workflow/phase_manager.rs)で暗号フェーズの管理方法を確認する
+7. **Infrastructure Repository実装（`src/infrastructure/`）の分析:**
+    * [`docs/development/domain/infrastructure/repository_implementations.md`](docs/development/domain/infrastructure/repository_implementations.md)
+    * ArweaveRepositoryImpl: 永続化実装
+    * elciao Bridge: EVM連携アダプタ
+    * AOステートレス環境での状態管理戦略を理解する
 
-8. **実装サブタスクの計画:**
-    * 実装作業をより小さく管理可能なサブタスクに分解する
-    * 各暗号フェーズ（Phase 0-5）に対応するサブタスクを明確にリストする
+8. **AOステートレス制約の考慮:**
+    * [`docs/development/ao/ao_process_model.md`](docs/development/ao/ao_process_model.md)でAO制約を確認
+    * メッセージ間でのメモリ非永続性
+    * Compute Units間での実行分散
+    * 明示的な状態保存・復元の必要性
+    * 各実装においてステートレス制約への対応を計画
 
-9. **依存関係によるサブタスクの順序付け:**
-    * 依存関係を尊重する順序でサブタスクを配置する。通常、ボトムアップアプローチに従う：
-        1. Cryptoレイヤーの変更
-        2. Domainレイヤーの変更
-        3. Infrastructureレイヤーの変更
-        4. UseCaseレイヤーの変更
-        5. Serviceレイヤーの変更
-        6. WASM ビルドと検証
+9. **実装サブタスクの計画:**
+    * 実装作業をAOメッセージ処理単位で分解する
+    * 各プロセスロール（Owner/Holder/Requester）に対応するサブタスクを計画
+    * ライフサイクル（Process/Secret/Access）の各段階を考慮
 
-10. **テストサブタスクの計画:**
-    * 暗号操作のテストサブタスクを計画する
-    * 暗号アルゴリズムの正確性テストを`src/tests/crypto/`に配置する
-    * 統合テストを`src/tests/integration_test/`に配置する
-    * インフラストラクチャ実装が外部通信（Arweave、AO Network）に依存する場合、`src/tests/mocks/`にモックを定義する
+10. **依存関係によるサブタスクの順序付け:**
+    * AOステートレス実行を考慮した順序で配置：
+        1. Domain Entitiesの変更（状態構造の定義）
+        2. Repository実装の変更（永続化戦略）
+        3. Core Servicesの変更（基本機能）
+        4. Workflow Servicesの変更（ビジネスロジック）
+        5. Controller Componentsの変更（メッセージ処理）
+        6. UseCase Handlersの変更（ロール固有処理）
+        7. WASM ビルドと検証
 
-11. **セキュリティ考慮事項:**
-    * 各サブタスクでセキュリティ監査を計画する
-    * 鍵管理とアクセス制御の検証を含める
-    * 暗号操作の正確性を確認する
+11. **テストサブタスクの計画:**
+    * AOステートレス環境でのテストを計画する
+    * 各メッセージ処理の独立性を確認
+    * 状態保存・復元の正確性をテスト
+    * プロセスロール固有のテストケースを作成
+    * 統合テストでライフサイクル全体をテスト
+
+12. **セキュリティ考慮事項:**
+    * AOステートレス環境でのセキュリティ制約を評価
+    * メッセージ間での秘密情報の適切なクリア
+    * プロセスロール間のアクセス制御検証
+    * 暗号操作の正確性とタイミング攻撃耐性を確認
+
+## AOステートレス制約への対応
+
+D-TPRESはAOネットワーク上で動作するため、以下の制約への対応が必要です：
+
+### 1. メモリ非永続性
+- **制約**: メッセージ処理間でメモリは保持されない
+- **対応**: すべての状態をArweaveまたはプロセスタグに明示的に保存
+- **実装**: Repository パターンによる永続化戦略
+
+### 2. Compute Units分散
+- **制約**: 異なるメッセージが異なるCompute Unitで処理される可能性
+- **対応**: プロセス状態の完全な再構築機能
+- **実装**: 状態の完全なシリアライゼーション/デシリアライゼーション
+
+### 3. 同期処理必須
+- **制約**: async/awaitは使用不可
+- **対応**: すべての処理を同期的に実装
+- **実装**: ブロッキング操作とエラーハンドリング
+
+### 4. メッセージ駆動アーキテクチャ
+- **制約**: すべての処理はメッセージトリガー
+- **対応**: UseCase Handlersでのメッセージルーティング
+- **実装**: プロセスロール別のハンドラー分離
