@@ -82,35 +82,122 @@ Change the source code. **Editing anything other than the target file is absolut
 
 ## Directory Structure
 
-```text
+```
 D-TPRES/
-├── src/                    # AO WebAssembly (Rust)
-│   ├── main.rs
-│   ├── di.rs
-│   ├── processes/          # AO Process実装
-│   │   ├── owner.rs
-│   │   ├── holder.rs
-│   │   └── requester.rs
-│   └── crypto/             # 暗号化ユーティリティ
-│       ├── umbral.rs
-│       └── shamir.rs
-├── browser/                # ブラウザフロントエンド
+├── src/                           # AO WebAssembly (Rust) - レイヤードアーキテクチャ
+│   ├── main.rs                    # AOエントリーポイント & ハンドラー登録
+│   ├── di.rs                      # 依存性注入コンテナ
+│   ├── lib.rs                     # WASMライブラリエクスポート
+│   │
+│   ├── usecase/                   # UseCase Layer - AOメッセージハンドラー
+│   │   ├── mod.rs                 # 公開エクスポート
+│   │   ├── handlers/              # ロールベースメッセージハンドラー
+│   │   │   ├── mod.rs
+│   │   │   ├── owner_handlers.rs  # Ownerロールハンドラー
+│   │   │   ├── holder_handlers.rs # Holderロールハンドラー
+│   │   │   ├── requester_handlers.rs # Requesterロールハンドラー
+│   │   │   └── common_handlers.rs # 共通ハンドラーユーティリティ
+│   │   ├── context.rs             # ハンドラーコンテキスト管理
+│   │   └── errors.rs              # UseCase層エラー定義
+│   │
+│   ├── controller/                # Controller Layer - メッセージ処理
+│   │   ├── mod.rs
+│   │   ├── message_handler.rs     # 中央MessageHandler
+│   │   ├── router.rs              # MessageRouter実装
+│   │   ├── validator.rs           # MessageValidator & バリデーションロジック
+│   │   ├── extractor.rs           # MessageContextExtractor & DTOs
+│   │   ├── response.rs            # レスポンス生成ユーティリティ
+│   │   └── errors.rs              # Controller層エラー定義
+│   │
+│   ├── service/                   # Service Layer - ビジネスロジック
+│   │   ├── mod.rs
+│   │   ├── workflow/              # Workflow Services (Phaseオーケストレーション)
+│   │   │   ├── mod.rs
+│   │   │   ├── secret_sharing.rs  # Phase 1: SecretSharingWorkflowService
+│   │   │   ├── access_request.rs  # Phase 2: AccessRequestWorkflowService
+│   │   │   ├── reencryption.rs    # Phase 3-4: ReencryptionWorkflowService
+│   │   │   └── secret_recovery.rs # Phase 5: SecretRecoveryWorkflowService
+│   │   ├── core/                  # Core Services (基本操作)
+│   │   │   ├── mod.rs
+│   │   │   ├── crypto.rs          # CryptoService (TPRE, Shamir)
+│   │   │   ├── process.rs         # ProcessManagementService
+│   │   │   ├── messaging.rs       # MessageRoutingService
+│   │   │   └── storage.rs         # ArweaveStorageService
+│   │   ├── container.rs           # ServiceContainer for DI
+│   │   └── errors.rs              # Service層エラー定義
+│   │
+│   ├── domain/                    # Domain Layer - エンティティ & Repository Interface
+│   │   ├── mod.rs
+│   │   ├── entities/              # 純粋データ構造
+│   │   │   ├── mod.rs
+│   │   │   ├── process.rs         # ProcessEntity
+│   │   │   ├── share.rs           # ShareEntity
+│   │   │   ├── capsule.rs         # CapsuleEntity
+│   │   │   ├── access_request.rs  # AccessRequestEntity
+│   │   │   ├── rekey_fragment.rs  # RekeyFragmentEntity
+│   │   │   └── reencryption.rs    # ReencryptionEntity
+│   │   ├── repositories/          # Repository Interface (DIP)
+│   │   │   ├── mod.rs
+│   │   │   ├── process.rs         # ProcessEntityRepository trait
+│   │   │   ├── share.rs           # ShareEntityRepository trait
+│   │   │   ├── capsule.rs         # CapsuleEntityRepository trait
+│   │   │   ├── access_request.rs  # AccessRequestEntityRepository trait
+│   │   │   ├── rekey_fragment.rs  # RekeyFragmentEntityRepository trait
+│   │   │   └── reencryption.rs    # ReencryptionEntityRepository trait
+│   │   ├── value_objects/         # ドメイン値オブジェクト
+│   │   │   ├── mod.rs
+│   │   │   ├── process_role.rs    # ProcessRole enum
+│   │   │   ├── secret_id.rs       # SecretId値オブジェクト
+│   │   │   └── phase.rs           # Phase enum
+│   │   └── errors.rs              # Domain層エラー定義
+│   │
+│   ├── infrastructure/            # Infrastructure Layer - 技術実装
+│   │   ├── mod.rs
+│   │   ├── repositories/          # Repository実装
+│   │   │   ├── mod.rs
+│   │   │   ├── arweave_base.rs    # 基盤ArweaveRepository実装
+│   │   │   ├── process_impl.rs    # ProcessEntityRepositoryImpl
+│   │   │   ├── share_impl.rs      # ShareEntityRepositoryImpl
+│   │   │   ├── capsule_impl.rs    # CapsuleEntityRepositoryImpl
+│   │   │   ├── access_request_impl.rs # AccessRequestEntityRepositoryImpl
+│   │   │   ├── rekey_fragment_impl.rs # RekeyFragmentEntityRepositoryImpl
+│   │   │   └── reencryption_impl.rs # ReencryptionEntityRepositoryImpl
+│   │   ├── external/              # 外部システムアダプター
+│   │   │   ├── mod.rs
+│   │   │   ├── arweave_client.rs  # ArweaveClient
+│   │   │   └── evm_bridge.rs      # elciao EVM bridge
+│   │   ├── cache.rs               # メッセージスコープキャッシュ
+│   │   └── errors.rs              # Infrastructure層エラー定義
+│   │
+│   ├── crypto/                    # 暗号化ユーティリティ
+│   │   ├── mod.rs
+│   │   ├── umbral.rs              # Umbral TPRE操作
+│   │   ├── shamir.rs              # Shamir Secret Sharing
+│   │   └── utils.rs               # 暗号化ユーティリティ関数
+│   │
+│   └── utils/                     # 共有ユーティリティ
+│       ├── mod.rs
+│       ├── serialization.rs       # Serdeヘルパー
+│       ├── time.rs                # タイムスタンプユーティリティ
+│       └── constants.rs           # システム定数
+│
+├── browser/                       # ブラウザフロントエンド
 │   ├── packages/
-│   │   ├── core/          # 共通ライブラリ
-│   │   │   ├── crypto/    # WebCrypto + WASM統合
-│   │   │   ├── ao/        # AO通信ライブラリ
-│   │   │   └── types/     # 共通型定義
-│   │   ├── o-browser/     # データ所有者UI
-│   │   └── a-browser/     # アクセス者UI
-│   ├── shared/            # 共通コンポーネント
+│   │   ├── core/                  # 共通ライブラリ
+│   │   │   ├── crypto/            # WebCrypto + WASM統合
+│   │   │   ├── ao/                # AO通信ライブラリ
+│   │   │   └── types/             # 共通型定義
+│   │   ├── o-browser/             # データ所有者UI
+│   │   └── a-browser/             # アクセス者UI
+│   ├── shared/                    # 共通コンポーネント
 │   └── package.json
-├── contracts/             # EVM Smart Contracts
+├── contracts/                     # EVM Smart Contracts
 │   ├── src/
 │   │   └── VerifyAccess.sol
 │   └── package.json
-├── wasm/                  # WebAssembly ビルド成果物
+├── wasm/                          # WebAssembly ビルド成果物
 │   ├── umbral_wasm.js
 │   └── umbral_wasm.wasm
-├── scripts/              # ビルド・デプロイスクリプト
+├── scripts/                       # ビルド・デプロイスクリプト
 └── docs/
 ```
