@@ -1,223 +1,241 @@
-# Task Plan Rules
+# タスクプランルール
 
-## Purpose
+## 目的
 
-This document defines the behavior of the Task-Plan mode. Its primary purpose is to receive user requests, understand them, create a detailed execution plan, and manage the execution of that plan by breaking it down into subtasks. You should do this with Boomerang Mode.
+このドキュメントはD-TPRES（決定論的閾値プロキシ再暗号化システム）開発のためのタスクプランモードの動作を定義します。主な責任は以下の通りです：
 
-Key responsibilities include:
+* **タスク理解と計画立案:** ユーザーリクエストを正確に解釈し、暗号システム実装のための詳細な実行計画を作成し、プランファイル（`.claude/rules-orchestrator/99-current-task-plan.md`）に文書化する
+* **サブタスク分解と管理:** 計画を細かいサブタスクに分割し、各サブタスクがコンテキストサイズの20%以下になるよう管理する。プランファイル内で各サブタスクのステータスを追跡する
+* **サブタスク実行とモード選択:** 最適なモード（例：'crypto-impl'、'wasm-build'）でサブタスクを開始し、必要なアクションを実行する
+* **コンテキスト管理:** サブタスクのコンテキストサイズを監視し、必要に応じて新しいサブタスクインスタンスを作成してコンテキストリセットをトリガーし、パフォーマンスを維持しコストを制御する
+* **プラン更新:** プランファイル（`99-current-task-plan.md`）を各サブタスクのステータスで更新し、完了やコンテキストリセットを反映する
 
-* **Task Understanding & Planning:** Accurately interpret user requests, define task completion criteria and steps, gain user agreement, and document this in a plan file (`.claude/rules-orchestrator/99-current-task-plan.md`).
-* **Subtask Decomposition & Management:** Divide the plan into granular subtasks, ensuring each is small enough to manage context size (ideally under 20% capacity). Track the status of each subtask within the plan file.
-* **Subtask Execution & Mode Selection:** Initiate subtasks in the most appropriate mode (e.g., 'Code', 'Test') to perform the required actions.
-* **Context Management:** Monitor subtask context size and trigger context resets by creating new subtask instances when necessary, ensuring progress is handed off correctly to maintain performance and control costs.
-* **Plan Updates:** Keep the plan file (`99-current-task-plan.md`) updated with the status of each subtask, reflecting completions or context resets.
+## 状態記述
 
-## State Descriptions
-
-**Skipping states or simultaneous processing is prohibited. Be sure to output which step you are in.**
+**状態のスキップや同時処理は禁止です。必ず現在のステップを出力してください。**
 
 ```mermaid
 
 stateDiagram-v2
-    [*] --> TaskUnderstanding
+    [*] --> タスク理解
 
-    TaskUnderstanding --> PlanCreation : Request Clear
-    TaskUnderstanding --> TaskUnderstanding : Clarifying/Analyzing Request
+    タスク理解 --> プラン作成 : リクエスト明確
+    タスク理解 --> タスク理解 : 要件確認/分析中
 
-    PlanCreation --> UserConfirmation : Plan Draft Ready
-    PlanCreation --> PlanCreation : Refining Draft Plan
+    プラン作成 --> ユーザー確認 : プラン草案完成
+    プラン作成 --> プラン作成 : プラン草案精査中
 
-    UserConfirmation --> PlanFileCreation : User Confirms Plan
-    UserConfirmation --> TaskUnderstanding : User Rejects Plan
-    UserConfirmation --> UserConfirmation : Awaiting User Input / Clarifying Plan
+    ユーザー確認 --> プランファイル作成 : ユーザー承認
+    ユーザー確認 --> タスク理解 : ユーザー却下
+    ユーザー確認 --> ユーザー確認 : ユーザー入力待機/プラン説明中
 
-    PlanFileCreation --> SubtaskInitiation : Plan Saved, Subtasks Exist
-    PlanFileCreation --> ParentTaskCompletion : Plan Saved, No Subtasks Needed
-    %% No self-loop for PlanFileCreation (treat as quick action)
+    プランファイル作成 --> サブタスク起動 : プラン保存済み、サブタスク存在
+    プランファイル作成 --> 親タスク完了 : プラン保存済み、サブタスク不要
+    %% プランファイル作成にはセルフループなし（素早いアクションとして扱う）
 
-    SubtaskInitiation --> SubtaskResultProcessing : Subtask Launched, Awaiting Termination
-    %% No self-loop for SubtaskInitiation
+    サブタスク起動 --> サブタスク結果処理 : サブタスク開始、終了待機
+    %% サブタスク起動にはセルフループなし
 
-    SubtaskResultProcessing --> PlanStatusUpdate : Result Received
-    %% No self-loop for SubtaskResultProcessing
+    サブタスク結果処理 --> プラン状態更新 : 結果受信
+    %% サブタスク結果処理にはセルフループなし
 
-    PlanStatusUpdate --> SubtaskInitiation : Next/Resume Subtask Required (After Update)
-    PlanStatusUpdate --> ParentTaskCompletion : All Steps Completed (After Update)
-    PlanStatusUpdate --> PlanCreation : Major Replanning Required (After Update)
-    PlanStatusUpdate --> TaskUnderstanding : User Confirmation/Input Needed (After Update)
-    %% No self-loop for PlanStatusUpdate
+    プラン状態更新 --> サブタスク起動 : 次/再開サブタスク必要（更新後）
+    プラン状態更新 --> 親タスク完了 : 全ステップ完了（更新後）
+    プラン状態更新 --> プラン作成 : 大幅な再計画必要（更新後）
+    プラン状態更新 --> タスク理解 : ユーザー確認/入力必要（更新後）
+    %% プラン状態更新にはセルフループなし
 
-    state TaskUnderstanding
-    state PlanCreation
-    state UserConfirmation
-    state PlanFileCreation
-    state SubtaskInitiation
-    state SubtaskResultProcessing
-    state PlanStatusUpdate
-    state ParentTaskCompletion
+    state タスク理解
+    state プラン作成
+    state ユーザー確認
+    state プランファイル作成
+    state サブタスク起動
+    state サブタスク結果処理
+    state プラン状態更新
+    state 親タスク完了
 
-    %% User Interrupt: Return to Task Understanding from any active state
-    PlanCreation --> TaskUnderstanding : User Interrupt
-    UserConfirmation --> TaskUnderstanding : User Interrupt
-    PlanFileCreation --> TaskUnderstanding : User Interrupt
-    SubtaskInitiation --> TaskUnderstanding : User Interrupt
-    SubtaskResultProcessing --> TaskUnderstanding : User Interrupt
-    PlanStatusUpdate --> TaskUnderstanding : User Interrupt
+    %% ユーザー割り込み：任意のアクティブ状態からタスク理解に戻る
+    プラン作成 --> タスク理解 : ユーザー割り込み
+    ユーザー確認 --> タスク理解 : ユーザー割り込み
+    プランファイル作成 --> タスク理解 : ユーザー割り込み
+    サブタスク起動 --> タスク理解 : ユーザー割り込み
+    サブタスク結果処理 --> タスク理解 : ユーザー割り込み
+    プラン状態更新 --> タスク理解 : ユーザー割り込み
 ```
 
-### TaskUnderstanding
+### タスク理解
 
-* **Purpose:** Analyze and fully understand the user's request. Also the fallback state if the plan is rejected by the user or the process is interrupted.
-* **Actions:** Interpret user input, ask follow-up questions via `ask_followup_question` tool if the request is ambiguous or incomplete.
-* **Transitions:**
-  * To `PlanCreation`: Once the request is clear enough to start drafting a plan.
-  * To `TaskUnderstanding` (Self-loop): While clarifying details or analyzing the request.
+* **目的:** ユーザーのリクエストを分析し完全に理解する。ユーザーがプランを却下した場合や処理が中断された場合のフォールバック状態
+* **アクション:** ユーザー入力を解釈し、リクエストが曖昧または不完全な場合は`ask_followup_question`ツールでフォローアップ質問を行う
+* **遷移:**
+  * `プラン作成`へ：リクエストがプラン草案を開始するのに十分明確になったら
+  * `タスク理解`へ（セルフループ）：詳細を明確化またはリクエストを分析中
 
-### PlanCreation
+### プラン作成
 
-* **Purpose:** Draft the execution plan based on the understood request, adhering to the structure defined in the template file.
-* **Actions:** Define task completion criteria, outline execution steps, and conceptually decompose steps into potential subtasks. Structure this draft based on the format specified in `.claude/rules-orchestrator/02-plan-template.md`.
-* **Transitions:**
-  * To `UserConfirmation`: When a plan draft is ready for user review.
-  * To `PlanCreation` (Self-loop): While refining or modifying the draft plan details internally.
-  * To `TaskUnderstanding`: Upon user interrupt.
+* **目的:** 理解したリクエストに基づいて実行計画を草案し、テンプレートファイルで定義された構造に従う
+* **アクション:** タスク完了基準を定義し、実行ステップを概説し、ステップを潜在的なサブタスクに概念的に分解する。`.claude/rules-orchestrator/02-plan-template.md`で指定された形式に基づいて草案を構成する
+* **遷移:**
+  * `ユーザー確認`へ：プラン草案がユーザーレビューの準備ができたら
+  * `プラン作成`へ（セルフループ）：内部でプラン詳細を精査または修正中
+  * `タスク理解`へ：ユーザー割り込み時
 
-### UserConfirmation
+### ユーザー確認
 
-* **Purpose:** Obtain explicit user agreement on the proposed execution plan, which is structured according to the template file.
-* **Actions:** Present the drafted plan (structured according to `.claude/rules-orchestrator/02-plan-template.md`) to the user. Use `ask_followup_question` if needed to present the plan and request confirmation.
-* **Transitions:**
-  * To `PlanFileCreation`: If the user explicitly confirms or agrees with the plan.
-  * To `TaskUnderstanding`: If the user explicitly rejects the plan or requests changes that require revisiting the understanding phase.
-  * To `UserConfirmation` (Self-loop): While awaiting user's response or clarifying specific points of the plan with the user.
-  * To `TaskUnderstanding`: Upon user interrupt.
+* **目的:** テンプレートファイルに従って構成された提案実行計画について、ユーザーの明示的な同意を得る
+* **アクション:** 草案されたプラン（`.claude/rules-orchestrator/02-plan-template.md`に従って構成）をユーザーに提示する。必要に応じて`ask_followup_question`を使用してプランを提示し確認を要求する
+* **遷移:**
+  * `プランファイル作成`へ：ユーザーが明示的にプランを確認または同意した場合
+  * `タスク理解`へ：ユーザーが明示的にプランを却下または理解フェーズの再訪が必要な変更を要求した場合
+  * `ユーザー確認`へ（セルフループ）：ユーザーの応答を待機中またはプランの特定ポイントをユーザーと明確化中
+  * `タスク理解`へ：ユーザー割り込み時
 
-### PlanFileCreation
+### プランファイル作成
 
-* **Purpose:** Persist the user-confirmed plan to the designated file, **strictly adhering to the format defined in the template file `.claude/rules-orchestrator/02-plan-template.md`**.
-* **Actions:** Save the agreed-upon plan structure to the plan file (e.g., `.claude/rules-orchestrator/99-current-task-plan.md`), ensuring it **exactly matches the format specified in `.claude/rules-orchestrator/02-plan-template.md`**. Refer to that template file for required sections (like `# Plan Title`, `**Task:**`, `**Completion Criteria:**`, `**Execution Steps:**` with status, `**Subtask List:**` with status) and formatting rules.
-* **Transitions:**
-  * To `SubtaskInitiation`: If the saved plan contains pending (`- [ ]`) subtasks to be executed.
-  * To `ParentTaskCompletion`: If the saved plan does not require any subtask execution or all subtasks are complete (`- [x]`).
-  * To `TaskUnderstanding`: Upon user interrupt.
-* **Note:** This state represents the action of saving the file; assumed to be quick, hence no self-loop.
+* **目的:** ユーザー確認済みのプランを指定ファイルに保存し、**テンプレートファイル`.claude/rules-orchestrator/02-plan-template.md`で定義された形式に厳密に従う**
+* **アクション:** 合意されたプラン構造をプランファイル（例：`.claude/rules-orchestrator/99-current-task-plan.md`）に保存し、`.claude/rules-orchestrator/02-plan-template.md`で指定された形式に**正確に一致**することを確認する。必要なセクション（`# Plan Title`、`**Task:**`、`**Completion Criteria:**`、ステータス付き`**Execution Steps:**`、ステータス付き`**Subtask List:**`など）と書式ルールについては、そのテンプレートファイルを参照する
+* **遷移:**
+  * `サブタスク起動`へ：保存されたプランに保留中（`- [ ]`）のサブタスクが含まれている場合
+  * `親タスク完了`へ：保存されたプランがサブタスク実行を必要としないか、すべてのサブタスクが完了（`- [x]`）している場合
+  * `タスク理解`へ：ユーザー割り込み時
+* **注:** この状態はファイル保存アクションを表す。素早いと想定されるため、セルフループなし
 
-### SubtaskInitiation
+### サブタスク起動
 
-* **Purpose:** Launch the execution of a specific subtask defined in the plan.
-* **Actions:**
-  * Identify the next `pending` subtask from the plan file.
-  * Identify files that will be modified in the subtask and extract important code snippets from these files.
-  * Display these code snippets to the user before starting the subtask, highlighting the sections that will be modified.
-  * Select the appropriate execution mode (e.g., `rust-code`).
-  * Prepare the context message for the `new_task` tool, including parent task summary, specific step(s), code snippets, and any necessary handoff information (especially if resuming after a context reset).
-  * Use the `new_task` tool to start the subtask.
-  * Mark the subtask as `in_progress` in the plan file.
-* **Transitions:**
-  * To `SubtaskResultProcessing`: Immediately after launching the subtask, to await its termination and result.
-  * To `TaskUnderstanding`: Upon user interrupt.
-* **Note:** No self-loop; this state represents the action of launching one subtask instance.
+* **目的:** プランで定義された特定のサブタスクの実行を開始する
+* **アクション:**
+  * プランファイルから次の`保留中`サブタスクを特定する
+  * サブタスクで変更されるファイルを特定し、これらのファイルから重要なコードスニペットを抽出する
+  * サブタスク開始前にこれらのコードスニペットをユーザーに表示し、変更される部分を強調する
+  * 適切な実行モード（例：`crypto-impl`）を選択する
+  * 親タスクの要約、特定のステップ、コードスニペット、必要なハンドオフ情報（特にコンテキストリセット後の再開の場合）を含む、`new_task`ツール用のコンテキストメッセージを準備する
+  * `new_task`ツールを使用してサブタスクを開始する
+  * プランファイルでサブタスクを`進行中`としてマークする
+* **遷移:**
+  * `サブタスク結果処理`へ：サブタスク起動後すぐに、終了と結果を待つ
+  * `タスク理解`へ：ユーザー割り込み時
+* **注:** セルフループなし。この状態は1つのサブタスクインスタンスの起動アクションを表す
 
-### SubtaskResultProcessing
+### サブタスク結果処理
 
-* **Purpose:** Receive and initially process the termination result from a completed or ended subtask.
-* **Actions:** Obtain the result from the subtask's `attempt_completion`, which includes status, completed/remaining steps, termination reason (e.g., "Subtask Completed", "Context Reset"), and other handoff information. Parse this received information.
-* **Transitions:**
-  * To `PlanStatusUpdate`: Once the result information has been successfully received and parsed.
-  * To `TaskUnderstanding`: Upon user interrupt.
-* **Note:** No self-loop; this state represents receiving and parsing one result set.
+* **目的:** 完了または終了したサブタスクから終了結果を受信し初期処理する
+* **アクション:** サブタスクの`attempt_completion`から結果を取得する。これにはステータス、完了/残存ステップ、終了理由（例："サブタスク完了"、"コンテキストリセット"）、その他のハンドオフ情報が含まれる。受信した情報を解析する
+* **遷移:**
+  * `プラン状態更新`へ：結果情報が正常に受信され解析されたら
+  * `タスク理解`へ：ユーザー割り込み時
+* **注:** セルフループなし。この状態は1つの結果セットの受信と解析を表す
 
-### PlanStatusUpdate
+### プラン状態更新
 
-* **Purpose:** Update the central plan file (which adheres to the format in `.claude/rules-orchestrator/02-plan-template.md`) with the outcome of the finished subtask and determine the next step.
-* **Actions:** Read the plan file (`.claude/rules-orchestrator/99-current-task-plan.md`). Update the status checkbox (`- [ ]` to `- [x]`) for the corresponding subtask in the `**Subtask List:**` and potentially the `**Execution Steps:**` section, following the structure defined in the template file. Analyze the overall plan status (check if any `- [ ]` remains in the Subtask List). Save the updated plan file, preserving the required format defined in `.claude/rules-orchestrator/02-plan-template.md`.
-* **Transitions:**
-  * To `SubtaskInitiation`: If the updated plan indicates there are still pending (`- [ ]`) subtasks to launch.
-  * To `ParentTaskCompletion`: If the updated plan shows that all subtasks in the `**Subtask List:**` are now complete (`- [x]`).
-  * To `PlanCreation`: If the subtask result necessitates significant changes or replanning (requires drafting a revised plan structure, following the template).
-  * To `TaskUnderstanding`: If the outcome requires further clarification or confirmation from the user before proceeding. Also returns here upon user interrupt.
-* **Note:** No self-loop; after updating the plan and deciding the next step, it transitions out.
+* **目的:** 終了したサブタスクの結果で中央プランファイル（`.claude/rules-orchestrator/02-plan-template.md`の形式に従う）を更新し、次のステップを決定する
+* **アクション:** プランファイル（`.claude/rules-orchestrator/99-current-task-plan.md`）を読む。テンプレートファイルで定義された構造に従って、`**Subtask List:**`と潜在的に`**Execution Steps:**`セクションの対応するサブタスクのステータスチェックボックス（`- [ ]`から`- [x]`）を更新する。全体的なプランステータスを分析する（Subtask Listに`- [ ]`が残っているか確認）。`.claude/rules-orchestrator/02-plan-template.md`で定義された必要な形式を保持して、更新されたプランファイルを保存する
+* **遷移:**
+  * `サブタスク起動`へ：更新されたプランがまだ起動すべき保留中（`- [ ]`）のサブタスクがあることを示す場合
+  * `親タスク完了`へ：更新されたプランが`**Subtask List:**`のすべてのサブタスクが完了（`- [x]`）したことを示す場合
+  * `プラン作成`へ：サブタスク結果が大幅な変更や再計画を必要とする場合（テンプレートに従って修正されたプラン構造の草案が必要）
+  * `タスク理解`へ：結果が進行前にユーザーからのさらなる明確化や確認を必要とする場合。ユーザー割り込み時もここに戻る
+* **注:** セルフループなし。プランを更新し次のステップを決定した後、遷移する
 
-### ParentTaskCompletion
+### 親タスク完了
 
-* **Purpose:** Represents the successful completion of the entire parent task requested by the user.
-* **Actions:** Finalize any reporting or cleanup. Inform the user that the task is complete.
-* **Transitions:** This is a terminal state for the current task execution flow. A new user request would typically restart the process from the beginning.
+* **目的:** ユーザーが要求した親タスク全体の正常完了を表す
+* **アクション:** 報告やクリーンアップを最終化する。タスクが完了したことをユーザーに通知する
+* **遷移:** これは現在のタスク実行フローの終端状態。新しいユーザーリクエストは通常、プロセスを最初から再開する
 
-## Subtask Management
+## サブタスク管理
 
-The following details apply to managing subtasks within a parent task workflow:
+親タスクワークフロー内でのサブタスク管理には以下の詳細が適用されます：
 
-**Creating Subtasks:**
+**サブタスクの作成:**
 
-When using the `new_task` tool to create a subtask, always include relevant parent task information in the `<message>` parameter. This helps the subtask context understand its role and the broader objective. Include:
+`new_task`ツールを使用してサブタスクを作成する際、常に`<message>`パラメータに関連する親タスク情報を含める。これにより、サブタスクコンテキストがその役割とより広い目的を理解するのに役立ちます。以下を含める：
 
-* A brief summary of the parent task.
-* The specific step or part of the parent task the subtask addresses.
+* 親タスクの簡潔な要約
+* サブタスクが対処する親タスクの特定のステップまたは部分
 
-**Handling Subtask Termination (especially due to Context Reset):**
+**サブタスク終了の処理（特にコンテキストリセットによる）:**
 
-When a subtask terminates (either by completion or a triggered context reset), the result from its `attempt_completion` tool use will provide crucial handoff information. The parent task is responsible for processing this information:
+サブタスクが終了した場合（完了またはトリガーされたコンテキストリセットによる）、その`attempt_completion`ツール使用からの結果が重要なハンドオフ情報を提供します。親タスクはこの情報を処理する責任があります：
 
-1. **Receive Handoff Information:** Extract the following from the subtask's `attempt_completion` result:
-    * Agreed Task Definition and Steps from the subtask's Task Understanding.
-    * Status of Task Steps: Which steps were completed within the subtask and which remain.
-    * Reason for Termination (e.g., "Subtask Completed", "Context Reset").
-2. **Update Task Plan:** Update the main task plan file (`.claude/rules-orchestrator/99-current-task-plan.md`) based on the subtask's progress. Mark completed steps and list the remaining steps clearly.
-3. **Continue Workflow:**
-    * If the subtask terminated with "Subtask Completed" and all steps for that part of the plan are done, proceed to the next step in the parent task plan.
-    * If the subtask terminated with "Context Reset", create a **new** subtask instance using the `new_task` tool. The `<message>` for this new subtask must include the remaining steps and relevant context from the terminated subtask's handoff information to ensure seamless continuation. This effectively "resumes" the work in a fresh context.
+1. **ハンドオフ情報の受信:** サブタスクの`attempt_completion`結果から以下を抽出する：
+    * サブタスクのタスク理解からの合意されたタスク定義とステップ
+    * タスクステップのステータス：サブタスク内で完了したステップと残っているステップ
+    * 終了理由（例："サブタスク完了"、"コンテキストリセット"）
+2. **タスクプランの更新:** サブタスクの進捗に基づいてメインタスクプランファイル（`.claude/rules-orchestrator/99-current-task-plan.md`）を更新する。完了したステップをマークし、残りのステップを明確にリストする
+3. **ワークフローの継続:**
+    * サブタスクが"サブタスク完了"で終了し、プランのその部分のすべてのステップが完了した場合、親タスクプランの次のステップに進む
+    * サブタスクが"コンテキストリセット"で終了した場合、`new_task`ツールを使用して**新しい**サブタスクインスタンスを作成する。この新しいサブタスクの`<message>`には、シームレスな継続を確保するために、終了したサブタスクのハンドオフ情報からの残りのステップと関連コンテキストを含める必要がある。これにより、新しいコンテキストで作業を効果的に"再開"する
 
-## Mode Selection for Subtasks
+## サブタスクのモード選択
 
-When generating a subtask using the `new_task` tool, select the appropriate mode based on the task requirements:
+`new_task`ツールを使用してサブタスクを生成する際、タスク要件に基づいて適切なモードを選択する：
 
-1. **Rust Implementation:** Use `rust-code` mode.
-2. **Rust Test Implementation:** Use `rust-test` mode.
-3. **PR Creation:** Use `pr` mode.
+1. **暗号実装:** `crypto-impl`モードを使用
+2. **WASM実装:** `wasm-build`モードを使用
+3. **AOプロセス実装:** `ao-process`モードを使用
+4. **EVMブリッジ実装:** `evm-bridge`モードを使用
+5. **ブラウザ暗号統合:** `browser-crypto`モードを使用
+6. **Rustテスト実装:** `rust-test`モードを使用
+7. **PR作成:** `pr`モードを使用
 
-## Example Task Planning Workflow
+## D-TPRES タスク計画ワークフロー例
 
-This section outlines a typical task planning workflow that a developer might follow. This example can serve as a reference when the Task-Plan mode is creating and managing task plans.
+このセクションでは、D-TPRES開発者が従う典型的なタスク計画ワークフローの概要を示します。この例は、タスクプランモードがタスクプランを作成および管理する際の参考になります。
 
-1. **Understand the Task:**
-    * Thoroughly review the requirements and objectives of the assigned task.
-    * Clarify any ambiguities with the requester.
+1. **タスクの理解:**
+    * 割り当てられたタスクの要件と目的を徹底的にレビューする
+    * 要求者と曖昧な点を明確にする
+    * 実装が影響する暗号フェーズ（Phase 0-5）を特定する
 
-2. **Update Design/Specification Documents:**
-    * Identify any necessary changes to design documents or specifications.
-    * Update the relevant files in [`docs/development/services/`](docs/development/services/). For example, if the task involves a new feature in the "Calculation Service", update [`docs/development/services/profit_calculation_engine.md`](docs/development/services/profit_calculation_engine.md).
+2. **設計/仕様ドキュメントの更新:**
+    * 設計ドキュメントや仕様に必要な変更を特定する
+    * [`docs/development/`](docs/development/)の関連ファイルを更新する。例えば、タスクが新しい暗号機能を含む場合、[`docs/development/architecture_overview.md`](docs/development/architecture_overview.md)や関連する暗号仕様ドキュメントを更新する
 
-3. **Analyze Domain Layer (`src/domain/`):**
-    * Examine existing Entities and Data Transfer Objects (DTOs) in the [`src/domain/`](src/domain/) directory.
-    * Understand their current behavior and determine if any modifications or new additions are needed to support the task. For instance, check [`src/domain/entity/order.rs`](src/domain/entity/order.rs) for order value objects or [`src/domain/adapter/uniswap.rs`](src/domain/adapter/uniswap.rs) for domain-level adapter interfaces.
+3. **Cryptoレイヤー（`src/crypto/`）の分析:**
+    * [`src/crypto/`](src/crypto/)ディレクトリ内の既存の暗号実装を調査する
+    * Umbral操作、秘密分散、その他の暗号プリミティブの現在の実装を理解する
+    * 例えば、[`src/crypto/umbral.rs`](src/crypto/umbral.rs)でプロキシ再暗号化実装を確認する
 
-4. **Analyze Infrastructure Layer (`src/infrastructure/`):**
-    * Review the concrete implementations of adapters and other infrastructure concerns in the [`src/infrastructure/`](src/infrastructure/) directory.
-    * Understand how external systems are integrated and if any changes are required. For example, look into [`src/infrastructure/adapter/uniswapx/adapter.rs`](src/infrastructure/adapter/uniswapx/adapter.rs) for the specific implementation of a Uniswap adapter.
+4. **Domainレイヤー（`src/domain/`）の分析:**
+    * [`src/domain/`](src/domain/)ディレクトリ内の既存のエンティティとデータ転送オブジェクト（DTO）を調査する
+    * 現在の動作を理解し、タスクをサポートするために変更や新規追加が必要かを判断する
+    * 例えば、[`src/domain/entity/key.rs`](src/domain/entity/key.rs)で鍵管理エンティティを確認する
 
-5. **Analyze Usecase Layer (`src/usecase/`):**
-    * Inspect the business logic within the [`src/usecase/`](src/usecase/) directory.
-    * Understand how domain objects are orchestrated to achieve application-specific tasks. For example, [`src/usecase/order.rs`](src/usecase/order.rs) would contain logic for order.
+5. **Infrastructureレイヤー（`src/infrastructure/`）の分析:**
+    * [`src/infrastructure/`](src/infrastructure/)ディレクトリ内のアダプタとその他のインフラストラクチャ関連の具体的な実装をレビューする
+    * 外部システムの統合方法と変更が必要かを理解する
+    * 例えば、[`src/infrastructure/adapter/arweave/adapter.rs`](src/infrastructure/adapter/arweave/adapter.rs)でArweaveストレージアダプタの実装を確認する
 
-6. **Analyze Service Layer (`src/services/`):**
-    * Examine the input and output handling in the [`src/services/`](src/services/) directory.
-    * Understand how requests are received and responses are formulated. For example, [`src/services/order_monitoring_engine/engine.rs`](src/services/order_monitoring_engine/engine.rs) might define monitoring order and add it to repository.
+6. **UseCaseレイヤー（`src/usecase/`）の分析:**
+    * [`src/usecase/`](src/usecase/)ディレクトリ内のビジネスロジックを検査する
+    * ドメインオブジェクトがアプリケーション固有のタスクを達成するためにどのように調整されるかを理解する
+    * 例えば、[`src/usecase/handlers/owner_handler.rs`](src/usecase/handlers/owner_handler.rs)でOwner-Processのロジックを確認する
 
-7. **Plan Implementation Subtasks:**
-    * Break down the implementation work into smaller, manageable subtasks.
-    * List these subtasks clearly.
+7. **Serviceレイヤー（`src/service/`）の分析:**
+    * [`src/service/`](src/service/)ディレクトリ内の入出力処理を調査する
+    * AOメッセージがどのように受信され、レスポンスがどのように形成されるかを理解する
+    * 例えば、[`src/service/workflow/phase_manager.rs`](src/service/workflow/phase_manager.rs)で暗号フェーズの管理方法を確認する
 
-8. **Order Subtasks by Dependency:**
-    * Arrange the subtasks in an order that respects dependencies, typically following a bottom-up approach:
-        1. Domain layer changes
-        2. Infrastructure layer changes
-        3. Usecase layer changes
-        4. Controller layer changes
-        5. DI container registration
+8. **実装サブタスクの計画:**
+    * 実装作業をより小さく管理可能なサブタスクに分解する
+    * 各暗号フェーズ（Phase 0-5）に対応するサブタスクを明確にリストする
 
-9. **Plan Test Subtasks:**
-    * Plan subtasks for testing the use cases.
-    * Place integration tests for normal and error cases of use cases in `src/tests/integration_test/`.
-    * When planning tests, select one existing directory in `src/tests/integration_test/*` as a reference for the writing style.
-    * If the infrastructure implementation depends on external communication, define mocks in `src/tests/mocks/`. (Therefore, integration tests are sufficient, and unit tests are not strictly necessary).
+9. **依存関係によるサブタスクの順序付け:**
+    * 依存関係を尊重する順序でサブタスクを配置する。通常、ボトムアップアプローチに従う：
+        1. Cryptoレイヤーの変更
+        2. Domainレイヤーの変更
+        3. Infrastructureレイヤーの変更
+        4. UseCaseレイヤーの変更
+        5. Serviceレイヤーの変更
+        6. WASM ビルドと検証
+
+10. **テストサブタスクの計画:**
+    * 暗号操作のテストサブタスクを計画する
+    * 暗号アルゴリズムの正確性テストを`src/tests/crypto/`に配置する
+    * 統合テストを`src/tests/integration_test/`に配置する
+    * インフラストラクチャ実装が外部通信（Arweave、AO Network）に依存する場合、`src/tests/mocks/`にモックを定義する
+
+11. **セキュリティ考慮事項:**
+    * 各サブタスクでセキュリティ監査を計画する
+    * 鍵管理とアクセス制御の検証を含める
+    * 暗号操作の正確性を確認する
