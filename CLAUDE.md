@@ -34,6 +34,27 @@ make test
 make all
 ```
 
+### MCP Server Management
+```bash
+# Setup all MCP servers (initial setup only)
+make mcp-setup
+
+# Start context7 MCP server in background
+make start-context7
+
+# Stop context7 MCP server
+make stop-context7
+
+# View context7 MCP server logs
+make logs-context7
+
+# Check context7 MCP server status
+make status-context7
+
+# Show MCP help
+make mcp-help
+```
+
 ### Individual Cargo Commands
 ```bash
 cargo check
@@ -43,6 +64,28 @@ cargo test
 ```
 
 ## Code Architecture
+
+### Layered Architecture Design
+The codebase follows a clean layered architecture with clear separation of concerns:
+
+```
+src/
+├── usecase/         # UseCase Layer - AO message handlers by role
+│   └── handlers/    # Owner, Holder, Requester, Common handlers
+├── controller/      # Controller Layer - Message processing & routing
+├── service/         # Service Layer - Business logic (Workflow + Core services)
+│   ├── workflow/    # Phase orchestration services
+│   └── core/        # Basic operation services
+├── domain/          # Domain Layer - Entities & repository interfaces
+│   ├── entities/    # Pure data structures
+│   ├── repositories/ # Repository interfaces (DIP)
+│   └── value_objects/ # Domain value objects
+├── infrastructure/ # Infrastructure Layer - Technical implementations
+│   ├── repositories/ # Repository implementations
+│   └── external/    # External system adapters
+├── crypto/         # Cryptographic utilities
+└── utils/          # Shared utilities
+```
 
 ### Multi-Role Wasm Design
 The core architecture implements a single Rust codebase (`dtpres_core`) that compiles to WebAssembly and runs on AO with different roles:
@@ -74,6 +117,32 @@ All processes use the same Wasm binary deployed to Arweave, with role differenti
 - **Formatting**: 100 character line width, 4 spaces, Unix newlines
 - **Linting**: Aggressive clippy configuration with specific allowances for development phase
 
-## Development Targets
+## Development Status
 
-The system is designed for compilation to WebAssembly for deployment on AO compute units. The current codebase is in early development phase with placeholder implementations in main.rs and di.rs.
+### Current Implementation
+- **Documentation**: Comprehensive architectural design and specifications
+- **Project Structure**: Well-defined layered architecture with clear separation of concerns
+- **Build System**: Makefile with Rust commands and MCP server management
+- **Toolchain**: Rust 1.86.0 with edition 2024 configuration
+
+### Implementation Phase
+The codebase is in **early development phase** with:
+- Placeholder implementations in main.rs and di.rs
+- Empty domain/, service/, and usecase/ directories ready for implementation
+- Extensive documentation in docs/ directory covering all architectural aspects
+- MCP server infrastructure for development tooling
+
+### Development Targets
+- **Primary**: WebAssembly compilation for AO Network deployment
+- **Secondary**: Browser integration via WebCrypto API and WASM bindings
+- **Future**: Smart contract integration via elciao bridge
+
+## Documentation
+
+Extensive project documentation is available in the `docs/` directory:
+- `docs/development/architecture/` - System architecture and design philosophy
+- `docs/development/domain/` - Domain entities and repository designs
+- `docs/development/service/` - Service layer specifications
+- `docs/development/usecase/` - UseCase handlers for each role
+- `docs/development/lifecycle/` - Process and access lifecycles
+- `docs/features/` - Feature specifications for each component

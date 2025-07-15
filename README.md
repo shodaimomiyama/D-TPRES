@@ -39,7 +39,7 @@ Single Rust codebase compiles to WebAssembly and runs on AO with different roles
 
 ## Concept diagram
 
-![D-TPRES Concept Diagram](docs/images/D-TPRES_Concept.png)
+![D-TPRES Concept Diagram](images/D-TPRES_Concept.png)
 
 
 ## Technical Documentation

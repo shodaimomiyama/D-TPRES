@@ -12,28 +12,35 @@ D-TPRESは、Threshold Proxy Re-Encryption (TPRE) を用いた分散型鍵管理
 
 ```mermaid
 graph TB
-    subgraph "Browser Layer"
-        OB[O-Browser<br/>データ所有者UI]
-        AB[A-Browser<br/>アクセス者UI]
+    subgraph "External Systems"
+        subgraph "Browser Applications"
+            OB[O-Browser<br/>データ所有者UI]
+            AB[A-Browser<br/>アクセス者UI]
+        end
+        
+        subgraph "Storage & Blockchain"
+            AR[Arweave<br/>Immutable Storage]
+            EVM[EVM Networks<br/>Smart Contracts]
+        end
     end
     
-    subgraph "AO Layer (WebAssembly)"
-        subgraph "UseCase Layer"
-            subgraph "Role-based Handlers"
+    subgraph AO_Network_WebAssembly_Runtime
+        subgraph "Application Layer"
+            subgraph "UseCase Handlers"
                 OH[Owner Handlers<br/>・Initialize-Owner<br/>・Split-Secret<br/>・Generate-ReKey]
                 HH[Holder Handlers<br/>・Store-KFrag<br/>・Perform-Reencryption<br/>・Send-CFrag]
                 RH[Requester Handlers<br/>・Access-Request<br/>・Collect-CFrag<br/>・Recover-Secret]
             end
+            
+            subgraph "Controller Components"
+                MH[MessageHandler<br/>処理統括]
+                MR[MessageRouter<br/>アクション振り分け]
+                MV[MessageValidator<br/>妥当性検証]
+                MC[MessageContextExtractor<br/>DTO変換]
+            end
         end
         
-        subgraph "Controller Layer"
-            MH[MessageHandler<br/>処理統括]
-            MR[MessageRouter<br/>アクション振り分け]
-            MV[MessageValidator<br/>妥当性検証]
-            MC[MessageContextExtractor<br/>DTO変換]
-        end
-        
-        subgraph "Service Layer"
+        subgraph "Business Layer"
             subgraph "Workflow Services"
                 WS1[AccessWorkflow]
                 WS2[RecoveryWorkflow]
@@ -55,22 +62,23 @@ graph TB
                 E4[AccessRequestEntity]
                 E5[RekeyFragmentEntity]
             end
-            subgraph "Repositories"
+            subgraph "Repository Interfaces"
                 R1[ProcessEntityRepository]
                 R2[ShareEntityRepository]
                 R3[CapsuleEntityRepository]
                 R4[AccessRequestEntityRepository]
             end
         end
-    end
-    
-    subgraph "Infrastructure"
-        subgraph "Repository Implementations"
-            RI[ArweaveRepositoryImpl<br/>ProcessEntityRepositoryImpl<br/>ShareEntityRepositoryImpl<br/>etc.]
+        
+        subgraph "Infrastructure Layer"
+            subgraph "Repository Implementations"
+                RI[ArweaveRepositoryImpl<br/>ProcessEntityRepositoryImpl<br/>ShareEntityRepositoryImpl<br/>etc.]
+            end
+            subgraph "External Adapters"
+                EL[elciao Bridge]
+                AC[ArweaveClient]
+            end
         end
-        AR[Arweave Storage]
-        EVM[EVM Smart Contract]
-        EL[elciao Bridge]
     end
     
     %% Browser to UseCase
@@ -104,26 +112,33 @@ graph TB
     CS3 --> E3
     CS4 --> E4
     
-    %% Service to Repository
+    %% Service to Repository Interfaces
     CS1 --> R1
     CS2 --> R2
     CS3 --> R3
     CS4 --> R4
     
-    %% Repository to Infrastructure
-    R1 --> RI
-    R2 --> RI
-    R3 --> RI
-    R4 --> RI
+    %% Repository Interfaces to Implementations (DIP)
+    R1 -.-> RI
+    R2 -.-> RI
+    R3 -.-> RI
+    R4 -.-> RI
     
     %% Infrastructure to External Systems
-    RI --> AR
+    RI --> AC
+    AC --> AR
     CS4 --> EL
     EL --> EVM
     
-    %% Inter-process communication
+    %% Inter-process communication within AO
     OH -.->|kFrag配布| HH
     RH -.->|cFrag要求| HH
+    
+    style AO_Network_WebAssembly_Runtime fill:#e6f3ff,stroke:#0066cc,stroke-width:3px
+    style R1 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray:5,5
+    style R2 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray:5,5
+    style R3 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray:5,5
+    style R4 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray:5,5
 ```
 
 ### 1.2 暗号化フロー
@@ -142,34 +157,121 @@ graph TB
 
 ```
 D-TPRES/
-├── src/                    # AO WebAssembly (Rust)
-│   ├── main.rs
-│   ├── di.rs
-│   ├── processes/          # AO Process実装
-│   │   ├── owner.rs
-│   │   ├── holder.rs
-│   │   └── requester.rs
-│   └── crypto/             # 暗号化ユーティリティ
-│       ├── umbral.rs
-│       └── shamir.rs
-├── browser/                # ブラウザフロントエンド
+├── src/                           # AO WebAssembly (Rust) - レイヤードアーキテクチャ
+│   ├── main.rs                    # AOエントリーポイント & ハンドラー登録
+│   ├── di.rs                      # 依存性注入コンテナ
+│   ├── lib.rs                     # WASMライブラリエクスポート
+│   │
+│   ├── usecase/                   # UseCase Layer - AOメッセージハンドラー
+│   │   ├── mod.rs                 # 公開エクスポート
+│   │   ├── handlers/              # ロールベースメッセージハンドラー
+│   │   │   ├── mod.rs
+│   │   │   ├── owner_handlers.rs  # Ownerロールハンドラー
+│   │   │   ├── holder_handlers.rs # Holderロールハンドラー
+│   │   │   ├── requester_handlers.rs # Requesterロールハンドラー
+│   │   │   └── common_handlers.rs # 共通ハンドラーユーティリティ
+│   │   ├── context.rs             # ハンドラーコンテキスト管理
+│   │   └── errors.rs              # UseCase層エラー定義
+│   │
+│   ├── controller/                # Controller Layer - メッセージ処理
+│   │   ├── mod.rs
+│   │   ├── message_handler.rs     # 中央MessageHandler
+│   │   ├── router.rs              # MessageRouter実装
+│   │   ├── validator.rs           # MessageValidator & バリデーションロジック
+│   │   ├── extractor.rs           # MessageContextExtractor & DTOs
+│   │   ├── response.rs            # レスポンス生成ユーティリティ
+│   │   └── errors.rs              # Controller層エラー定義
+│   │
+│   ├── service/                   # Service Layer - ビジネスロジック
+│   │   ├── mod.rs
+│   │   ├── workflow/              # Workflow Services (Phaseオーケストレーション)
+│   │   │   ├── mod.rs
+│   │   │   ├── secret_sharing.rs  # Phase 1: SecretSharingWorkflowService
+│   │   │   ├── access_request.rs  # Phase 2: AccessRequestWorkflowService
+│   │   │   ├── reencryption.rs    # Phase 3-4: ReencryptionWorkflowService
+│   │   │   └── secret_recovery.rs # Phase 5: SecretRecoveryWorkflowService
+│   │   ├── core/                  # Core Services (基本操作)
+│   │   │   ├── mod.rs
+│   │   │   ├── crypto.rs          # CryptoService (TPRE, Shamir)
+│   │   │   ├── process.rs         # ProcessManagementService
+│   │   │   ├── messaging.rs       # MessageRoutingService
+│   │   │   └── storage.rs         # ArweaveStorageService
+│   │   ├── container.rs           # ServiceContainer for DI
+│   │   └── errors.rs              # Service層エラー定義
+│   │
+│   ├── domain/                    # Domain Layer - エンティティ & Repository Interface
+│   │   ├── mod.rs
+│   │   ├── entities/              # 純粋データ構造
+│   │   │   ├── mod.rs
+│   │   │   ├── process.rs         # ProcessEntity
+│   │   │   ├── share.rs           # ShareEntity
+│   │   │   ├── capsule.rs         # CapsuleEntity
+│   │   │   ├── access_request.rs  # AccessRequestEntity
+│   │   │   ├── rekey_fragment.rs  # RekeyFragmentEntity
+│   │   │   └── reencryption.rs    # ReencryptionEntity
+│   │   ├── repositories/          # Repository Interface (DIP)
+│   │   │   ├── mod.rs
+│   │   │   ├── process.rs         # ProcessEntityRepository trait
+│   │   │   ├── share.rs           # ShareEntityRepository trait
+│   │   │   ├── capsule.rs         # CapsuleEntityRepository trait
+│   │   │   ├── access_request.rs  # AccessRequestEntityRepository trait
+│   │   │   ├── rekey_fragment.rs  # RekeyFragmentEntityRepository trait
+│   │   │   └── reencryption.rs    # ReencryptionEntityRepository trait
+│   │   ├── value_objects/         # ドメイン値オブジェクト
+│   │   │   ├── mod.rs
+│   │   │   ├── process_role.rs    # ProcessRole enum
+│   │   │   ├── secret_id.rs       # SecretId値オブジェクト
+│   │   │   └── phase.rs           # Phase enum
+│   │   └── errors.rs              # Domain層エラー定義
+│   │
+│   ├── infrastructure/            # Infrastructure Layer - 技術実装
+│   │   ├── mod.rs
+│   │   ├── repositories/          # Repository実装
+│   │   │   ├── mod.rs
+│   │   │   ├── arweave_base.rs    # 基盤ArweaveRepository実装
+│   │   │   ├── process_impl.rs    # ProcessEntityRepositoryImpl
+│   │   │   ├── share_impl.rs      # ShareEntityRepositoryImpl
+│   │   │   ├── capsule_impl.rs    # CapsuleEntityRepositoryImpl
+│   │   │   ├── access_request_impl.rs # AccessRequestEntityRepositoryImpl
+│   │   │   ├── rekey_fragment_impl.rs # RekeyFragmentEntityRepositoryImpl
+│   │   │   └── reencryption_impl.rs # ReencryptionEntityRepositoryImpl
+│   │   ├── external/              # 外部システムアダプター
+│   │   │   ├── mod.rs
+│   │   │   ├── arweave_client.rs  # ArweaveClient
+│   │   │   └── evm_bridge.rs      # elciao EVM bridge
+│   │   ├── cache.rs               # メッセージスコープキャッシュ
+│   │   └── errors.rs              # Infrastructure層エラー定義
+│   │
+│   ├── crypto/                    # 暗号化ユーティリティ
+│   │   ├── mod.rs
+│   │   ├── umbral.rs              # Umbral TPRE操作
+│   │   ├── shamir.rs              # Shamir Secret Sharing
+│   │   └── utils.rs               # 暗号化ユーティリティ関数
+│   │
+│   └── utils/                     # 共有ユーティリティ
+│       ├── mod.rs
+│       ├── serialization.rs       # Serdeヘルパー
+│       ├── time.rs                # タイムスタンプユーティリティ
+│       └── constants.rs           # システム定数
+│
+├── browser/                       # ブラウザフロントエンド
 │   ├── packages/
-│   │   ├── core/          # 共通ライブラリ
-│   │   │   ├── crypto/    # WebCrypto + WASM統合
-│   │   │   ├── ao/        # AO通信ライブラリ
-│   │   │   └── types/     # 共通型定義
-│   │   ├── o-browser/     # データ所有者UI
-│   │   └── a-browser/     # アクセス者UI
-│   ├── shared/            # 共通コンポーネント
+│   │   ├── core/                  # 共通ライブラリ
+│   │   │   ├── crypto/            # WebCrypto + WASM統合
+│   │   │   ├── ao/                # AO通信ライブラリ
+│   │   │   └── types/             # 共通型定義
+│   │   ├── o-browser/             # データ所有者UI
+│   │   └── a-browser/             # アクセス者UI
+│   ├── shared/                    # 共通コンポーネント
 │   └── package.json
-├── contracts/             # EVM Smart Contracts
+├── contracts/                     # EVM Smart Contracts
 │   ├── src/
 │   │   └── VerifyAccess.sol
 │   └── package.json
-├── wasm/                  # WebAssembly ビルド成果物
+├── wasm/                          # WebAssembly ビルド成果物
 │   ├── umbral_wasm.js
 │   └── umbral_wasm.wasm
-├── scripts/              # ビルド・デプロイスクリプト
+├── scripts/                       # ビルド・デプロイスクリプト
 └── docs/
 ```
 

@@ -25,67 +25,134 @@ src/
 - **A-Browser**: アクセス者フロントエンド（EVM連携、復号処理）
 - **技術スタック**: TypeScript、WebCrypto、MetaMask、umbral-pre（Wasm）
 
-### 1.2 技術的依存関係
+### 1.2 クリーンアーキテクチャに基づく依存関係
 
 ```mermaid
-graph TD
-    Browser[Browser Layer] --> AO[AO Layer]
-    Browser --> EVM[EVM Smart Contracts]
-    AO --> Arweave[Arweave Storage]
-    EVM --> Elciao[elciao Bridge]
-    Elciao --> AO
-    
-    subgraph "共有コンポーネント"
-        UmbralWasm[umbral-pre WebAssembly]
-        CryptoUtils[暗号化ユーティリティ]
+graph TB
+    subgraph "Entities (Enterprise Business Rules)"
+        E[ProcessEntity<br/>ShareEntity<br/>CapsuleEntity<br/>AccessRequestEntity<br/>RekeyFragmentEntity]
     end
     
-    Browser --> UmbralWasm
-    AO --> UmbralWasm
+    subgraph "Use Cases (Application Business Rules)"
+        UC[UseCase Handlers<br/>・Owner Handlers<br/>・Holder Handlers<br/>・Requester Handlers]
+        WF[Workflow Services<br/>・SecretSharingWorkflow<br/>・AccessRequestWorkflow<br/>・ReencryptionWorkflow]
+    end
+    
+    subgraph "Interface Adapters"
+        CTRL[Controllers<br/>・MessageHandler<br/>・MessageRouter<br/>・MessageValidator]
+        REPO[Repository Interfaces<br/>・ProcessEntityRepository<br/>・ShareEntityRepository<br/>・CapsuleEntityRepository]
+        PRES[Presenters<br/>・Response Formatters<br/>・DTO Converters]
+    end
+    
+    subgraph "Frameworks & Drivers"
+        WEB[Web<br/>・Browser UI<br/>・O-Browser<br/>・A-Browser]
+        DB[External Storage<br/>・Arweave<br/>・IndexedDB]
+        DEV[Devices & External Services<br/>・AO Network<br/>・EVM<br/>・elciao Bridge]
+        IMPL[Repository Implementations<br/>・ArweaveRepositoryImpl<br/>・ProcessEntityRepositoryImpl]
+    end
+    
+    %% 依存方向（外側から内側へ）
+    WEB --> CTRL
+    DEV --> CTRL
+    CTRL --> UC
+    UC --> E
+    UC --> WF
+    WF --> E
+    CTRL --> REPO
+    REPO --> E
+    IMPL --> REPO
+    IMPL --> DB
+    CTRL --> PRES
+    
+    %% スタイル
+    style E fill:#ffd700,stroke:#333,stroke-width:2px
+    style UC fill:#90ee90,stroke:#333,stroke-width:2px
+    style WF fill:#90ee90,stroke:#333,stroke-width:2px
+    style CTRL fill:#87ceeb,stroke:#333,stroke-width:2px
+    style REPO fill:#87ceeb,stroke:#333,stroke-width:2px
+    style PRES fill:#87ceeb,stroke:#333,stroke-width:2px
+    style WEB fill:#dda0dd,stroke:#333,stroke-width:2px
+    style DB fill:#dda0dd,stroke:#333,stroke-width:2px
+    style DEV fill:#dda0dd,stroke:#333,stroke-width:2px
+    style IMPL fill:#dda0dd,stroke:#333,stroke-width:2px
 ```
 
 ## 2. システム全体アーキテクチャ
 
-### 2.1 レイヤー構成
+### 2.1 クリーンアーキテクチャのレイヤー構成
 
-#### Browser Layer
-- **O-Browser**: 秘密分散・暗号化・Arweave投稿
-- **A-Browser**: アクセス要求・復号・秘密復元
-- **技術**: TypeScript + WebCrypto API + MetaMask
+#### Entities Layer (Enterprise Business Rules)
+- **責務**: ビジネスルールとデータ構造の定義
+- **コンポーネント**: ProcessEntity, ShareEntity, CapsuleEntity, AccessRequestEntity, RekeyFragmentEntity
+- **特徴**: 外部依存なし、純粋なビジネスロジック
 
-#### AO Layer
-- **Owner-Process**: 再暗号化鍵生成・kFrag分散
-- **Holder-Process**: kFrag保持・プロキシ再暗号化
-- **Requester-Process**: cFrag収集・バッチ配信
-- **技術**: Rust WebAssembly + umbral-pre
+#### Use Cases Layer (Application Business Rules) 
+- **責務**: アプリケーション固有のビジネスルール実装
+- **コンポーネント**: UseCase Handlers (Owner/Holder/Requester), Workflow Services
+- **特徴**: Entitiesのみに依存、フレームワーク非依存
 
-#### Storage Layer
-- **Arweave**: 暗号化データ・Capsule・メッセージログ
-- **EVM**: アクセス制御条件・検証イベント
+#### Interface Adapters Layer
+- **責務**: データ形式の変換、外部とのインターフェース
+- **コンポーネント**: Controllers, Repository Interfaces, Presenters, Gateways
+- **特徴**: Use Cases/Entitiesに依存、実装詳細を隠蔽
 
-### 2.2 データフロー
+#### Frameworks & Drivers Layer
+- **責務**: 外部システムとの具体的な接続実装
+- **コンポーネント**: 
+  - Web: O-Browser, A-Browser (TypeScript + WebCrypto)
+  - DB: Arweave Storage, IndexedDB
+  - External: AO Network, EVM, elciao Bridge
+  - Implementations: Repository実装クラス
+- **特徴**: 最外層、すべての技術的詳細を含む
+
+### 2.2 クリーンアーキテクチャに基づくデータフロー
 
 ```mermaid
 sequenceDiagram
-    participant OB as O-Browser
-    participant PO as Owner-Process
-    participant AR as Arweave
-    participant AB as A-Browser
-    participant EVM as EVM Smart Contract
-    participant RP as Requester-Process
-    participant H as Holder-Process
-
-    OB->>OB: 鍵生成・秘密分散・暗号化
-    OB->>AR: Capsule・暗号化シェア投稿
-    OB->>PO: spawn(role="owner")
+    participant FD as Frameworks & Drivers
+    participant IA as Interface Adapters
+    participant UC as Use Cases
+    participant E as Entities
     
-    AB->>EVM: verifyAccess(pkA)
-    EVM->>RP: ProofPkg（elciao経由）
-    RP->>PO: アクセス要求
-    PO->>H: kFrag分散
-    H->>RP: cFrag生成・返信
-    RP->>AB: バッチ送信
-    AB->>AB: 復号・秘密復元
+    Note over FD: O-Browser, A-Browser<br/>AO Network, Arweave, EVM
+    Note over IA: Controllers, Presenters<br/>Repository Interfaces
+    Note over UC: UseCase Handlers<br/>Workflow Services
+    Note over E: Domain Entities<br/>Business Rules
+    
+    rect rgb(255, 240, 245)
+        Note left of FD: Phase 1: Secret Splitting
+        FD->>IA: O-Browser: Split Secret Request
+        IA->>UC: MessageHandler: Process Request
+        UC->>E: Create ShareEntity, CapsuleEntity
+        E-->>UC: Entities Created
+        UC->>IA: Repository: Save Entities
+        IA->>FD: ArweaveImpl: Store to Arweave
+    end
+    
+    rect rgb(240, 255, 240)
+        Note left of FD: Phase 2-3: Access Request & ReKey
+        FD->>IA: A-Browser: Access Request
+        IA->>UC: AccessRequestWorkflow
+        UC->>E: Create AccessRequestEntity
+        UC->>IA: EVMVerificationService
+        IA->>FD: EVM: Verify Conditions
+        FD-->>IA: Verification Result
+        IA->>UC: Generate ReKey
+        UC->>E: Create RekeyFragmentEntity
+    end
+    
+    rect rgb(240, 240, 255)
+        Note left of FD: Phase 4-5: Recovery
+        FD->>IA: Holder: Perform Reencryption
+        IA->>UC: ReencryptionWorkflow
+        UC->>E: Process kFrag/cFrag
+        E-->>UC: Cipher Fragments
+        UC->>IA: Collect cFrags
+        IA->>FD: Return to Requester
+        FD->>IA: A-Browser: Recover Secret
+        IA->>UC: SecretRecoveryWorkflow
+        UC->>E: Reconstruct Secret
+    end
 ```
 
 ## 3. 実装配置戦略の比較
