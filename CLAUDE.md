@@ -34,6 +34,18 @@ make test
 make all
 ```
 
+### Run Single Test
+```bash
+# Run specific test
+cargo test test_name
+
+# Run tests for specific module
+cargo test module_name
+
+# Run tests with output
+cargo test -- --nocapture
+```
+
 ### MCP Server Management
 ```bash
 # Setup all MCP servers (initial setup only)
@@ -117,6 +129,63 @@ All processes use the same Wasm binary deployed to Arweave, with role differenti
 - **Formatting**: 100 character line width, 4 spaces, Unix newlines
 - **Linting**: Aggressive clippy configuration with specific allowances for development phase
 
+## AO Stateless Execution Constraints
+
+**Critical for D-TPRES**: The AO Network executes processes statelessly with specific constraints:
+
+1. **Memory Non-Persistence Between Messages**
+   - Each message execution starts with clean memory
+   - All state must be explicitly loaded from storage (Arweave)
+   - Process state cannot rely on in-memory variables between messages
+
+2. **Distributed Compute Units**
+   - Messages may be processed by different Compute Units
+   - No shared memory between executions
+   - State consistency must be maintained through persistence
+
+3. **Synchronous-Only Execution**
+   - async/await is not available in AO environment
+   - All operations must be blocking
+   - Error handling must be synchronous
+
+4. **Message-Driven Architecture**
+   - All processing is triggered by messages
+   - UseCase handlers are entry points
+   - State transitions must be atomic per message
+
+### Required Message Handler Pattern
+```rust
+pub fn handle_message(msg: AOMessage, repo: &dyn Repository) -> Result<Response> {
+    // 1. Load state
+    let mut state = repo.load_state(msg.process_id)?;
+    
+    // 2. Process message
+    let result = process_with_state(&mut state, msg)?;
+    
+    // 3. Persist state
+    repo.save_state(msg.process_id, &state)?;
+    
+    Ok(result)
+}
+```
+
+## Security and Cryptographic Requirements
+
+### Memory Management for Secrets
+- **Always use Zeroize**: All structs containing secrets must derive `Zeroize` and `ZeroizeOnDrop`
+- **No Clone for Secrets**: Secret-containing types should not implement `Clone`
+- **Explicit Secret Types**: Use `secrecy::Secret<T>` or similar wrappers for clarity
+
+### Constant-Time Operations
+- **Use subtle crate**: For comparisons that must be constant-time
+- **Avoid secret-dependent branching**: No if statements based on secret values
+- **Use crypto libraries**: Don't implement cryptographic primitives yourself
+
+### Process Role Separation
+- **Single Role Per Process**: Each AO process instance has exactly one role
+- **Role-Specific Handlers**: UseCase handlers are separated by role
+- **No Cross-Role Access**: Handlers cannot access other roles' functionality
+
 ## Development Status
 
 ### Current Implementation
@@ -137,12 +206,37 @@ The codebase is in **early development phase** with:
 - **Secondary**: Browser integration via WebCrypto API and WASM bindings
 - **Future**: Smart contract integration via elciao bridge
 
+## Claude Rules and Modes
+
+This project uses Claude-specific rules and modes for AI-assisted development:
+
+### Available Modes
+- **Default Mode**: General Rust development with AO constraints
+- **rust-test Mode**: For implementing or modifying tests
+- **pr Mode**: For creating Pull Requests
+
+### Key Rules from `.claude/rules/`
+- **Comment Convention**: Only write comments explaining "why", not "what"
+- **Import Resolution**: Use absolute imports with blank lines between standard/third-party and internal modules
+- **Entity Encapsulation**: Domain entities must have private fields with constructor validation
+- **Role Separation**: Strict separation between Owner/Holder/Requester process roles
+- **Stateless Patterns**: All handlers must follow load-process-save pattern for AO compatibility
+
+### Security Restrictions
+The project has specific security restrictions in `.claude/settings.json`:
+- Limited bash command permissions
+- No access to secrets, tokens, or key files
+- Restricted file access patterns
+- No database access
+
 ## Documentation
 
 Extensive project documentation is available in the `docs/` directory:
+- `docs/PRD.md` - Product Requirements Document with system specifications
 - `docs/development/architecture/` - System architecture and design philosophy
 - `docs/development/domain/` - Domain entities and repository designs
 - `docs/development/service/` - Service layer specifications
 - `docs/development/usecase/` - UseCase handlers for each role
 - `docs/development/lifecycle/` - Process and access lifecycles
 - `docs/features/` - Feature specifications for each component
+- `docs/development/codes/rust.md` - Detailed Rust coding rules and conventions
