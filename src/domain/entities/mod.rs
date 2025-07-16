@@ -11,7 +11,6 @@ pub mod access_request;
 pub mod capsule;
 pub mod process;
 pub mod reencryption;
-pub mod rekey_fragment;
 pub mod secret_details;
 pub mod share;
 
@@ -22,6 +21,5 @@ pub use process::{
     RequesterData, SecretIndex,
 };
 pub use reencryption::{CFragData, ReencryptionEntity};
-pub use rekey_fragment::RekeyFragmentEntity;
 pub use secret_details::{AccessRecord, SecretDetailsEntity};
 pub use share::ShareEntity;

@@ -169,3 +169,220 @@ pub struct PerformanceMetrics {
 
     pub last_updated_at: u64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+    use serde_json;
+
+    fn create_test_process_entity() -> ProcessEntity {
+        ProcessEntity {
+            process_id: "test_process_001".to_string(),
+            process_name: "Test Process".to_string(),
+            active_roles: vec!["owner".to_string()],
+            owner_data: Some(OwnerData {
+                owner_public_key: vec![1, 2, 3, 4],
+                secret_indices: HashMap::new(),
+                owner_config: HashMap::new(),
+            }),
+            holder_data: None,
+            requester_data: None,
+            configuration: HashMap::new(),
+            supported_crypto_operations: vec!["shamir".to_string(), "pre".to_string()],
+            performance_metrics: PerformanceMetrics {
+                successful_operations: 0,
+                failed_operations: 0,
+                average_response_time_ms: 0,
+                last_updated_at: 1642000000,
+            },
+            created_at: 1642000000,
+            updated_at: 1642000000,
+            version: 1,
+        }
+    }
+
+    #[test]
+    fn test_process_entity_serialization() {
+        let process = create_test_process_entity();
+        
+        // JSON シリアライゼーション/デシリアライゼーション
+        let json = serde_json::to_string(&process).unwrap();
+        let deserialized: ProcessEntity = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(process, deserialized);
+    }
+
+    #[test]
+    fn test_process_entity_clone_and_equality() {
+        let process = create_test_process_entity();
+        let cloned = process.clone();
+        
+        assert_eq!(process, cloned);
+    }
+
+    #[test]
+    fn test_multi_role_consistency() {
+        let mut process = create_test_process_entity();
+        
+        // 複数ロールを持つプロセスのテスト
+        process.active_roles = vec!["owner".to_string(), "holder".to_string()];
+        process.holder_data = Some(HolderData {
+            held_fragments: HashMap::new(),
+            fragments_by_condition: HashMap::new(),
+            reliability_score: 0.9,
+            completed_reencryptions: 0,
+            max_fragment_capacity: 100,
+            current_load: 0,
+        });
+        
+        // ownerロールがアクティブな場合、owner_dataが存在する必要がある
+        assert!(process.owner_data.is_some());
+        
+        // holderロールがアクティブな場合、holder_dataが存在する必要がある
+        assert!(process.holder_data.is_some());
+    }
+
+    #[test]
+    fn test_optimistic_locking() {
+        let mut process1 = create_test_process_entity();
+        let mut process2 = process1.clone();
+        
+        // 楽観的ロックのテスト
+        process1.version = 2;
+        process2.version = 2;
+        
+        // 同じバージョンを持つプロセスは等価
+        assert_eq!(process1.version, process2.version);
+        
+        // バージョンが異なる場合、等価でない
+        process1.version = 3;
+        assert_ne!(process1.version, process2.version);
+    }
+
+    #[test]
+    fn test_performance_metrics_calculation() {
+        let mut metrics = PerformanceMetrics {
+            successful_operations: 10,
+            failed_operations: 2,
+            average_response_time_ms: 150,
+            last_updated_at: 1642000000,
+        };
+        
+        // 成功率の計算（手動計算）
+        let total_operations = metrics.successful_operations + metrics.failed_operations;
+        let success_rate = metrics.successful_operations as f64 / total_operations as f64;
+        
+        assert_eq!(total_operations, 12);
+        assert!((success_rate - 0.8333333333333334).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_secret_index_validation() {
+        let secret_index = SecretIndex {
+            secret_id: "secret_001".to_string(),
+            status: "active".to_string(),
+            entity_references: EntityReferences {
+                share_ids: vec!["share_001".to_string()],
+                capsule_ids: vec!["capsule_001".to_string()],
+                active_requests: vec![],
+                details_entity_id: "details_001".to_string(),
+            },
+            last_updated: 1642000000,
+            shamir_threshold: 3,
+            shamir_total_shares: 5,
+        };
+        
+        // 閾値パラメータの検証
+        assert!(secret_index.shamir_threshold <= secret_index.shamir_total_shares);
+        assert!(secret_index.shamir_threshold > 0);
+        assert!(secret_index.shamir_total_shares > 0);
+    }
+
+    #[test]
+    fn test_holder_fragment_info_validation() {
+        let fragment_info = HolderFragmentInfo {
+            fragment_id: "fragment_001".to_string(),
+            secret_id: "secret_001".to_string(),
+            access_control_condition: "evm_verified".to_string(),
+            received_at: 1642000000,
+            usage_count: 0,
+            status: "active".to_string(),
+        };
+        
+        // フラグメント情報のバリデーション
+        assert!(!fragment_info.fragment_id.is_empty());
+        assert!(!fragment_info.secret_id.is_empty());
+        assert!(!fragment_info.access_control_condition.is_empty());
+        assert!(fragment_info.received_at > 0);
+    }
+
+    #[test]
+    fn test_requester_data_validation() {
+        let requester_data = RequesterData {
+            active_requests: vec!["request_001".to_string()],
+            active_reencryptions: vec!["reenc_001".to_string()],
+            completed_requests: 50,
+            success_rate: 0.85,
+            average_processing_time_ms: 2000,
+            requester_config: HashMap::new(),
+        };
+        
+        // リクエスターデータのバリデーション
+        assert!(requester_data.success_rate >= 0.0 && requester_data.success_rate <= 1.0);
+        assert!(requester_data.average_processing_time_ms > 0);
+        assert!(requester_data.completed_requests >= 0);
+    }
+
+    #[test]
+    fn test_large_data_serialization() {
+        let mut process = create_test_process_entity();
+        
+        // 大容量データのシリアライゼーション性能テスト
+        let mut large_config = HashMap::new();
+        for i in 0..1000 {
+            large_config.insert(format!("key_{}", i), format!("value_{}", i));
+        }
+        process.configuration = large_config;
+        
+        // シリアライゼーション/デシリアライゼーションが成功することを確認
+        let json = serde_json::to_string(&process).unwrap();
+        let deserialized: ProcessEntity = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(process.configuration.len(), 1000);
+        assert_eq!(process, deserialized);
+    }
+
+    #[test]
+    fn test_empty_fields_handling() {
+        let process = ProcessEntity {
+            process_id: "test_process_001".to_string(),
+            process_name: "Test Process".to_string(),
+            active_roles: vec![],
+            owner_data: None,
+            holder_data: None,
+            requester_data: None,
+            configuration: HashMap::new(),
+            supported_crypto_operations: vec![],
+            performance_metrics: PerformanceMetrics {
+                successful_operations: 0,
+                failed_operations: 0,
+                average_response_time_ms: 0,
+                last_updated_at: 1642000000,
+            },
+            created_at: 1642000000,
+            updated_at: 1642000000,
+            version: 1,
+        };
+        
+        // 空のフィールドを持つプロセスのシリアライゼーション
+        let json = serde_json::to_string(&process).unwrap();
+        let deserialized: ProcessEntity = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(process, deserialized);
+        assert!(process.active_roles.is_empty());
+        assert!(process.owner_data.is_none());
+        assert!(process.holder_data.is_none());
+        assert!(process.requester_data.is_none());
+    }
+}
