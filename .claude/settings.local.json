@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check:*)",
+      "Bash(rustup component add:*)",
+      "Bash(make clippy:*)"
+    ],
+    "deny": []
+  }
+}

@@ -7,10 +7,7 @@
       "Bash(git:*)",
       "Bash(find:*)",
       "Bash(mkdir:*)",
-      "Bash(ls:*)",
-      "Bash(cargo check:*)",
-      "Bash(rustup component add:*)",
-      "Bash(make clippy:*)"
+      "Bash(ls:*)"
     ],
     "deny": [
       "Bash(sudo:*)",
