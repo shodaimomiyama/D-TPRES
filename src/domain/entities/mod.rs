@@ -7,21 +7,21 @@
 //! - Private fields with public access (struct fields can be public)
 //! - Zeroize for sensitive data
 
-pub mod process;
-pub mod share;
-pub mod capsule;
 pub mod access_request;
-pub mod rekey_fragment;
+pub mod capsule;
+pub mod process;
 pub mod reencryption;
+pub mod rekey_fragment;
 pub mod secret_details;
+pub mod share;
 
-pub use process::{
-    ProcessEntity, OwnerData, HolderData, RequesterData, 
-    PerformanceMetrics, SecretIndex, EntityReferences, HolderFragmentInfo
-};
-pub use share::ShareEntity;
-pub use capsule::CapsuleEntity;
 pub use access_request::{AccessRequestEntity, EvmVerificationData, ProofPkgData};
+pub use capsule::CapsuleEntity;
+pub use process::{
+    EntityReferences, HolderData, HolderFragmentInfo, OwnerData, PerformanceMetrics, ProcessEntity,
+    RequesterData, SecretIndex,
+};
+pub use reencryption::{CFragData, ReencryptionEntity};
 pub use rekey_fragment::RekeyFragmentEntity;
-pub use reencryption::{ReencryptionEntity, CFragData};
-pub use secret_details::{SecretDetailsEntity, AccessRecord};
+pub use secret_details::{AccessRecord, SecretDetailsEntity};
+pub use share::ShareEntity;
