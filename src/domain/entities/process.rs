@@ -18,8 +18,7 @@ pub struct ProcessEntity {
 
     pub process_name: String,
 
-    // 単一プロセスが複数の役割を担うことでネットワーク効率を向上
-    // 例: ["owner", "holder"] - 自身の秘密を管理しながら他者のkFragも保持
+    // 単一プロセスが複数の役割を担うことでネットワーク効率を向上 例: ["owner", "holder", "requester"] - 自身の秘密を管理しながら他者のkFragも保持
     pub active_roles: Vec<String>,
 
     // Phase 0, 1, 3で使用されるOwner機能
@@ -59,9 +58,7 @@ pub struct OwnerData {
     // 秘密鍵自体は保存せず、必要時にセキュアストレージから取得
     pub owner_public_key: Vec<u8>,
 
-    // 軽量な秘密インデックス情報のみを保持
-    // AOの頻繁なEntity再構築時のメモリ使用量を削減するため
-    // 詳細情報はSecretDetailsEntityで別管理
+    // 軽量な秘密インデックス情報のみを保持、
     pub secret_indices: HashMap<String, SecretIndex>,
 
     // Owner固有の設定
@@ -73,123 +70,102 @@ pub struct OwnerData {
 /// Minimal information held in ProcessEntity
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SecretIndex {
-    /// Secret identifier
     pub secret_id: String,
 
-    /// Secret status
-    /// Values: "active", "archived", "expired"
+    // 文字列ベースのステータス管理により、新しい状態の追加が既存データを破壊しない
     pub status: String,
 
-    /// Entity reference information
     pub entity_references: EntityReferences,
 
-    /// Last update timestamp
     pub last_updated: u64,
 
-    /// Shamir threshold (k) - kept for frequent reference
+    // 頻繁に参照される閾値情報をインデックスに含めることで、詳細エンティティのロードを回避し、レスポンス時間を短縮
     pub shamir_threshold: u8,
 
-    /// Shamir total shares (n) - kept for frequent reference
     pub shamir_total_shares: u8,
 }
 
 /// Entity references - Holds only IDs of related entities
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EntityReferences {
-    /// ShareEntity ID list
     pub share_ids: Vec<String>,
 
-    /// CapsuleEntity ID list
     pub capsule_ids: Vec<String>,
 
-    /// Active AccessRequestEntity ID list
+    // アクティブなリクエストのみを保持することで、履歴データによるメモリ圧迫を防ぎ、検索効率を向上
     pub active_requests: Vec<String>,
 
-    /// SecretDetailsEntity ID (reference to detailed information)
+    // 詳細情報への参照により遅延ロードを可能にし、頻繁なリスト操作時のメモリ使用量を最小化
     pub details_entity_id: String,
 }
 
 /// Holder functionality data - kFrag storage and re-encryption execution
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HolderData {
-    /// Held kFrag collection
-    /// Key: RekeyFragment ID, Value: fragment information
+    // Fragment情報を直接保持することで、再暗号化時の外部エンティティ参照を減らし、処理速度を向上
     pub held_fragments: HashMap<String, HolderFragmentInfo>,
 
-    /// kFrag management by access control condition
-    /// Key: access control condition, Value: RekeyFragment ID list
+    // 条件別インデックスにより、特定条件に対するフラグメント検索をO(1)で実現
     pub fragments_by_condition: HashMap<String, Vec<String>>,
 
-    /// Reliability score (0.0-1.0)
+    // 信頼性スコアによりロードバランシング時のHolder選択を最適化し、システム全体の可用性を向上
     pub reliability_score: f64,
 
-    /// Completed re-encryption count
     pub completed_reencryptions: u64,
 
-    /// Maximum fragment capacity
     pub max_fragment_capacity: u64,
 
-    /// Current load status (0-100)
+    // 負荷状態を数値化することで、動的なフラグメント配置の判断基準を提供
     pub current_load: u64,
 }
 
 /// Holder fragment information
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct HolderFragmentInfo {
-    /// Fragment identifier
     pub fragment_id: String,
 
-    /// Related secret ID
     pub secret_id: String,
 
-    /// Access control condition
     pub access_control_condition: String,
 
-    /// Receipt timestamp
     pub received_at: u64,
 
-    /// Usage count
+    // 使用回数を追跡することで、ホットなフラグメントの識別と最適配置を可能にする
     pub usage_count: u64,
 
-    /// Status ("active", "expired", "revoked")
+    // 文字列ベースのステータス管理により、新しい状態の追加が既存データを破壊しない
     pub status: String,
 }
 
 /// Requester functionality data - Access requests and cFrag collection
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RequesterData {
-    /// Active access request ID list
+    // アクティブなリクエストのみを保持することで、履歴データによるメモリ圧迫を防ぎ、検索効率を向上
     pub active_requests: Vec<String>,
 
-    /// Active re-encryption request ID list
     pub active_reencryptions: Vec<String>,
 
-    /// Completed request count
     pub completed_requests: u64,
 
-    /// Success rate (0.0-1.0)
+    // 成功率を追跡することで、信頼性の低いRequesterの早期検出と対策を可能にする
     pub success_rate: f64,
 
-    /// Average processing time (milliseconds)
+    // 平均処理時間により、タイムアウト値の動的調整とSLA管理を実現
     pub average_processing_time_ms: u64,
 
-    /// Requester-specific configuration
-    /// Example: {"retry_attempts": "3", "timeout_ms": "30000"}
+    // 設定を外部化することで、コード変更なしに動作パラメータを調整可能にする
     pub requester_config: HashMap<String, String>,
 }
 
 /// Performance metrics
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PerformanceMetrics {
-    /// Successful operation count
     pub successful_operations: u64,
 
-    /// Failed operation count
     pub failed_operations: u64,
 
-    /// Average response time (milliseconds)
+    // レスポンス時間を追跡することで、パフォーマンス劣化の早期検出と最適化ポイントの特定を可能にする
     pub average_response_time_ms: u64,
 
-    /// Last metrics update timestamp
     pub last_updated_at: u64,
 }

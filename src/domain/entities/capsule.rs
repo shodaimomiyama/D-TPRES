@@ -16,22 +16,18 @@ pub struct CapsuleEntity {
 
     pub secret_id: String,
 
-    // ShareEntityのthreshold_indexと対応させることで、
-    // 再暗号化時に正しいカプセルとシェアのペアを特定
+    // ShareEntityのthreshold_indexと対応させることで、再暗号化時に正しいカプセルとシェアのペアを特定
     pub capsule_index: u8,
 
-    // PRE_Enc(pkO, Ki)で生成したカプセル
-    // pkOからpkAへの変換情報を含むが、秘密情報は含まない
+    // PRE_Enc(pkO, Ki)で生成したカプセル、pkOからpkAへの変換情報を含むが、秘密情報は含まない
     pub capsule_data: Vec<u8>,
 
-    // カプセルとシェアの1対1対応を明示的に管理
-    // 再暗号化時の整合性チェックに使用
+    // カプセルとシェアの1対1対応を明示的に管理、再暗号化時の整合性チェックに使用
     pub corresponding_ciphertext_id: String,
 
     pub owner_public_key: Vec<u8>,
 
-    // カプセル生成時のランダム性を保存することで、
-    // 必要時に再暗号化鍵の生成過程を検証可能にする
+    // カプセル生成時のランダム性を保存することで、必要時に再暗号化鍵の生成過程を検証可能にする
     pub encrypted_random_key: Vec<u8>,
 
     pub created_at: u64,
