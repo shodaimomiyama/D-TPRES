@@ -10,63 +10,58 @@ use serde::{Deserialize, Serialize};
 /// Created in Phase 4, tracks cFrag collection and re-encryption
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReencryptionEntity {
-    /// Re-encryption identifier
     pub reencryption_id: String,
 
-    /// Related access request ID
     pub access_request_id: String,
 
-    /// Target capsule ID
     pub target_capsule_id: String,
 
-    /// Requester process ID (R-Proc)
     pub requester_process_id: String,
 
-    /// Target Holder process IDs
+    // 事前にHolderリストを決定することで、
+    // 再暗号化プロセスの予測可能性を高め、タイムアウト管理を容易にする
     pub target_holders: Vec<String>,
 
-    /// Required threshold (k)
     pub required_threshold: u8,
 
-    /// Collected cFrag collection
+    // cFragを直接エンティティ内に保持することで、
+    // 閘値判定と再暗号化完了チェックを高速化
     pub collected_cfrags: Vec<CFragData>,
 
-    /// Re-encryption status
-    /// Values: "initiated", "collecting", "threshold_met", "completed", "failed"
+    // 文字列ベースのステータス管理により、
+    // 新しい状態の追加が既存データを破壊しない
     pub status: String,
 
-    /// Start timestamp
     pub started_at: u64,
 
-    /// Completion timestamp
     pub completed_at: Option<u64>,
 
-    /// Timeout timestamp
+    // タイムアウトを明示的に設定することで、
+    // 無応答Holderによるプロセス停滞を防ぎ、システム全体の可用性を向上
     pub timeout_at: u64,
 
-    /// Version
+    // AOのステートレス環境で同時更新を検出するための楽観的ロック
     pub version: u64,
 }
 
 /// cFrag data - Re-encrypted fragment
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CFragData {
-    /// cFrag identifier
     pub cfrag_id: String,
 
-    /// Source Holder process ID
     pub holder_id: String,
 
-    /// cFrag data
-    /// cFragj = PRE_ReEnc(kFragj, Capsulei)
+    // PRE_ReEnc(kFragj, Capsulei)の結果
+    // 暗号化データの再暗号化フラグメント
     pub cfrag_data: Vec<u8>,
 
-    /// Corresponding kFrag ID
+    // kFragとcFragの対応関係を明示的に管理することで、
+    // 再暗号化プロセスの監査とデバッグを容易にする
     pub corresponding_kfrag_id: String,
 
-    /// Generation timestamp
     pub generated_at: u64,
 
-    /// Holder signature (for integrity)
+    // Holderの署名を含めることで、悪意あるHolderによる
+    // 偽のcFrag投入を防ぎ、システムの信頼性を向上
     pub holder_signature: Vec<u8>,
 }

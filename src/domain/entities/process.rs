@@ -14,59 +14,58 @@ use std::collections::HashMap;
 /// - Integrated performance metrics
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProcessEntity {
-    /// Process identifier (AO process ID)
     pub process_id: String,
 
-    /// Process name (human-readable identifier)
     pub process_name: String,
 
-    /// Currently active roles
-    /// Values: ["owner"], ["holder"], ["requester"], or combinations
+    // 単一プロセスが複数の役割を担うことでネットワーク効率を向上
+    // 例: ["owner", "holder"] - 自身の秘密を管理しながら他者のkFragも保持
     pub active_roles: Vec<String>,
 
-    /// Owner functionality data (used in Phase 0, 1, 3)
+    // Phase 0, 1, 3で使用されるOwner機能
+    // skO（秘密鍵）の管理と秘密分割を担当
     pub owner_data: Option<OwnerData>,
 
-    /// Holder functionality data (used in Phase 3, 4)
+    // Phase 3, 4で使用されるHolder機能
+    // kFragの保管と再暗号化の実行を担当
     pub holder_data: Option<HolderData>,
 
-    /// Requester functionality data (used in Phase 2, 4, 5)
+    // Phase 2, 4, 5で使用されるRequester機能
+    // アクセス要求の発行とcFrag収集を担当
     pub requester_data: Option<RequesterData>,
 
-    /// Process configuration (Key-Value format)
-    /// Example: {"max_concurrent_requests": "10", "timeout_seconds": "300"}
+    // プロセス固有の設定をKey-Value形式で柔軟に管理
+    // 例: {"max_concurrent_requests": "10", "timeout_seconds": "300"}
     pub configuration: HashMap<String, String>,
 
-    /// Supported crypto operations list
-    /// Values: ["shamir_split", "pre_encrypt", "re_encrypt", "verify_proof"]
+    // プロセスがサポートする暗号操作を明示
+    // 能力ベースのルーティングとロードバランシングに使用
     pub supported_crypto_operations: Vec<String>,
 
-    /// Performance metrics
     pub performance_metrics: PerformanceMetrics,
 
-    /// Creation timestamp (Unix timestamp seconds)
     pub created_at: u64,
 
-    /// Last update timestamp (Unix timestamp seconds)
     pub updated_at: u64,
 
-    /// Version number (for optimistic locking)
+    // AOのステートレス環境で同時更新を検出するための楽観的ロック
     pub version: u64,
 }
 
 /// Owner functionality data - Manages skO and secret splitting
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OwnerData {
-    /// Owner public key (pkO corresponding to skO)
+    // skO（秘密鍵）に対応する公開鍵
+    // 秘密鍵自体は保存せず、必要時にセキュアストレージから取得
     pub owner_public_key: Vec<u8>,
 
-    /// Secret index information
-    /// Key: secret ID, Value: lightweight secret index
-    /// Detailed information is managed separately in SecretDetailsEntity
+    // 軽量な秘密インデックス情報のみを保持
+    // AOの頻繁なEntity再構築時のメモリ使用量を削減するため
+    // 詳細情報はSecretDetailsEntityで別管理
     pub secret_indices: HashMap<String, SecretIndex>,
 
-    /// Owner-specific configuration
-    /// Example: {"default_threshold": "3", "default_shares": "5"}
+    // Owner固有の設定
+    // デフォルト値を設定することで、秘密ごとの設定の繰り返しを避ける
     pub owner_config: HashMap<String, String>,
 }
 

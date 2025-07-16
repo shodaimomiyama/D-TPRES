@@ -10,43 +10,44 @@ use serde::{Deserialize, Serialize};
 /// Generated in PRD Phase 1, required for secret reconstruction
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ShareEntity {
-    /// Share identifier
     pub share_id: String,
 
-    /// Data group identifier (identifies shares from the same secret)
+    // 同一秘密から生成されたシェアをグループ化するため
+    // 復元時に正しいシェアの組み合わせを特定する必要がある
     pub data_id: String,
 
-    /// Related secret identifier
     pub secret_id: String,
 
-    /// Threshold index (1 to n)
+    // 1からnまでの連番で、Shamir多項式の評価点を表す
+    // 各シェアが異なる点で評価されることで線形独立性を保証
     pub threshold_index: u8,
 
-    /// Shamir threshold (k: minimum shares needed for reconstruction)
+    // k-of-n閾値秘密分散のパラメータ
+    // 最小k個のシェアがあれば秘密を復元可能
     pub shamir_threshold: u8,
 
-    /// Shamir total shares (n: total number of generated shares)
+    // 総シェア数n
+    // 冗長性とアクセス制御のバランスを取るため設定
     pub shamir_total_shares: u8,
 
-    /// Encrypted fragment data
-    /// Ci = AES_GCM(Ki, f(i)) where f(i) is Shamir share
+    // Shamir秘密分散で生成したシェアf(i)を鍵Kiで暗号化: Ci = AES_GCM(Ki, f(i))
+    // 各シェアを個別に暗号化することで、単一のシェアが漏洩しても秘密が復元できない
     pub encrypted_fragment: Vec<u8>,
 
-    /// Fragment size (bytes)
     pub fragment_size: usize,
 
-    /// Data owner's public key (pkO)
+    // シェアの所有者を特定し、アクセス権限を検証するため
     pub owner_public_key: Vec<u8>,
 
-    /// Integrity verification hash (SHA-256)
+    // シェアの改竄を検出するためのSHA-256ハッシュ
+    // Arweaveの不変性に加えて、アプリケーション層でも完全性を保証
     pub integrity_hash: Vec<u8>,
 
-    /// Creation timestamp
     pub created_at: u64,
 
-    /// Last access timestamp
+    // アクセスパターンの分析とキャッシュ戦略の最適化に使用
     pub last_accessed_at: Option<u64>,
 
-    /// Version
+    // AOのステートレス環境で同時更新を検出するための楽観的ロック
     pub version: u64,
 }

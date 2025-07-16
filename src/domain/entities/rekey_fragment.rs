@@ -12,69 +12,62 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 /// Contains sensitive key material that must be zeroized
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct RekeyFragmentEntity {
-    /// Fragment identifier
+    // ID系フィールドにzeroize(skip)を適用し、機密データのみをゼロ化対象にすることで、
+    // セキュリティとパフォーマンスのバランスを最適化
     #[zeroize(skip)]
     pub fragment_id: String,
 
-    /// Related secret identifier
     #[zeroize(skip)]
     pub secret_id: String,
 
-    /// Related access request ID
     #[zeroize(skip)]
     pub access_request_id: String,
 
-    /// Access control condition
     #[zeroize(skip)]
     pub access_control_condition: String,
 
-    /// Owner public key (pkO)
+    // 公開鍵はゼロ化不要だが、統一性のためzeroize(skip)を適用
+    // 将来的に公開鍵の扱いが変わっても影響を最小化
     #[zeroize(skip)]
     pub owner_public_key: Vec<u8>,
 
-    /// Accessor public key (pkA)
     #[zeroize(skip)]
     pub accessor_public_key: Vec<u8>,
 
-    /// Shamir fragment index (j: 1 to n)
     #[zeroize(skip)]
     pub shamir_index: u8,
 
-    /// Shamir threshold (k: minimum fragments needed for re-encryption)
     #[zeroize(skip)]
     pub shamir_threshold: u8,
 
-    /// Shamir total fragments (n)
     #[zeroize(skip)]
     pub shamir_total_fragments: u8,
 
-    /// kFrag data (Shamir-split re-encryption key fragment)
-    /// kFragj = ShamirSplit(ReKey(skO→pkA), j)
-    /// This is sensitive cryptographic material
+    // kFragjは再暗号化鍵の断片で、最も重要な機密データ
+    // zeroize(skip)を付けずにメモリから確実に消去することで、
+    // サイドチャネル攻撃やメモリダンプによる漏洩を防ぐ
     pub kfrag_data: Vec<u8>,
 
-    /// Assigned Holder process ID
     #[zeroize(skip)]
     pub assigned_holder_id: String,
 
-    /// Fragment status
-    /// Values: "created", "distributed", "active", "consumed", "expired"
+    // 文字列ベースのステータス管理により、
+    // 新しい状態の追加が既存データを破壊しない
     #[zeroize(skip)]
     pub status: String,
 
-    /// Expiration timestamp
+    // 有効期限をOptionalにすることで、永続的なkFragと
+    // 時限的なkFragの両方をサポート
     #[zeroize(skip)]
     pub expires_at: Option<u64>,
 
-    /// Creation timestamp
     #[zeroize(skip)]
     pub created_at: u64,
 
-    /// Distribution timestamp
     #[zeroize(skip)]
     pub distributed_at: Option<u64>,
 
-    /// Version
+    // AOのステートレス環境で同時更新を検出するための楽観的ロック
     #[zeroize(skip)]
     pub version: u64,
 }

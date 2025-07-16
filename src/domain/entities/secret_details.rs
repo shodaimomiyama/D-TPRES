@@ -11,58 +11,54 @@ use std::collections::HashMap;
 /// Separated from ProcessEntity, loaded only when needed
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SecretDetailsEntity {
-    /// Details entity identifier
     pub details_id: String,
 
-    /// Related secret identifier
     pub secret_id: String,
 
-    /// Access control conditions
-    /// Example: ["erc20_balance_check", "nft_ownership_check"]
+    // アクセス制御条件をリスト形式で管理することで、
+    // 複数の条件のAND/OR組み合わせを柔軟に表現
     pub access_control_conditions: Vec<String>,
 
-    /// Generated kFrag collection by condition (created in Phase 3)
-    /// Key: access control condition, Value: RekeyFragmentEntity ID list
+    // 条件別にkFragをグループ化することで、
+    // 異なるアクセスパターンに対して異なる再暗号化鍵を生成可能にする
     pub generated_kfrags_by_condition: HashMap<String, Vec<String>>,
 
-    /// Access history
+    // アクセス履歴を保持することで、
+    // セキュリティ監査と不正アクセスの検出を可能にする
     pub access_history: Vec<AccessRecord>,
 
-    /// Secret metadata
+    // 柔軟なメタデータ管理により、
+    // アプリケーション固有の情報をスキーマ変更なしに格納
     pub metadata: HashMap<String, String>,
 
-    /// Secret description
     pub description: Option<String>,
 
-    /// Expiration timestamp
+    // 有効期限をOptionalにすることで、
+    // 永続的な秘密と時限的な秘密の両方をサポート
     pub expires_at: Option<u64>,
 
-    /// Creation timestamp
     pub created_at: u64,
 
-    /// Last update timestamp
     pub updated_at: u64,
 
-    /// Version
+    // AOのステートレス環境で同時更新を検出するための楽観的ロック
     pub version: u64,
 }
 
 /// Access record
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AccessRecord {
-    /// Access request ID
     pub request_id: String,
 
-    /// Accessor process ID
     pub accessor_process_id: String,
 
-    /// Access timestamp
     pub accessed_at: u64,
 
-    /// Access result
-    /// Values: "granted", "denied", "expired"
+    // 文字列ベースの結果管理により、
+    // 新しい結果タイプの追加が既存データを破壊しない
     pub result: String,
 
-    /// Used access control condition
+    // 実際に使用された条件を記録することで、
+    // 複数条件下でのアクセスパターンを分析可能にする
     pub condition_used: String,
 }
