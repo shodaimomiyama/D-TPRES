@@ -3,7 +3,8 @@
     "allow": [
       "Bash(cargo check:*)",
       "Bash(rustup component add:*)",
-      "Bash(make clippy:*)"
+      "Bash(make clippy:*)",
+      "Bash(cargo clippy:*)"
     ],
     "deny": []
   }
