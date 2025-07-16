@@ -1,7 +1,7 @@
 ---
 title: "D-TPRES Development Status"
-version: "1.1.0"
-last_updated: "2025-07-09"
+version: "1.2.0"
+last_updated: "2025-07-16"
 author: "D-TPRES Development Team"
 status: "active"
 ---
@@ -12,13 +12,13 @@ status: "active"
 
 **D-TPRES (Deterministic Threshold Proxy Re-Encryption System)** は、Arweave、AO Network、EVM Smart Contractsを統合した分散暗号システムです。現在Phase1（MVP版）の開発中です。
 
-**全体進捗率**: 15% (設計フェーズ完了、実装フェーズ開始)
+**全体進捗率**: 20% (設計フェーズ完了、ドメイン層実装完了)
 
 ---
 
 ## 1. ドメイン層 (Domain Layer)
 
-**進捗率**: 20% (設計完了、実装未着手)
+**進捗率**: 60% (設計完了、エンティティ実装完了、テスト未着手)
 
 ### ステータス判定基準
 - **Plan**: ドメインモデルの設計ドキュメントが存在し、レビュー済みであること
@@ -27,14 +27,15 @@ status: "active"
 
 | Component | Plan | Implementation | Test | 備考 |
 | :-------- | :--: | :------------: | :--: | :--- |
-| EncryptedDataShare | ✅ | ⬜️ | ⬜️ | Shamir Secret Sharing の暗号化シェア |
-| ReEncryptionCapsule | ✅ | ⬜️ | ⬜️ | Umbral-PRE カプセル、暗号学的妥当性検証必要 |
-| ProcessActor | ✅ | ⬜️ | ⬜️ | AO プロセス管理、ハートビート機構実装予定 |
-| AccessProof | ✅ | ⬜️ | ⬜️ | EVM 検証証明、elciao 連携必要 |
-| CipherFragment | ✅ | ⬜️ | ⬜️ | 再暗号化結果、k-of-n 収集ロジック |
-| KeyFragment | ✅ | ⬜️ | ⬜️ | 閾値分散鍵材料、セキュアメモリ管理必要 |
-| ThresholdConfig | ✅ | ⬜️ | ⬜️ | k-of-n パラメータ管理 |
-| ReEncryptionSession | ✅ | ⬜️ | ⬜️ | セッション状態管理、タイムアウト制御 |
+| ShareEntity | ✅ | ✅ | ⬜️ | Shamir Secret Sharing の暗号化シェア |
+| CapsuleEntity | ✅ | ✅ | ⬜️ | Umbral-PRE カプセル、暗号学的妥当性検証必要 |
+| ProcessEntity | ✅ | ✅ | ⬜️ | AO プロセス管理、ハートビート機構実装予定 |
+| AccessRequestEntity | ✅ | ✅ | ⬜️ | EVM 検証証明、elciao 連携必要 |
+| ReencryptionEntity | ✅ | ✅ | ⬜️ | 再暗号化結果、k-of-n 収集ロジック |
+| RekeyFragmentEntity | ✅ | ✅ | ⬜️ | 閾値分散鍵材料、セキュアメモリ管理必要 |
+| SecretDetailsEntity | ✅ | ✅ | ⬜️ | 秘密詳細管理、アクセス履歴追跡 |
+| ThresholdConfig | ✅ | 🟡 | ⬜️ | k-of-n パラメータ管理（ProcessEntity内で部分実装） |
+| ReEncryptionSession | ✅ | 🟡 | ⬜️ | セッション状態管理（ReencryptionEntity内で部分実装） |
 
 ### 重要な注意点・課題
 - **暗号学的安全性**: `zeroize` による秘密材料のメモリクリアが必須
@@ -308,6 +309,7 @@ status: "active"
 
 | バージョン | 日付 | 変更内容 | 担当者 |
 |-----------|------|----------|--------|
+| 1.2.0 | 2025-07-16 | ドメイン層エンティティ実装完了、進捗率更新（20%→60%）| D-TPRES Development Team |
 | 1.1.0 | 2025-07-09 | PoC実装計画を段階的アプローチに変更（AO環境→EVM統合→Client統合）、マイルストーン調整 | D-TPRES Development Team |
 | 1.0.0 | 2025-06-01 | 初版作成、全セクション定義・現状分析 | D-TPRES Development Team |
 
@@ -322,4 +324,4 @@ status: "active"
 
 ---
 
-*Last updated: 2025-07-09 by D-TPRES Development Team*
+*Last updated: 2025-07-16 by D-TPRES Development Team*
