@@ -6,7 +6,8 @@
       "Bash(make clippy:*)",
       "Bash(cargo clippy:*)",
       "WebFetch(domain:github.com)",
-      "Bash(cargo fmt:*)"
+      "Bash(cargo fmt:*)",
+      "Bash(make:*)"
     ],
     "deny": []
   }
