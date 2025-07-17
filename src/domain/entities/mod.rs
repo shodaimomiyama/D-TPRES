@@ -14,6 +14,7 @@ pub mod reencryption;
 pub mod rekey_fragment;
 pub mod secret_details;
 pub mod share;
+pub mod value_objects;
 
 pub use access_request::{AccessRequestEntity, EvmVerificationData, ProofPkgData};
 pub use capsule::CapsuleEntity;
@@ -25,3 +26,7 @@ pub use reencryption::{CFragData, ReencryptionEntity};
 pub use rekey_fragment::RekeyFragmentEntity;
 pub use secret_details::{AccessRecord, SecretDetailsEntity};
 pub use share::ShareEntity;
+pub use value_objects::{
+    AccessRequestStatus, CryptoOperation, ProcessRole, ReencryptionStatus, RekeyFragmentStatus,
+    SecretStatus,
+};

@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::value_objects::AccessRequestStatus;
+
 /// Access request entity - Data access request and verification
 ///
 /// Created in Phase 2, goes through EVM verification to proceed to Phase 3
@@ -30,9 +32,9 @@ pub struct AccessRequestEntity {
     // EVM検証方式の将来的な変更に柔軟に対応
     pub proof_pkg: Option<ProofPkgData>,
 
-    // 文字列ベースのステータス管理により、
-    // 新しい状態の追加が既存データを破壊しない
-    pub status: String,
+    // 型安全なステータス管理により、
+    // 不正な状態遷移を防止
+    pub status: AccessRequestStatus,
 
     pub created_at: u64,
 
