@@ -65,3 +65,12 @@ pub enum CryptoOperation {
     ReEncrypt,
     VerifyProof,
 }
+
+/// アクセス結果
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AccessResult {
+    Granted,
+    Denied,
+    Expired,
+}
