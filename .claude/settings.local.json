@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check:*)",
+      "Bash(rustup component add:*)",
+      "Bash(make clippy:*)",
+      "Bash(cargo clippy:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(cargo fmt:*)"
+    ],
+    "deny": []
+  }
+}
