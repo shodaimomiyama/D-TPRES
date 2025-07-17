@@ -6,6 +6,8 @@
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
+use super::value_objects::RekeyFragmentStatus;
+
 /// Re-encryption key fragment entity - Split re-encryption key
 ///
 /// Generated in Phase 3, distributed to Holders
@@ -51,10 +53,10 @@ pub struct RekeyFragmentEntity {
     #[zeroize(skip)]
     pub assigned_holder_id: String,
 
-    // 文字列ベースのステータス管理により、
-    // 新しい状態の追加が既存データを破壊しない
+    // 型安全なステータス管理により、
+    // 不正な状態遷移を防止
     #[zeroize(skip)]
-    pub status: String,
+    pub status: RekeyFragmentStatus,
 
     // 有効期限をOptionalにすることで、永続的なkFragと
     // 時限的なkFragの両方をサポート
