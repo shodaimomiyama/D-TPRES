@@ -65,6 +65,7 @@ AOプロセスは各メッセージ処理で異なるCompute Unit（CU）で実�
 ```rust
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
+use crate::domain::entities::types::{ProcessRole, CryptoOperation, SecretStatus, RekeyFragmentStatus};
 
 /// プロセスエンティティ - AOプロセスの完全な状態表現
 /// 
@@ -81,8 +82,8 @@ pub struct ProcessEntity {
     pub process_name: String,
     
     /// 現在のアクティブロール
-    /// 値: ["owner"], ["holder"], ["requester"], またはその組み合わせ
-    pub active_roles: Vec<String>,
+    /// 例: [ProcessRole::Owner], [ProcessRole::Holder], またはその組み合わせ
+    pub active_roles: Vec<ProcessRole>,
     
     /// Owner機能データ（Phase 0, 1, 3で使用）
     pub owner_data: Option<OwnerData>,
@@ -98,8 +99,8 @@ pub struct ProcessEntity {
     pub configuration: HashMap<String, String>,
     
     /// 対応暗号操作リスト
-    /// 値: ["shamir_split", "pre_encrypt", "re_encrypt", "verify_proof"]
-    pub supported_crypto_operations: Vec<String>,
+    /// 例: [CryptoOperation::ShamirSplit, CryptoOperation::PreEncrypt]
+    pub supported_crypto_operations: Vec<CryptoOperation>,
     
     /// パフォーマンスメトリクス
     pub performance_metrics: PerformanceMetrics,
@@ -138,8 +139,8 @@ pub struct SecretIndex {
     pub secret_id: String,
     
     /// 秘密の状態
-    /// 値: "active", "archived", "expired"
-    pub status: String,
+    /// SecretStatusを使用した型安全な状態管理
+    pub status: SecretStatus,
     
     /// Entity参照情報
     pub entity_references: EntityReferences,
@@ -212,8 +213,9 @@ pub struct HolderFragmentInfo {
     /// 使用回数
     pub usage_count: u64,
     
-    /// 状態（"active", "expired", "revoked"）
-    pub status: String,
+    /// 状態
+    /// RekeyFragmentStatusを使用した型安全な状態管理
+    pub status: RekeyFragmentStatus,
 }
 
 /// Requester機能データ - アクセス要求とcFrag収集
@@ -263,7 +265,7 @@ pub struct PerformanceMetrics {
 let owner_process = ProcessEntity {
     process_id: "ao_process_001".to_string(),
     process_name: "AliceOwnerProcess".to_string(),
-    active_roles: vec!["owner".to_string()],
+    active_roles: vec![ProcessRole::Owner],
     owner_data: Some(OwnerData {
         owner_public_key: vec![/* pkO bytes */],
         secret_indices: HashMap::new(), // 秘密が追加されるまでは空
@@ -278,8 +280,8 @@ let owner_process = ProcessEntity {
         ("max_secrets".to_string(), "100".to_string()),
     ]),
     supported_crypto_operations: vec![
-        "shamir_split".to_string(),
-        "pre_encrypt".to_string(),
+        CryptoOperation::ShamirSplit,
+        CryptoOperation::PreEncrypt,
     ],
     performance_metrics: PerformanceMetrics {
         successful_operations: 0,
@@ -295,7 +297,7 @@ let owner_process = ProcessEntity {
 // Phase 1後: 秘密追加時のインデックス更新
 let secret_index = SecretIndex {
     secret_id: "secret_001".to_string(),
-    status: "active".to_string(),
+    status: SecretStatus::Active,
     entity_references: EntityReferences {
         share_ids: vec!["share_001_01".to_string(), /* ... */],
         capsule_ids: vec!["capsule_001_01".to_string(), /* ... */],
@@ -466,6 +468,8 @@ let capsule = CapsuleEntity {
 ### 6.2 詳細定義
 
 ```rust
+use crate::domain::entities::types::AccessRequestStatus;
+
 /// アクセス要求エンティティ - データアクセスの要求と検証
 /// 
 /// Phase 2で作成され、EVM検証を経てPhase 3へ進む
@@ -496,8 +500,8 @@ pub struct AccessRequestEntity {
     pub proof_pkg: Option<ProofPkgData>,
     
     /// 要求状態
-    /// 値: "pending", "evm_verified", "approved", "rejected", "completed"
-    pub status: String,
+    /// AccessRequestStatusを使用した型安全な状態管理
+    pub status: AccessRequestStatus,
     
     /// 要求作成日時
     pub created_at: u64,
@@ -575,7 +579,7 @@ let access_request = AccessRequestEntity {
         created_at: 1703001850,
         verified: true,
     }),
-    status: "evm_verified".to_string(),
+    status: AccessRequestStatus::EvmVerified,
     created_at: 1703001750,
     evm_verified_at: Some(1703001800),
     completed_at: None,
@@ -595,6 +599,8 @@ Shamirで分割された再暗号化キーフラグメント（kFrag）を表現
 ### 7.2 詳細定義
 
 ```rust
+use crate::domain::entities::types::RekeyFragmentStatus;
+
 /// 再暗号化キーフラグメントエンティティ - 分割された再暗号化キー
 /// 
 /// Phase 3で生成され、Holderに配布される
@@ -635,8 +641,8 @@ pub struct RekeyFragmentEntity {
     pub assigned_holder_id: String,
     
     /// フラグメント状態
-    /// 値: "created", "distributed", "active", "consumed", "expired"
-    pub status: String,
+    /// RekeyFragmentStatusを使用した型安全な状態管理
+    pub status: RekeyFragmentStatus,
     
     /// 有効期限
     pub expires_at: Option<u64>,
@@ -668,7 +674,7 @@ let kfrag = RekeyFragmentEntity {
     shamir_total_fragments: 5,
     kfrag_data: vec![/* ShamirSplit(ReKey, 1) */],
     assigned_holder_id: "ao_process_h01".to_string(),
-    status: "distributed".to_string(),
+    status: RekeyFragmentStatus::Distributed,
     expires_at: Some(1703088000),
     created_at: 1703001900,
     distributed_at: Some(1703001950),
@@ -684,6 +690,8 @@ k-of-nプロキシ再暗号化処理の状態を管理するEntity（PRD Phase 4
 ### 8.2 詳細定義
 
 ```rust
+use crate::domain::entities::types::ReencryptionStatus;
+
 /// 再暗号化エンティティ - プロキシ再暗号化処理の管理
 /// 
 /// Phase 4で作成され、cFrag収集と再暗号化を追跡
@@ -711,8 +719,8 @@ pub struct ReencryptionEntity {
     pub collected_cfrags: Vec<CFragData>,
     
     /// 再暗号化状態
-    /// 値: "initiated", "collecting", "threshold_met", "completed", "failed"
-    pub status: String,
+    /// ReencryptionStatusを使用した型安全な状態管理
+    pub status: ReencryptionStatus,
     
     /// 開始日時
     pub started_at: u64,
@@ -777,7 +785,7 @@ let reencryption = ReencryptionEntity {
         },
         // ... more cFrags
     ],
-    status: "collecting".to_string(),
+    status: ReencryptionStatus::Collecting,
     started_at: 1703001950,
     completed_at: None,
     timeout_at: 1703005550,
@@ -793,6 +801,8 @@ let reencryption = ReencryptionEntity {
 ### 9.2 詳細定義
 
 ```rust
+use crate::domain::entities::types::AccessResult;
+
 /// 秘密管理詳細エンティティ - 1つの秘密に関する詳細情報
 /// 
 /// ProcessEntityから分離され、必要時のみロードされる
@@ -847,8 +857,8 @@ pub struct AccessRecord {
     pub accessed_at: u64,
     
     /// アクセス結果
-    /// 値: "granted", "denied", "expired"
-    pub result: String,
+    /// AccessResultを使用した型安全な結果管理
+    pub result: AccessResult,
     
     /// 使用されたアクセス制御条件
     pub condition_used: String,

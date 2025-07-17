@@ -6,6 +6,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use super::value_objects::{CryptoOperation, ProcessRole, RekeyFragmentStatus, SecretStatus};
+
 /// Process entity - Complete state representation of an AO process
 ///
 /// # Features
@@ -18,8 +20,8 @@ pub struct ProcessEntity {
 
     pub process_name: String,
 
-    // 単一プロセスが複数の役割を担うことでネットワーク効率を向上 例: ["owner", "holder", "requester"] - 自身の秘密を管理しながら他者のkFragも保持
-    pub active_roles: Vec<String>,
+    // 単一プロセスが複数の役割を担うことでネットワーク効率を向上 例: [Owner, Holder, Requester] - 自身の秘密を管理しながら他者のkFragも保持
+    pub active_roles: Vec<ProcessRole>,
 
     // Phase 0, 1, 3で使用されるOwner機能
     // skO（秘密鍵）の管理と秘密分割を担当
@@ -39,7 +41,7 @@ pub struct ProcessEntity {
 
     // プロセスがサポートする暗号操作を明示
     // 能力ベースのルーティングとロードバランシングに使用
-    pub supported_crypto_operations: Vec<String>,
+    pub supported_crypto_operations: Vec<CryptoOperation>,
 
     pub performance_metrics: PerformanceMetrics,
 
@@ -72,8 +74,8 @@ pub struct OwnerData {
 pub struct SecretIndex {
     pub secret_id: String,
 
-    // 文字列ベースのステータス管理により、新しい状態の追加が既存データを破壊しない
-    pub status: String,
+    // 型安全なステータス管理により、不正な状態遷移を防止
+    pub status: SecretStatus,
 
     pub entity_references: EntityReferences,
 
@@ -133,8 +135,8 @@ pub struct HolderFragmentInfo {
     // 使用回数を追跡することで、ホットなフラグメントの識別と最適配置を可能にする
     pub usage_count: u64,
 
-    // 文字列ベースのステータス管理により、新しい状態の追加が既存データを破壊しない
-    pub status: String,
+    // 型安全なステータス管理により、不正な状態遷移を防止
+    pub status: RekeyFragmentStatus,
 }
 
 /// Requester functionality data - Access requests and cFrag collection

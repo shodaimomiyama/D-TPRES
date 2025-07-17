@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::value_objects::ReencryptionStatus;
+
 /// Re-encryption entity - Proxy re-encryption process management
 ///
 /// Created in Phase 4, tracks cFrag collection and re-encryption
@@ -26,8 +28,8 @@ pub struct ReencryptionEntity {
     // cFragを直接エンティティ内に保持することで、閘値判定と再暗号化完了チェックを高速化
     pub collected_cfrags: Vec<CFragData>,
 
-    // 文字列ベースのステータス管理により、新しい状態の追加が既存データを破壊しない
-    pub status: String,
+    // 型安全なステータス管理により、不正な状態遷移を防止
+    pub status: ReencryptionStatus,
 
     pub started_at: u64,
 
