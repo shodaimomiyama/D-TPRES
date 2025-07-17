@@ -87,7 +87,9 @@ D-TPRES/
 │   │   │   ├── capsule.rs         # CapsuleEntity
 │   │   │   ├── access_request.rs  # AccessRequestEntity
 │   │   │   ├── rekey_fragment.rs  # RekeyFragmentEntity
-│   │   │   └── reencryption.rs    # ReencryptionEntity
+│   │   │   ├── reencryption.rs    # ReencryptionEntity
+│   │   │   ├── secret_details.rs  # SecretDetailsEntity
+│   │   │   └── value_objects.rs           # Union型定義（ProcessRole, SecretStatus等）
 │   │   ├── repositories/          # Repository Interface (DIP)
 │   │   │   ├── mod.rs
 │   │   │   ├── process.rs         # ProcessEntityRepository trait
@@ -96,11 +98,6 @@ D-TPRES/
 │   │   │   ├── access_request.rs  # AccessRequestEntityRepository trait
 │   │   │   ├── rekey_fragment.rs  # RekeyFragmentEntityRepository trait
 │   │   │   └── reencryption.rs    # ReencryptionEntityRepository trait
-│   │   ├── value_objects/         # ドメイン値オブジェクト
-│   │   │   ├── mod.rs
-│   │   │   ├── process_role.rs    # ProcessRole enum
-│   │   │   ├── secret_id.rs       # SecretId値オブジェクト
-│   │   │   └── phase.rs           # Phase enum
 │   │   └── errors.rs              # Domain層エラー定義
 │   │
 │   ├── infrastructure/            # Infrastructure Layer - 技術実装
