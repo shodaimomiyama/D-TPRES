@@ -15,7 +15,7 @@ pub trait ShareEntityRepository: Repository<ShareEntity, String> {
     /// 所有者でシェアを検索
     fn find_by_owner(&self, owner_public_key: &[u8]) -> Result<Vec<ShareEntity>, Self::Error>;
 
-    /// 闾値インデックスでシェアを検索
+    /// 閾値インデックスでシェアを検索
     fn find_by_threshold_index(
         &self,
         data_id: &str,
@@ -36,6 +36,6 @@ pub trait ShareEntityRepository: Repository<ShareEntity, String> {
     /// 最終アクセスタイムスタンプを更新
     fn update_last_accessed(&self, share_id: &str, accessed_at: u64) -> Result<(), Self::Error>;
 
-    /// クリーンアップ用に闾値日付より古いシェアを検索
+    /// クリーンアップ用に閾値日付より古いシェアを検索
     fn find_older_than(&self, threshold_date: u64) -> Result<Vec<ShareEntity>, Self::Error>;
 }
