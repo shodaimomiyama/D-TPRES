@@ -74,3 +74,21 @@ pub enum AccessResult {
     Denied,
     Expired,
 }
+
+/// 暗号化ワークフローのフェーズ
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CryptoPhase {
+    /// Phase 0: プロセス生成・鍵準備
+    Initialize,
+    /// Phase 1: 秘密分割・公開ストレージ
+    SecretSharing,
+    /// Phase 2: アクセス要求・EVM検証
+    AccessRequest,
+    /// Phase 3: 再暗号化鍵のkFrag分割
+    KeyFragmentation,
+    /// Phase 4: k-of-n プロキシ再暗号化
+    ProxyReencryption,
+    /// Phase 5: クライアント復号・秘密復元
+    SecretRecovery,
+}
