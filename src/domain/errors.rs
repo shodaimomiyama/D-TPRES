@@ -27,10 +27,7 @@ pub enum DomainError {
     },
 
     /// Business rule violation
-    BusinessRuleViolation {
-        rule: String,
-        message: String,
-    },
+    BusinessRuleViolation { rule: String, message: String },
 
     /// Process role authorization failed
     UnauthorizedRole {
@@ -61,10 +58,7 @@ pub enum DomainError {
     },
 
     /// Cryptographic operation failed
-    CryptographicError {
-        operation: String,
-        details: String,
-    },
+    CryptographicError { operation: String, details: String },
 
     /// Entity relationship constraint violation
     RelationshipConstraintViolation {
@@ -109,94 +103,169 @@ pub enum DomainError {
     },
 
     /// Generic validation error for complex validations
-    ValidationError {
-        message: String,
-    },
+    ValidationError { message: String },
 
     /// Internal domain logic error
-    InternalError {
-        message: String,
-    },
+    InternalError { message: String },
 
     /// Entity not found in repository
-    NotFound {
-        entity_type: String,
-        id: String,
-    },
+    NotFound { entity_type: String, id: String },
 
     /// Entity already exists in repository
-    AlreadyExists {
-        entity_type: String,
-        id: String,
-    },
+    AlreadyExists { entity_type: String, id: String },
 
     /// Storage system error
-    StorageError {
-        operation: String,
-        details: String,
-    },
+    StorageError { operation: String, details: String },
 
     /// Serialization/Deserialization error
-    SerializationError {
-        operation: String,
-        details: String,
-    },
+    SerializationError { operation: String, details: String },
 }
 
 impl fmt::Display for DomainError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DomainError::EntityValidation { entity_type, field, message } => {
-                write!(f, "Entity validation failed for {}.{}: {}", entity_type, field, message)
+            DomainError::EntityValidation {
+                entity_type,
+                field,
+                message,
+            } => {
+                write!(
+                    f,
+                    "Entity validation failed for {}.{}: {}",
+                    entity_type, field, message
+                )
             }
-            DomainError::InvalidStateTransition { entity_type, from_state, to_state, reason } => {
-                write!(f, "Invalid state transition in {}: {} -> {} ({})", 
-                       entity_type, from_state, to_state, reason)
+            DomainError::InvalidStateTransition {
+                entity_type,
+                from_state,
+                to_state,
+                reason,
+            } => {
+                write!(
+                    f,
+                    "Invalid state transition in {}: {} -> {} ({})",
+                    entity_type, from_state, to_state, reason
+                )
             }
             DomainError::BusinessRuleViolation { rule, message } => {
                 write!(f, "Business rule '{}' violation: {}", rule, message)
             }
-            DomainError::UnauthorizedRole { required_role, actual_role, operation } => {
-                write!(f, "Unauthorized role for operation '{}': required={}, actual={}", 
-                       operation, required_role, actual_role)
+            DomainError::UnauthorizedRole {
+                required_role,
+                actual_role,
+                operation,
+            } => {
+                write!(
+                    f,
+                    "Unauthorized role for operation '{}': required={}, actual={}",
+                    operation, required_role, actual_role
+                )
             }
-            DomainError::ThresholdConstraintViolation { required_threshold, available_shares, operation } => {
-                write!(f, "Threshold constraint violation in '{}': required={}, available={}", 
-                       operation, required_threshold, available_shares)
+            DomainError::ThresholdConstraintViolation {
+                required_threshold,
+                available_shares,
+                operation,
+            } => {
+                write!(
+                    f,
+                    "Threshold constraint violation in '{}': required={}, available={}",
+                    operation, required_threshold, available_shares
+                )
             }
-            DomainError::SecretConstraintViolation { secret_id, constraint, message } => {
-                write!(f, "Secret constraint '{}' violation for {}: {}", 
-                       constraint, secret_id, message)
+            DomainError::SecretConstraintViolation {
+                secret_id,
+                constraint,
+                message,
+            } => {
+                write!(
+                    f,
+                    "Secret constraint '{}' violation for {}: {}",
+                    constraint, secret_id, message
+                )
             }
-            DomainError::AccessControlViolation { condition, accessor_id, message } => {
-                write!(f, "Access control violation for condition '{}' by {}: {}", 
-                       condition, accessor_id, message)
+            DomainError::AccessControlViolation {
+                condition,
+                accessor_id,
+                message,
+            } => {
+                write!(
+                    f,
+                    "Access control violation for condition '{}' by {}: {}",
+                    condition, accessor_id, message
+                )
             }
             DomainError::CryptographicError { operation, details } => {
-                write!(f, "Cryptographic error in operation '{}': {}", operation, details)
+                write!(
+                    f,
+                    "Cryptographic error in operation '{}': {}",
+                    operation, details
+                )
             }
-            DomainError::RelationshipConstraintViolation { parent_entity, child_entity, constraint } => {
-                write!(f, "Relationship constraint '{}' violation between {} and {}", 
-                       constraint, parent_entity, child_entity)
+            DomainError::RelationshipConstraintViolation {
+                parent_entity,
+                child_entity,
+                constraint,
+            } => {
+                write!(
+                    f,
+                    "Relationship constraint '{}' violation between {} and {}",
+                    constraint, parent_entity, child_entity
+                )
             }
-            DomainError::PhaseConstraintViolation { current_phase, required_phase, operation } => {
-                write!(f, "Phase constraint violation for operation '{}': current={}, required={}", 
-                       operation, current_phase, required_phase)
+            DomainError::PhaseConstraintViolation {
+                current_phase,
+                required_phase,
+                operation,
+            } => {
+                write!(
+                    f,
+                    "Phase constraint violation for operation '{}': current={}, required={}",
+                    operation, current_phase, required_phase
+                )
             }
-            DomainError::IdentifierConstraintViolation { entity_type, identifier, constraint } => {
-                write!(f, "Identifier constraint '{}' violation for {} with ID '{}'", 
-                       constraint, entity_type, identifier)
+            DomainError::IdentifierConstraintViolation {
+                entity_type,
+                identifier,
+                constraint,
+            } => {
+                write!(
+                    f,
+                    "Identifier constraint '{}' violation for {} with ID '{}'",
+                    constraint, entity_type, identifier
+                )
             }
-            DomainError::OperationTimeout { operation, timeout_seconds } => {
-                write!(f, "Operation '{}' timed out after {} seconds", operation, timeout_seconds)
+            DomainError::OperationTimeout {
+                operation,
+                timeout_seconds,
+            } => {
+                write!(
+                    f,
+                    "Operation '{}' timed out after {} seconds",
+                    operation, timeout_seconds
+                )
             }
-            DomainError::ConcurrentAccess { entity_type, entity_id, expected_version, actual_version } => {
-                write!(f, "Concurrent access detected for {} {}: expected version {}, actual {}", 
-                       entity_type, entity_id, expected_version, actual_version)
+            DomainError::ConcurrentAccess {
+                entity_type,
+                entity_id,
+                expected_version,
+                actual_version,
+            } => {
+                write!(
+                    f,
+                    "Concurrent access detected for {} {}: expected version {}, actual {}",
+                    entity_type, entity_id, expected_version, actual_version
+                )
             }
-            DomainError::ConfigurationError { parameter, value, constraint } => {
-                write!(f, "Configuration error for parameter '{}': value '{}' violates constraint '{}'", 
-                       parameter, value, constraint)
+            DomainError::ConfigurationError {
+                parameter,
+                value,
+                constraint,
+            } => {
+                write!(
+                    f,
+                    "Configuration error for parameter '{}': value '{}' violates constraint '{}'",
+                    parameter, value, constraint
+                )
             }
             DomainError::ValidationError { message } => {
                 write!(f, "Validation error: {}", message)
@@ -214,7 +283,10 @@ impl fmt::Display for DomainError {
                 write!(f, "Storage error in operation '{operation}': {details}")
             }
             Self::SerializationError { operation, details } => {
-                write!(f, "Serialization error in operation '{operation}': {details}")
+                write!(
+                    f,
+                    "Serialization error in operation '{operation}': {details}"
+                )
             }
         }
     }
@@ -388,7 +460,8 @@ mod tests {
 
     #[test]
     fn test_entity_validation_error() {
-        let error = DomainError::entity_validation("ProcessEntity", "process_id", "ID cannot be empty");
+        let error =
+            DomainError::entity_validation("ProcessEntity", "process_id", "ID cannot be empty");
         assert_eq!(
             error.to_string(),
             "Entity validation failed for ProcessEntity.process_id: ID cannot be empty"
@@ -401,7 +474,7 @@ mod tests {
             "AccessRequest",
             "pending",
             "completed",
-            "EVM verification not done"
+            "EVM verification not done",
         );
         assert_eq!(
             error.to_string(),
@@ -430,19 +503,13 @@ mod tests {
     #[test]
     fn test_not_found_error() {
         let error = DomainError::not_found("ProcessEntity", "process_123");
-        assert_eq!(
-            error.to_string(),
-            "ProcessEntity not found: process_123"
-        );
+        assert_eq!(error.to_string(), "ProcessEntity not found: process_123");
     }
 
     #[test]
     fn test_already_exists_error() {
         let error = DomainError::already_exists("ShareEntity", "share_456");
-        assert_eq!(
-            error.to_string(),
-            "ShareEntity already exists: share_456"
-        );
+        assert_eq!(error.to_string(), "ShareEntity already exists: share_456");
     }
 
     #[test]
