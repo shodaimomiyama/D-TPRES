@@ -5,18 +5,18 @@
 //! external frameworks or infrastructure concerns.
 
 pub mod entities;
-pub mod repositories;
 pub mod errors;
+pub mod repositories;
 
 // Re-export commonly used types
-pub use entities::{
-    AccessRequestEntity, CapsuleEntity, ProcessEntity, ReencryptionEntity, RekeyFragmentEntity,
-    SecretDetailsEntity, ShareEntity,
-};
 pub use entities::{
     AccessRecord, CFragData, EntityReferences, EvmVerificationData, HolderData, HolderFragmentInfo,
     OwnerData, PerformanceMetrics, ProcessEntity as Process, ProofPkgData, RequesterData,
     SecretIndex,
+};
+pub use entities::{
+    AccessRequestEntity, CapsuleEntity, ProcessEntity, ReencryptionEntity, RekeyFragmentEntity,
+    SecretDetailsEntity, ShareEntity,
 };
 pub use entities::{
     AccessRequestStatus, AccessResult, CryptoOperation, CryptoPhase, ProcessRole,

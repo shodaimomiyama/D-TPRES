@@ -62,11 +62,7 @@ pub trait AccessRequestEntityRepository: Repository<AccessRequestEntity, String>
     ) -> Result<(), Self::Error>;
 
     /// elciao生成後にProofPkgデータを設定
-    fn set_proof_pkg(
-        &self,
-        request_id: &str,
-        proof_pkg: &ProofPkgData,
-    ) -> Result<(), Self::Error>;
+    fn set_proof_pkg(&self, request_id: &str, proof_pkg: &ProofPkgData) -> Result<(), Self::Error>;
 
     /// Phase 5で要求を完了としてマーク
     fn mark_completed(&self, request_id: &str, completed_at: u64) -> Result<(), Self::Error>;
