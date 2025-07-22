@@ -61,6 +61,7 @@ where
 
 /// 大規模データセット処理用のページネーションサポート
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct Page<T> {
     pub items: Vec<T>,
     pub total: usize,

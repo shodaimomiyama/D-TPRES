@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 /// Data share entity - Shamir-split data fragment
 ///
 /// Generated in PRD Phase 1, required for secret reconstruction
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ShareEntity {
     pub share_id: String,
 
