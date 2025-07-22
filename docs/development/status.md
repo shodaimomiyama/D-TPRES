@@ -1,7 +1,7 @@
 ---
 title: "D-TPRES Development Status"
-version: "1.3.0"
-last_updated: "2025-07-17"
+version: "1.4.0"
+last_updated: "2025-07-22"
 author: "D-TPRES Development Team"
 status: "active"
 ---
@@ -12,13 +12,13 @@ status: "active"
 
 **D-TPRES (Deterministic Threshold Proxy Re-Encryption System)** は、Arweave、AO Network、EVM Smart Contractsを統合した分散暗号システムです。現在Phase1（MVP版）の開発中です。
 
-**全体進捗率**: 25% (設計フェーズ完了、ドメイン層実装80%完了)
+**全体進捗率**: 30% (設計フェーズ完了、ドメイン層実装90%完了)
 
 ---
 
 ## 1. ドメイン層 (Domain Layer)
 
-**進捗率**: 80% (設計完了、エンティティ実装完了、値オブジェクト実装完了、テスト未着手)
+**進捗率**: 90% (設計完了、エンティティ実装完了、値オブジェクト実装完了、Repository Interface実装完了、テスト未着手)
 
 ### ステータス判定基準
 - **Plan**: ドメインモデルの設計ドキュメントが存在し、レビュー済みであること
@@ -44,12 +44,25 @@ status: "active"
 | ReencryptionStatus | ✅ | ✅ | ⬜️ | 再暗号化ステータス列挙型 |
 | CryptoOperation | ✅ | ✅ | ⬜️ | 暗号操作列挙型 |
 | AccessResult | ✅ | ✅ | ⬜️ | アクセス結果列挙型（Granted, Denied, Expired） |
+| **Repository Interfaces** |
+| Repository<T, ID> | ✅ | ✅ | ⬜️ | 汎用リポジトリトレイト、CRUD操作・ページネーション対応 |
+| PageableRepository<T, ID> | ✅ | ✅ | ⬜️ | ページ分割対応リポジトリトレイト |
+| ProcessEntityRepository | ✅ | ✅ | ⬜️ | プロセスエンティティ専用リポジトリ、マルチロール・負荷分散対応 |
+| ShareEntityRepository | ✅ | ✅ | ⬜️ | シェアエンティティ専用リポジトリ、k-of-n秘密復元対応 |
+| CapsuleEntityRepository | ✅ | ✅ | ⬜️ | カプセルエンティティ専用リポジトリ、PRE暗号化対応 |
+| AccessRequestEntityRepository | ✅ | ✅ | ⬜️ | アクセス要求専用リポジトリ、EVM検証フロー対応 |
+| RekeyFragmentEntityRepository | ✅ | ✅ | ⬜️ | 再暗号化キーフラグメント専用リポジトリ、分散管理対応 |
+| ReencryptionEntityRepository | ✅ | ✅ | ⬜️ | 再暗号化専用リポジトリ、cFrag収集・閾値判定対応 |
+| SecretDetailsEntityRepository | ✅ | ✅ | ⬜️ | 秘密詳細専用リポジトリ、メタデータ・統計管理 |
+| RepositoryError | ✅ | ✅ | ⬜️ | 統一エラー型、thiserror活用・構造化エラー処理 |
 
 ### 重要な注意点・課題
 - **暗号学的安全性**: `zeroize` による秘密材料のメモリクリアが必須
 - **型安全性**: ~~NewType pattern による型レベル制約の実装~~ → Union型（列挙型）による型安全性を実装済み
 - **WebAssembly対応**: `no_std` 環境での制約考慮が必要
 - **決定論的実行**: AO環境での再現可能性保証
+- **Repository Interface**: 同期実行（async削除）、DIP原則準拠、AO制約完全対応
+- **依存性管理**: thiserror 2.0新規追加、構造化エラー処理強化
 
 ---
 
@@ -317,6 +330,7 @@ status: "active"
 
 | バージョン | 日付 | 変更内容 | 担当者 |
 |-----------|------|----------|--------|
+| 1.4.0 | 2025-07-22 | ドメイン層Repository Interface実装完了、進捗率更新（80%→90%）、全体進捗率更新（25%→30%）、thiserror依存関係追加 | D-TPRES Development Team |
 | 1.3.0 | 2025-07-17 | ドメイン層値オブジェクト実装完了、進捗率更新（60%→80%）、全体進捗率更新（20%→25%）| D-TPRES Development Team |
 | 1.2.0 | 2025-07-16 | ドメイン層エンティティ実装完了、進捗率更新（20%→60%）| D-TPRES Development Team |
 | 1.1.0 | 2025-07-09 | PoC実装計画を段階的アプローチに変更（AO環境→EVM統合→Client統合）、マイルストーン調整 | D-TPRES Development Team |
@@ -333,4 +347,4 @@ status: "active"
 
 ---
 
-*Last updated: 2025-07-17 by D-TPRES Development Team*
+*Last updated: 2025-07-22 by D-TPRES Development Team*
