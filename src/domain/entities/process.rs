@@ -15,6 +15,7 @@ use super::value_objects::{CryptoOperation, ProcessRole, RekeyFragmentStatus, Se
 /// - AO environment native properties
 /// - Integrated performance metrics
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ProcessEntity {
     pub process_id: String,
 
@@ -54,7 +55,8 @@ pub struct ProcessEntity {
 }
 
 /// Owner functionality data - Manages skO and secret splitting
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct OwnerData {
     // skO（秘密鍵）に対応する公開鍵
     // 秘密鍵自体は保存せず、必要時にセキュアストレージから取得
@@ -70,7 +72,8 @@ pub struct OwnerData {
 
 /// Secret index - Lightweight secret management information
 /// Minimal information held in ProcessEntity
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SecretIndex {
     pub secret_id: String,
 
@@ -88,7 +91,8 @@ pub struct SecretIndex {
 }
 
 /// Entity references - Holds only IDs of related entities
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct EntityReferences {
     pub share_ids: Vec<String>,
 
@@ -103,6 +107,7 @@ pub struct EntityReferences {
 
 /// Holder functionality data - kFrag storage and re-encryption execution
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct HolderData {
     // Fragment情報を直接保持することで、再暗号化時の外部エンティティ参照を減らし、処理速度を向上
     pub held_fragments: HashMap<String, HolderFragmentInfo>,
@@ -122,7 +127,8 @@ pub struct HolderData {
 }
 
 /// Holder fragment information
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct HolderFragmentInfo {
     pub fragment_id: String,
 
@@ -141,6 +147,7 @@ pub struct HolderFragmentInfo {
 
 /// Requester functionality data - Access requests and cFrag collection
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct RequesterData {
     // アクティブなリクエストのみを保持することで、履歴データによるメモリ圧迫を防ぎ、検索効率を向上
     pub active_requests: Vec<String>,
@@ -160,7 +167,8 @@ pub struct RequesterData {
 }
 
 /// Performance metrics
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct PerformanceMetrics {
     pub successful_operations: u64,
 

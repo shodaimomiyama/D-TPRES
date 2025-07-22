@@ -9,7 +9,8 @@ use std::collections::HashMap;
 /// Secret management details entity - Detailed information about a secret
 ///
 /// Separated from ProcessEntity, loaded only when needed
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct SecretDetailsEntity {
     pub details_id: String,
 
@@ -46,7 +47,8 @@ pub struct SecretDetailsEntity {
 }
 
 /// Access record
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccessRecord {
     pub request_id: String,
 

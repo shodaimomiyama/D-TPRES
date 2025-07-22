@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 /// プロセスが持つことができるロール
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum ProcessRole {
     Owner,
     Holder,
@@ -17,6 +18,7 @@ pub enum ProcessRole {
 /// 秘密の状態
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum SecretStatus {
     Active,
     Archived,
@@ -26,6 +28,7 @@ pub enum SecretStatus {
 /// アクセス要求の状態
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum AccessRequestStatus {
     Pending,
     EvmVerified,
@@ -37,6 +40,7 @@ pub enum AccessRequestStatus {
 /// 再暗号化キーフラグメントの状態
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum RekeyFragmentStatus {
     Created,
     Distributed,
@@ -48,6 +52,7 @@ pub enum RekeyFragmentStatus {
 /// 再暗号化処理の状態
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum ReencryptionStatus {
     Initiated,
     Collecting,
@@ -59,6 +64,7 @@ pub enum ReencryptionStatus {
 /// サポートされる暗号操作
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum CryptoOperation {
     ShamirSplit,
     PreEncrypt,
@@ -69,6 +75,7 @@ pub enum CryptoOperation {
 /// アクセス結果
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum AccessResult {
     Granted,
     Denied,
@@ -78,6 +85,7 @@ pub enum AccessResult {
 /// 暗号化ワークフローのフェーズ
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum CryptoPhase {
     /// Phase 0: プロセス生成・鍵準備
     Initialize,
