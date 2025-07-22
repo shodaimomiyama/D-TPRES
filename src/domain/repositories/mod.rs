@@ -5,8 +5,6 @@
 
 use std::error::Error;
 
-pub mod errors;
-pub use errors::{RepositoryError, RepositoryResult};
 
 pub mod process;
 pub mod share;
