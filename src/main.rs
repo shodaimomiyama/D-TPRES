@@ -1,3 +1,5 @@
+pub mod domain;
+
 fn main() {
-    println!("Hello, world!");
+    println!("D-TPRES: Deterministic Threshold Proxy Re-Encryption System");
 }
