@@ -9,8 +9,10 @@ use super::Repository;
 /// シークレット管理詳細用のSecretDetailsEntityリポジトリインターフェース
 pub trait SecretDetailsEntityRepository: Repository<SecretDetailsEntity, String> {
     /// シークレットIDで詳細を検索
-    fn find_by_secret_id(&self, secret_id: &str)
-        -> Result<Option<SecretDetailsEntity>, Self::Error>;
+    fn find_by_secret_id(
+        &self,
+        secret_id: &str,
+    ) -> Result<Option<SecretDetailsEntity>, Self::Error>;
 
     /// アクセス制御条件で詳細を検索
     fn find_by_access_control_condition(

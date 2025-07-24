@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 /// Capsule entity - PRE encryption capsule
 ///
 /// Generated in Phase 1, used in Phase 4 re-encryption
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CapsuleEntity {
     pub capsule_id: String,
 

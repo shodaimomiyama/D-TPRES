@@ -10,7 +10,8 @@ use super::value_objects::AccessRequestStatus;
 /// Access request entity - Data access request and verification
 ///
 /// Created in Phase 2, goes through EVM verification to proceed to Phase 3
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct AccessRequestEntity {
     pub request_id: String,
 
@@ -51,7 +52,8 @@ pub struct AccessRequestEntity {
 }
 
 /// EVM verification data
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct EvmVerificationData {
     pub tx_hash: String,
 
@@ -69,7 +71,8 @@ pub struct EvmVerificationData {
 }
 
 /// ProofPkg data - Verification package by elciao
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ProofPkgData {
     pub proof_pkg_id: String,
 
