@@ -27,6 +27,6 @@ pub use rekey_fragment::RekeyFragmentEntity;
 pub use secret_details::{AccessRecord, SecretDetailsEntity};
 pub use share::ShareEntity;
 pub use value_objects::{
-    AccessRequestStatus, AccessResult, CryptoOperation, ProcessRole, RekeyFragmentStatus,
-    ReencryptionStatus, SecretStatus,
+    AccessRequestStatus, AccessResult, CryptoOperation, CryptoPhase, ProcessRole,
+    ReencryptionStatus, RekeyFragmentStatus, SecretStatus,
 };

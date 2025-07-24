@@ -10,7 +10,8 @@ use super::value_objects::ReencryptionStatus;
 /// Re-encryption entity - Proxy re-encryption process management
 ///
 /// Created in Phase 4, tracks cFrag collection and re-encryption
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ReencryptionEntity {
     pub reencryption_id: String,
 
@@ -43,7 +44,8 @@ pub struct ReencryptionEntity {
 }
 
 /// cFrag data - Re-encrypted fragment
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CFragData {
     pub cfrag_id: String,
 

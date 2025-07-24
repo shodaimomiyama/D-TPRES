@@ -12,7 +12,8 @@ use super::value_objects::RekeyFragmentStatus;
 ///
 /// Generated in Phase 3, distributed to Holders
 /// Contains sensitive key material that must be zeroized
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+#[non_exhaustive]
 pub struct RekeyFragmentEntity {
     // ID系フィールドにzeroize(skip)を適用し、機密データのみをゼロ化対象にすることで、
     // セキュリティとパフォーマンスのバランスを最適化

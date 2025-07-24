@@ -5,24 +5,21 @@
 
 use std::error::Error;
 
-pub mod errors;
-pub use errors::{RepositoryError, RepositoryResult};
-
-pub mod process;
-pub mod share;
-pub mod capsule;
 pub mod access_request;
-pub mod rekey_fragment;
+pub mod capsule;
+pub mod process;
 pub mod reencryption;
+pub mod rekey_fragment;
 pub mod secret_details;
+pub mod share;
 
-pub use process::ProcessEntityRepository;
-pub use share::ShareEntityRepository;
-pub use capsule::CapsuleEntityRepository;
 pub use access_request::AccessRequestEntityRepository;
-pub use rekey_fragment::RekeyFragmentEntityRepository;
+pub use capsule::CapsuleEntityRepository;
+pub use process::ProcessEntityRepository;
 pub use reencryption::ReencryptionEntityRepository;
+pub use rekey_fragment::RekeyFragmentEntityRepository;
 pub use secret_details::SecretDetailsEntityRepository;
+pub use share::ShareEntityRepository;
 
 /// エンティティCRUD操作の汎用Repositoryインターフェース
 /// AO環境では同期実行が必須
@@ -64,6 +61,7 @@ where
 
 /// 大規模データセット処理用のページネーションサポート
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct Page<T> {
     pub items: Vec<T>,
     pub total: usize,
