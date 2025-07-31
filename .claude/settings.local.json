@@ -8,8 +8,18 @@
       "WebFetch(domain:github.com)",
       "Bash(cargo fmt:*)",
       "Bash(make:*)",
-      "Bash(cargo test:*)"
+      "Bash(cargo test:*)",
+      "Bash(grep:*)",
+      "mcp__serena__list_dir",
+      "mcp__serena__find_file",
+      "mcp__serena__get_symbols_overview",
+      "mcp__serena__switch_modes",
+      "mcp__serena__think_about_collected_information"
     ],
     "deny": []
-  }
+  },
+  "enabledMcpjsonServers": [
+    "context7",
+    "serena"
+  ]
 }

@@ -1,0 +1,29 @@
+{
+  "mcpServers": {
+    "context7": {
+      "type": "stdio",
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "context7-mcp"
+      ],
+      "transportType": "stdio"
+    },
+    "serena": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-v",
+        "${PWD}:/workspace:rw",
+        "-w",
+        "/workspace",
+        "ghcr.io/oraios/serena:latest"
+      ],
+      "env": {}
+    }
+  }
+}
