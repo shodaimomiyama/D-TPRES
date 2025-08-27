@@ -26,5 +26,8 @@
   "enabledMcpjsonServers": [
     "context7",
     "serena"
-  ]
+  ],
+  "env": {
+    "DISABLE_MICROCOMPACT": true
+  }
 }
