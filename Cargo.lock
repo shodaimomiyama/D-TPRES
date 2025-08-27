@@ -9,6 +9,7 @@ dependencies = [
  "rand",
  "serde",
  "shamirsecretsharing",
+ "subtle",
  "thiserror",
  "umbral-pre",
  "zeroize",
