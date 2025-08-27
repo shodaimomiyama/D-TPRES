@@ -8,5 +8,6 @@ pub mod error;
 
 pub use error::{BusinessException, ServiceError, ServiceResult, SystemException};
 
-#[cfg(feature = "workflow")]
-pub mod workflow;
+// TODO: Enable when workflow module is implemented
+// #[cfg(feature = "workflow")]
+// pub mod workflow;
