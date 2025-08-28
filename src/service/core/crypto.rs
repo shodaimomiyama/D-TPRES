@@ -3,9 +3,30 @@
 //! Threshold Proxy Re-Encryption (TPRE) とShamir Secret Sharingの実装を提供します。
 //! AO環境の制約に従い、すべての操作は同期的に実行されます。
 
+use shamirsecretsharing::{DATA_SIZE, combine_shares, create_shares};
+use subtle::ConstantTimeEq;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::service::error::{ServiceError, ServiceResult};
+
+/// 暗号パラメータ定数
+pub mod constants {
+    /// 最小閾値
+    pub const MIN_THRESHOLD: u8 = 2;
+
+    /// シェアの最大生成数
+    pub const MAX_SHARES: u8 = 20;
+
+    /// 鍵サイズ（バイト）
+    pub const KEY_SIZE_BYTES: usize = 32;
+
+    /// 公開鍵サイズ（バイト、圧縮形式）
+    pub const PUBLIC_KEY_SIZE_BYTES: usize = 33;
+
+    /// カプセルサイズ定数
+    pub const CAPSULE_POINT_SIZE: usize = 33;
+    pub const CAPSULE_SIGNATURE_SIZE: usize = 64;
+}
 
 /// Shamir Secret Sharingのシェア
 #[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
@@ -13,7 +34,6 @@ pub struct ShamirShare {
     /// シェアのインデックス（1から開始）
     pub index: u8,
     /// シェアデータ（使用後にゼロ化される）
-    #[zeroize(skip)]
     pub data: Vec<u8>,
 }
 
@@ -34,14 +54,12 @@ pub struct PublicKey {
 /// 秘密鍵（使用後にゼロ化される）
 #[derive(Debug, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKey {
-    #[zeroize(skip)]
     key_data: Vec<u8>,
 }
 
 /// 再暗号化鍵
 #[derive(Debug, Zeroize, ZeroizeOnDrop)]
 pub struct ReencryptionKey {
-    #[zeroize(skip)]
     key_data: Vec<u8>,
 }
 
@@ -133,6 +151,18 @@ impl CryptoServiceImpl {
             _phantom: std::marker::PhantomData,
         }
     }
+
+    /// 定数時間でバイト配列を比較
+    ///
+    /// # セキュリティ
+    /// この関数はタイミング攻撃を防ぐため定数時間で実行されます
+    #[inline]
+    fn constant_time_compare(a: &[u8], b: &[u8]) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
+        a.ct_eq(b).into()
+    }
 }
 
 impl CryptoService for CryptoServiceImpl {
@@ -143,28 +173,55 @@ impl CryptoService for CryptoServiceImpl {
         total_shares: u8,
     ) -> ServiceResult<Vec<ShamirShare>> {
         // 入力検証
-        if threshold == 0 || threshold > total_shares {
-            return Err(ServiceError::validation_error(format!(
-                "Invalid threshold: {} (total: {})",
-                threshold, total_shares
-            )));
+        if threshold < constants::MIN_THRESHOLD {
+            return Err(ServiceError::validation_error(
+                "Threshold below minimum requirement",
+            ));
+        }
+
+        if total_shares > constants::MAX_SHARES {
+            return Err(ServiceError::validation_error("Too many shares requested"));
+        }
+
+        if threshold > total_shares {
+            return Err(ServiceError::validation_error(
+                "Threshold cannot exceed total shares",
+            ));
         }
 
         if secret.is_empty() {
             return Err(ServiceError::validation_error("Secret cannot be empty"));
         }
 
-        // TODO: 実際のShamir実装を使用
-        // 現在はプレースホルダー実装
-        let mut shares = Vec::with_capacity(total_shares as usize);
-        for i in 1..=total_shares {
-            shares.push(ShamirShare {
-                index: i,
-                data: vec![0u8; secret.len()], // プレースホルダー
+        // shamirsecretsharing は 64バイト固定長を要求
+        let mut padded_secret: Vec<u8> = vec![0u8; DATA_SIZE];
+
+        if secret.len() < DATA_SIZE {
+            // パディング: 最初にデータ長を格納し、その後に実データをコピー
+            padded_secret[0] = secret.len() as u8;
+            padded_secret[1..secret.len() + 1].copy_from_slice(secret);
+        } else {
+            return Err(ServiceError::validation_error(format!(
+                "Secret too large: {} bytes (max: {} bytes)",
+                secret.len(),
+                DATA_SIZE - 1
+            )));
+        }
+
+        // ライブラリを使用してシェアを作成
+        let shares: Vec<Vec<u8>> = create_shares(&padded_secret, total_shares, threshold)
+            .map_err(|e| ServiceError::crypto_error(format!("Failed to create shares: {:?}", e)))?;
+
+        // Vec<Vec<u8>>からShamirShare型へ変換
+        let mut result: Vec<ShamirShare> = Vec::with_capacity(shares.len());
+        for (index, share) in shares.into_iter().enumerate() {
+            result.push(ShamirShare {
+                index: (index + 1) as u8, // 1から開始
+                data: share,
             });
         }
 
-        Ok(shares)
+        Ok(result)
     }
 
     fn reconstruct_secret_shamir(
@@ -181,9 +238,38 @@ impl CryptoService for CryptoServiceImpl {
             )));
         }
 
-        // TODO: 実際のShamir実装を使用
-        // 現在はプレースホルダー実装
-        Ok(vec![0u8; 32]) // プレースホルダー
+        // ShamirShare型からVec<u8>へ変換（shamirsecretsharing::ShareはVec<u8>型）
+        let share_vecs: Vec<Vec<u8>> = shares.iter().map(|s| s.data.clone()).collect();
+
+        // ライブラリを使用してシェアを結合
+        let recovered = combine_shares(&share_vecs).map_err(|e| {
+            ServiceError::crypto_error(format!("Failed to combine shares: {:?}", e))
+        })?;
+
+        // 復元されたデータを処理
+        match recovered {
+            Some(data) => {
+                // パディングを除去して元のデータを取得
+                if data.is_empty() {
+                    return Err(ServiceError::crypto_error("Recovered data is empty"));
+                }
+
+                let original_len = data[0] as usize;
+                if original_len == 0 || original_len > DATA_SIZE - 1 {
+                    return Err(ServiceError::crypto_error(format!(
+                        "Invalid recovered data length: {}",
+                        original_len
+                    )));
+                }
+
+                // 元のデータを抽出
+                let result = data[1..original_len + 1].to_vec();
+                Ok(result)
+            }
+            None => Err(ServiceError::crypto_error(
+                "Failed to recover secret from shares",
+            )),
+        }
     }
 
     fn create_pre_capsule(
@@ -202,10 +288,10 @@ impl CryptoService for CryptoServiceImpl {
 
         // TODO: 実際のUmbral実装を使用
         // 現在はプレースホルダー実装
-        let capsule = Capsule {
-            point_e: vec![0u8; 33],   // プレースホルダー
-            point_v: vec![0u8; 33],   // プレースホルダー
-            signature: vec![0u8; 64], // プレースホルダー
+        let capsule: Capsule = Capsule {
+            point_e: vec![0u8; constants::CAPSULE_POINT_SIZE],
+            point_v: vec![0u8; constants::CAPSULE_POINT_SIZE],
+            signature: vec![0u8; constants::CAPSULE_SIGNATURE_SIZE],
         };
 
         let ciphertext = vec![0u8; plaintext.len()]; // プレースホルダー
@@ -232,7 +318,7 @@ impl CryptoService for CryptoServiceImpl {
         // TODO: 実際のUmbral実装を使用
         // 現在はプレースホルダー実装
         Ok(ReencryptionKey {
-            key_data: vec![0u8; 32], // プレースホルダー
+            key_data: vec![0u8; constants::KEY_SIZE_BYTES],
         })
     }
 
@@ -243,11 +329,22 @@ impl CryptoService for CryptoServiceImpl {
         total_fragments: u8,
     ) -> ServiceResult<Vec<KeyFragment>> {
         // 入力検証
-        if threshold == 0 || threshold > total_fragments {
-            return Err(ServiceError::validation_error(format!(
-                "Invalid threshold: {} (total: {})",
-                threshold, total_fragments
-            )));
+        if threshold < constants::MIN_THRESHOLD {
+            return Err(ServiceError::validation_error(
+                "Threshold below minimum requirement",
+            ));
+        }
+
+        if total_fragments > constants::MAX_SHARES {
+            return Err(ServiceError::validation_error(
+                "Too many fragments requested",
+            ));
+        }
+
+        if threshold > total_fragments {
+            return Err(ServiceError::validation_error(
+                "Threshold cannot exceed total fragments",
+            ));
         }
 
         if reencryption_key.key_data.is_empty() {
@@ -316,11 +413,11 @@ impl CryptoService for CryptoServiceImpl {
         // TODO: 実際のUmbral実装を使用
         // 現在はプレースホルダー実装
         let secret_key = SecretKey {
-            key_data: vec![0u8; 32], // プレースホルダー
+            key_data: vec![0u8; constants::KEY_SIZE_BYTES],
         };
 
         let public_key = PublicKey {
-            key_data: vec![0u8; 33], // プレースホルダー
+            key_data: vec![0u8; constants::PUBLIC_KEY_SIZE_BYTES],
         };
 
         Ok((secret_key, public_key))
@@ -338,13 +435,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_shamir_split_validation() {
-        println!("\n=== CryptoService: Shamir Secret Sharing Validation Test ===");
-        println!("【テスト内容】: Shamir秘密分散の入力検証ロジックを検証");
-        println!("【テスト対象】: split_secret_shamir()メソッドのエラーハンドリング");
+    fn test_shamir_split_and_reconstruct() {
+        println!("\n=== CryptoService: Shamir Secret Sharing Complete Test ===");
+        println!("【テスト内容】: Shamir秘密分散の分割と復元の完全な動作検証");
+        println!("【テスト対象】: split_secret_shamir()とreconstruct_secret_shamir()メソッド");
 
-        let service = CryptoServiceImpl::new();
-        let secret = b"test secret";
+        let service: CryptoServiceImpl = CryptoServiceImpl::new();
+        let secret = b"This is a test secret for Shamir!";
         println!(
             "\nテスト用秘密データ: \"{}\" ({} bytes)",
             std::str::from_utf8(secret).unwrap(),
@@ -381,35 +478,66 @@ mod tests {
         }
         assert!(result.is_err());
 
-        // 正常系のテスト
-        println!("\n📋 テストケース4: 正常な入力の場合");
-        println!("   入力: threshold=3, total_shares=5");
-        let result = service.split_secret_shamir(secret, 3, 5);
-        match &result {
-            Ok(shares) => {
-                println!("   成功: {}個のシェアを生成", shares.len());
-                println!("\n   シェアの詳細 (プレースホルダー実装):");
-                for (i, share) in shares.iter().enumerate() {
-                    println!("\n   Share {} (index={}):", i + 1, share.index);
-                    println!("     - サイズ: {} bytes", share.data.len());
-                    println!("     - データ (16進数):");
-                    print!("       ");
-                    for (j, byte) in share.data.iter().enumerate() {
-                        if j > 0 && j % 16 == 0 {
-                            print!("\n       ");
-                        }
-                        print!("{:02x} ", byte);
-                    }
-                    println!();
-                }
-                println!("\n   注: 実際の実装では各シェアは異なる値を持ちます");
-                println!("   注: 任意の3個のシェアから元の秘密を復元可能になります");
-            }
-            Err(e) => println!("   エラー: {}", e),
-        }
+        // 正常系のテスト: 分割と復元
+        println!("\n📋 テストケース4: 正常な分割と復元");
+        println!("   入力: threshold=3, total_shares=10");
+        let result = service.split_secret_shamir(secret, 3, 10);
         assert!(result.is_ok());
 
-        println!("\n✅ すべての検証テストが成功しました！");
+        let shares: Vec<ShamirShare> = result.unwrap();
+        println!("   ✓ 成功: {}個のシェアを生成", shares.len());
+        assert_eq!(shares.len(), 10);
+
+        // シェアの詳細を表示
+        println!("\n   シェアの詳細:");
+        for (i, share) in shares.iter().enumerate() {
+            println!("   Share {} (index={}):", i + 1, share.index);
+            println!("     - サイズ: {} bytes", share.data.len());
+            // 最初の16バイトだけを表示
+            print!("     - データ先頭 (16進数): ");
+            for byte in share.data.iter().take(16) {
+                print!("{:02x} ", byte);
+            }
+            println!("...");
+        }
+
+        // 最小限のシェア(閾値と同じ数)で復元
+        println!("\n📋 テストケース5: 最小限のシェアで復元 (3/5)");
+        let min_shares = &shares[0..4];
+        let reconstruct_result = service.reconstruct_secret_shamir(min_shares, 4);
+        assert!(reconstruct_result.is_ok());
+
+        let recovered = reconstruct_result.unwrap();
+        println!("   ✓ 復元成功");
+        println!(
+            "   復元データ: \"{}\" ({} bytes)",
+            std::str::from_utf8(&recovered).unwrap(),
+            recovered.len()
+        );
+        assert_eq!(recovered, secret);
+        println!("   ✓ 元の秘密と完全一致！");
+
+        // 異なるシェアの組み合わせで復元
+        println!("\n📋 テストケース6: 異なるシェアの組み合わせで復元 (shares 2,3,5)");
+        let different_shares = vec![shares[1].clone(), shares[2].clone(), shares[4].clone()];
+        let reconstruct_result2 = service.reconstruct_secret_shamir(&different_shares, 3);
+        assert!(reconstruct_result2.is_ok());
+
+        let recovered2 = reconstruct_result2.unwrap();
+        assert_eq!(recovered2, secret);
+        println!("   ✓ 異なる組み合わせでも復元成功！");
+
+        // 不十分なシェアでの復元試行
+        println!("\n📋 テストケース7: 不十分なシェアでの復元試行 (2/3)");
+        let insufficient_shares = &shares[0..2];
+        let reconstruct_fail = service.reconstruct_secret_shamir(insufficient_shares, 3);
+        match &reconstruct_fail {
+            Err(e) => println!("   期待通りエラー発生: {}", e),
+            Ok(_) => panic!("エラーが発生すべきところで成功してしまった"),
+        }
+        assert!(reconstruct_fail.is_err());
+
+        println!("\n✅ すべてのShamir Secret Sharingテストが成功しました！");
     }
 
     #[test]
