@@ -63,9 +63,14 @@ pub struct SecretKey {
 }
 
 /// 再暗号化鍵
+/// 
+/// 実際にはkFrags生成に必要な情報を保持する中間構造体
 #[derive(Debug, Zeroize, ZeroizeOnDrop)]
 pub struct ReencryptionKey {
-    key_data: Vec<u8>,
+    /// 委任者の秘密鍵（シリアライズ済み）
+    delegating_sk_data: Vec<u8>,
+    /// 受信者の公開鍵（シリアライズ済み）
+    receiving_pk_data: Vec<u8>,
 }
 
 /// 鍵フラグメント（kFrag）
@@ -178,16 +183,27 @@ impl CryptoServiceImpl {
     }
 
     /// SecretKeyからumbral_pre::SecretKeyを復元
-    ///
-    /// 注: 現在はプレースホルダー実装
-    /// umbral-preのSecretKeyはSerializeを実装していないため、
-    /// 適切なデシリアライズ方法の実装が必要
-    #[allow(dead_code)]
-    fn deserialize_secret_key(&self, _key: &SecretKey) -> ServiceResult<umbral_pre::SecretKey> {
-        // TODO: umbral_pre::SecretKey::try_from_be_bytes()を使用した実装
-        Err(ServiceError::crypto_error(
-            "Secret key deserialization not yet implemented",
-        ))
+    fn deserialize_secret_key(&self, key: &SecretKey) -> ServiceResult<umbral_pre::SecretKey> {
+        // key_dataをGenericArray<u8, U32>に変換
+        if key.key_data.len() != constants::KEY_SIZE_BYTES {
+            return Err(ServiceError::crypto_error(
+                format!("Invalid secret key size: expected {}, got {}", 
+                    constants::KEY_SIZE_BYTES, key.key_data.len())
+            ));
+        }
+        
+        // バイト配列からGenericArrayを作成してSecretBoxにラップ
+        // SecretBoxのコンストラクタはprivateなので、一時的な秘密鍵を生成して
+        // そのバイト表現を使う方法を採用
+        let temp_sk = umbral_pre::SecretKey::random();
+        let mut secret_bytes = temp_sk.to_be_bytes();
+        
+        // 実際のデータをコピー
+        secret_bytes.as_mut_secret().copy_from_slice(&key.key_data);
+        
+        // SecretKeyに変換
+        umbral_pre::SecretKey::try_from_be_bytes(&secret_bytes)
+            .map_err(|e| ServiceError::crypto_error(format!("Failed to deserialize secret key: {}", e)))
     }
 
     /// PublicKeyからumbral_pre::PublicKeyを復元
@@ -357,10 +373,12 @@ impl CryptoService for CryptoServiceImpl {
             ));
         }
 
-        // TODO: 実際のUmbral実装を使用
-        // 現在はプレースホルダー実装
+        // 再暗号化鍵の生成
+        // umbral-preではgenerate_kfragsで直接kFragsを生成するため、
+        // ここでは必要な情報を保持する中間構造体を返す
         Ok(ReencryptionKey {
-            key_data: vec![0u8; constants::KEY_SIZE_BYTES],
+            delegating_sk_data: owner_secret_key.key_data.clone(),
+            receiving_pk_data: accessor_public_key.key_data.clone(),
         })
     }
 
@@ -389,18 +407,47 @@ impl CryptoService for CryptoServiceImpl {
             ));
         }
 
-        if reencryption_key.key_data.is_empty() {
+        if reencryption_key.delegating_sk_data.is_empty() || 
+           reencryption_key.receiving_pk_data.is_empty() {
             return Err(ServiceError::validation_error("Invalid reencryption key"));
         }
 
-        // TODO: 実際のUmbral実装を使用
-        // 現在はプレースホルダー実装
-        let mut kfrags = Vec::with_capacity(total_fragments as usize);
-        for i in 0..total_fragments {
+        // 委任者の秘密鍵をデシリアライズ
+        let delegating_sk = SecretKey {
+            key_data: reencryption_key.delegating_sk_data.clone(),
+        };
+        let umbral_delegating_sk = self.deserialize_secret_key(&delegating_sk)?;
+        
+        // 受信者の公開鍵をデシリアライズ
+        let receiving_pk = PublicKey {
+            key_data: reencryption_key.receiving_pk_data.clone(),
+        };
+        let umbral_receiving_pk = self.deserialize_public_key(&receiving_pk)?;
+        
+        // kFragsを生成
+        let verified_kfrags = umbral_pre::generate_kfrags(
+            &umbral_delegating_sk,
+            &umbral_receiving_pk,
+            &self.signer,
+            threshold as usize,
+            total_fragments as usize,
+            true,  // sign_delegating_key
+            true,  // sign_receiving_key
+        );
+        
+        // VerifiedKeyFragをKeyFragmentに変換
+        let mut kfrags = Vec::with_capacity(verified_kfrags.len());
+        for (index, verified_kfrag) in verified_kfrags.iter().enumerate() {
+            // VerifiedKeyFragをシリアライズ
+            let kfrag_bytes = bincode::serialize(verified_kfrag)
+                .map_err(|e| ServiceError::crypto_error(
+                    format!("Failed to serialize kFrag: {}", e)
+                ))?;
+            
             kfrags.push(KeyFragment {
-                id: i,
-                key_data: vec![0u8; 33],  // プレースホルダー
-                precursor: vec![0u8; 33], // プレースホルダー
+                id: index as u8,
+                key_data: kfrag_bytes,
+                precursor: vec![],  // precursorは現時点では使用しない
             });
         }
 
@@ -483,6 +530,88 @@ impl Default for CryptoServiceImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_generate_reencryption_key() {
+        println!("\n=== CryptoService: Generate Re-encryption Key Test ===");
+        println!("【テスト内容】: 再暗号化鍵生成機能を検証");
+        println!("【期待結果】: 委任者の秘密鍵と受信者の公開鍵を保持する中間構造体が生成される");
+
+        let service = CryptoServiceImpl::new();
+
+        println!("\n1. 鍵ペアを生成中...");
+        let (owner_sk, owner_pk) = service
+            .generate_keypair()
+            .expect("Failed to generate owner keypair");
+        let (accessor_sk, accessor_pk) = service
+            .generate_keypair()
+            .expect("Failed to generate accessor keypair");
+
+        println!("\n2. 再暗号化鍵を生成中...");
+        let reencryption_key = service
+            .generate_reencryption_key(&owner_sk, &accessor_pk)
+            .expect("Failed to generate re-encryption key");
+
+        println!("\n3. 生成された再暗号化鍵の詳細:");
+        println!("   委任者秘密鍵データサイズ: {} bytes", reencryption_key.delegating_sk_data.len());
+        println!("   受信者公開鍵データサイズ: {} bytes", reencryption_key.receiving_pk_data.len());
+
+        assert_eq!(reencryption_key.delegating_sk_data.len(), constants::KEY_SIZE_BYTES);
+        assert!(!reencryption_key.receiving_pk_data.is_empty());
+
+        println!("\n✅ テスト成功: 再暗号化鍵が正常に生成されました！");
+    }
+
+    #[test]
+    fn test_create_kfrags() {
+        println!("\n=== CryptoService: Create kFrags Test ===");
+        println!("【テスト内容】: kFrags生成機能を検証");
+        println!("【期待結果】: 指定された数のkFragsが生成される");
+
+        let service = CryptoServiceImpl::new();
+
+        println!("\n1. 鍵ペアを生成中...");
+        let (owner_sk, _owner_pk) = service
+            .generate_keypair()
+            .expect("Failed to generate owner keypair");
+        let (_accessor_sk, accessor_pk) = service
+            .generate_keypair()
+            .expect("Failed to generate accessor keypair");
+
+        println!("\n2. 再暗号化鍵を生成中...");
+        let reencryption_key = service
+            .generate_reencryption_key(&owner_sk, &accessor_pk)
+            .expect("Failed to generate re-encryption key");
+
+        println!("\n3. kFragsを生成中 (threshold=3, total=5)...");
+        let kfrags = service
+            .create_kfrags(&reencryption_key, 3, 5)
+            .expect("Failed to create kFrags");
+
+        println!("\n4. 生成されたkFragsの詳細:");
+        assert_eq!(kfrags.len(), 5);
+        println!("   生成されたkFrags数: {}", kfrags.len());
+        
+        for (i, kfrag) in kfrags.iter().enumerate() {
+            println!("   kFrag {} (id={}):", i, kfrag.id);
+            println!("     - サイズ: {} bytes", kfrag.key_data.len());
+            assert!(!kfrag.key_data.is_empty());
+        }
+
+        println!("\n5. 閾値検証テスト:");
+        
+        // 無効な閾値（0）
+        let result = service.create_kfrags(&reencryption_key, 0, 5);
+        assert!(result.is_err());
+        println!("   ✓ 閾値0で期待通りエラー");
+        
+        // 閾値が総数より大きい
+        let result = service.create_kfrags(&reencryption_key, 6, 5);
+        assert!(result.is_err());
+        println!("   ✓ 閾値>総数で期待通りエラー");
+
+        println!("\n✅ テスト成功: kFragsが正常に生成されました！");
+    }
 
     #[test]
     fn test_shamir_split_and_reconstruct() {
