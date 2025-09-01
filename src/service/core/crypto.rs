@@ -3,11 +3,17 @@
 //! Threshold Proxy Re-Encryption (TPRE) とShamir Secret Sharingの実装を提供します。
 //! AO環境の制約に従い、すべての操作は同期的に実行されます。
 
+use bincode;
+use generic_array::{GenericArray, typenum::U32};
 use shamirsecretsharing::{DATA_SIZE, combine_shares, create_shares};
 use subtle::ConstantTimeEq;
+use umbral_pre;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::service::error::{ServiceError, ServiceResult};
+
+// 型エイリアス：秘密鍵のバイト表現
+type SecretKeyBytes = umbral_pre::SecretBox<GenericArray<u8, U32>>;
 
 /// 暗号パラメータ定数
 pub mod constants {
@@ -37,12 +43,11 @@ pub struct ShamirShare {
     pub data: Vec<u8>,
 }
 
-/// Umbral暗号化のカプセル
-#[derive(Debug, Clone)]
+/// Umbral暗号化のカプセル（シリアライズされた不透明トークン）
+#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct Capsule {
-    pub point_e: Vec<u8>,
-    pub point_v: Vec<u8>,
-    pub signature: Vec<u8>,
+    /// umbral_pre::Capsuleのシリアライズされた完全なデータ
+    pub data: Vec<u8>,
 }
 
 /// 公開鍵
@@ -64,7 +69,7 @@ pub struct ReencryptionKey {
 }
 
 /// 鍵フラグメント（kFrag）
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct KeyFragment {
     pub id: u8,
     pub key_data: Vec<u8>,
@@ -72,7 +77,7 @@ pub struct KeyFragment {
 }
 
 /// 暗号フラグメント（cFrag）
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct CipherFragment {
     pub fragment_id: u8,
     pub capsule_fragment: Vec<u8>,
@@ -140,16 +145,24 @@ pub trait CryptoService: Send + Sync {
 
 /// CryptoService実装 - Umbral-PREとShamirライブラリを使用
 pub struct CryptoServiceImpl {
-    // Note: 実際の実装では、umbral-preとshamirライブラリのインスタンスを保持
-    _phantom: std::marker::PhantomData<()>,
+    /// kFrag生成用のSigner
+    signer: umbral_pre::Signer,
 }
 
 impl CryptoServiceImpl {
     /// 新しいCryptoServiceインスタンスを作成
     pub fn new() -> Self {
-        Self {
-            _phantom: std::marker::PhantomData,
-        }
+        // 署名用の鍵を生成
+        let signing_key: umbral_pre::SecretKey = umbral_pre::SecretKey::random();
+        let signer: umbral_pre::Signer = umbral_pre::Signer::new(signing_key);
+
+        Self { signer }
+    }
+
+    /// 秘密鍵をバイト配列に変換するヘルパー関数
+    fn serialize_secret_key(sk: &umbral_pre::SecretKey) -> Vec<u8> {
+        let sk_bytes: SecretKeyBytes = sk.to_be_bytes();
+        sk_bytes.as_secret().to_vec()
     }
 
     /// 定数時間でバイト配列を比較
@@ -162,6 +175,26 @@ impl CryptoServiceImpl {
             return false;
         }
         a.ct_eq(b).into()
+    }
+
+    /// SecretKeyからumbral_pre::SecretKeyを復元
+    ///
+    /// 注: 現在はプレースホルダー実装
+    /// umbral-preのSecretKeyはSerializeを実装していないため、
+    /// 適切なデシリアライズ方法の実装が必要
+    #[allow(dead_code)]
+    fn deserialize_secret_key(&self, _key: &SecretKey) -> ServiceResult<umbral_pre::SecretKey> {
+        // TODO: umbral_pre::SecretKey::try_from_be_bytes()を使用した実装
+        Err(ServiceError::crypto_error(
+            "Secret key deserialization not yet implemented",
+        ))
+    }
+
+    /// PublicKeyからumbral_pre::PublicKeyを復元
+    fn deserialize_public_key(&self, key: &PublicKey) -> ServiceResult<umbral_pre::PublicKey> {
+        bincode::deserialize(&key.key_data).map_err(|e| {
+            ServiceError::crypto_error(format!("Failed to deserialize public key: {}", e))
+        })
     }
 }
 
@@ -286,15 +319,24 @@ impl CryptoService for CryptoServiceImpl {
             return Err(ServiceError::validation_error("Plaintext cannot be empty"));
         }
 
-        // TODO: 実際のUmbral実装を使用
-        // 現在はプレースホルダー実装
+        // PublicKeyをデシリアライズ
+        let umbral_pk: umbral_pre::PublicKey = self.deserialize_public_key(public_key)?;
+
+        // umbral-preで暗号化を実行
+        let (umbral_capsule, ciphertext_box) = umbral_pre::encrypt(&umbral_pk, plaintext)
+            .map_err(|e| ServiceError::crypto_error(format!("Encryption failed: {}", e)))?;
+
+        // Capsuleをシリアライズして保存
+        let capsule_bytes: Vec<u8> = bincode::serialize(&umbral_capsule).map_err(|e| {
+            ServiceError::crypto_error(format!("Failed to serialize capsule: {}", e))
+        })?;
+
         let capsule: Capsule = Capsule {
-            point_e: vec![0u8; constants::CAPSULE_POINT_SIZE],
-            point_v: vec![0u8; constants::CAPSULE_POINT_SIZE],
-            signature: vec![0u8; constants::CAPSULE_SIGNATURE_SIZE],
+            data: capsule_bytes,
         };
 
-        let ciphertext = vec![0u8; plaintext.len()]; // プレースホルダー
+        // ciphertextをVec<u8>に変換
+        let ciphertext: Vec<u8> = ciphertext_box.to_vec();
 
         Ok((capsule, ciphertext))
     }
@@ -410,15 +452,23 @@ impl CryptoService for CryptoServiceImpl {
     }
 
     fn generate_keypair(&self) -> ServiceResult<(SecretKey, PublicKey)> {
-        // TODO: 実際のUmbral実装を使用
-        // 現在はプレースホルダー実装
-        let secret_key = SecretKey {
-            key_data: vec![0u8; constants::KEY_SIZE_BYTES],
-        };
+        // umbral-preを使用して実際の鍵ペアを生成
+        let umbral_sk: umbral_pre::SecretKey = umbral_pre::SecretKey::random();
+        let umbral_pk: umbral_pre::PublicKey = umbral_sk.public_key();
 
-        let public_key = PublicKey {
-            key_data: vec![0u8; constants::PUBLIC_KEY_SIZE_BYTES],
-        };
+        // ヘルパー関数を使用して秘密鍵をシリアライズ
+        let sk_vec: Vec<u8> = Self::serialize_secret_key(&umbral_sk);
+
+        // 公開鍵をシリアライズ
+        let pk_bytes: Vec<u8> =
+            bincode::serialize(&umbral_pk).map_err(|e: Box<bincode::ErrorKind>| {
+                ServiceError::crypto_error(format!("Failed to serialize public key: {}", e))
+            })?;
+
+        // 既存の構造体に格納
+        let secret_key: SecretKey = SecretKey { key_data: sk_vec };
+
+        let public_key: PublicKey = PublicKey { key_data: pk_bytes };
 
         Ok((secret_key, public_key))
     }
@@ -586,5 +636,182 @@ mod tests {
         println!("   ✓ 公開鍵が空でない");
 
         println!("\n✅ テスト成功: 鍵ペアが正常に生成されました！");
+    }
+
+    #[test]
+    fn test_create_pre_capsule() {
+        println!("\n=== CryptoService: Create PRE Capsule Test ===");
+        println!("【テスト内容】: Umbral PRE暗号化カプセル生成機能を検証");
+        println!("【テスト項目】:");
+        println!("  - 正常な暗号化処理");
+        println!("  - エラーハンドリング");
+        println!("  - ランダム性の検証");
+        println!("  - 大容量データの暗号化");
+
+        let service = CryptoServiceImpl::new();
+
+        // テスト1: 正常な暗号化
+        println!("\n1. 正常な暗号化テスト:");
+        println!("   鍵ペアを生成中...");
+        let (owner_sk, owner_pk) = service
+            .generate_keypair()
+            .expect("Failed to generate keypair");
+
+        let plaintext = b"Test message for PRE encryption";
+        println!("   平文: {:?}", std::str::from_utf8(plaintext).unwrap());
+
+        println!("   暗号化を実行中...");
+        let (capsule, ciphertext) = service
+            .create_pre_capsule(&owner_pk, plaintext)
+            .expect("Failed to create capsule");
+
+        println!("   ✓ カプセル生成成功");
+        println!("   ✓ カプセルサイズ: {} bytes", capsule.data.len());
+        println!("   ✓ 暗号文サイズ: {} bytes", ciphertext.len());
+
+        // カプセルデータの詳細ログ出力
+        println!("\n   カプセルデータの詳細 (16進数):");
+        for (i, chunk) in capsule.data.chunks(16).enumerate() {
+            print!("     {:04x}: ", i * 16);
+            for byte in chunk {
+                print!("{:02x} ", byte);
+            }
+            // ASCII表示 (印字可能文字のみ)
+            print!("  |");
+            for byte in chunk {
+                if byte.is_ascii_graphic() || *byte == b' ' {
+                    print!("{}", *byte as char);
+                } else {
+                    print!(".");
+                }
+            }
+            println!("|");
+        }
+
+        // 暗号文の先頭部分も表示
+        println!("\n   暗号文データの先頭32バイト (16進数):");
+        for (i, chunk) in ciphertext
+            .iter()
+            .take(32)
+            .collect::<Vec<_>>()
+            .chunks(16)
+            .enumerate()
+        {
+            print!("     {:04x}: ", i * 16);
+            for byte in chunk {
+                print!("{:02x} ", byte);
+            }
+            println!();
+        }
+
+        assert!(!capsule.data.is_empty(), "Capsule should not be empty");
+        assert!(!ciphertext.is_empty(), "Ciphertext should not be empty");
+        assert_ne!(
+            plaintext,
+            &ciphertext[..plaintext.len().min(ciphertext.len())],
+            "Ciphertext should differ from plaintext"
+        );
+
+        // テスト2: 無効な公開鍵でのエラーハンドリング
+        println!("\n2. エラーハンドリングテスト (無効な公開鍵):");
+        let invalid_pk = PublicKey {
+            key_data: vec![0u8; 10],
+        }; // 不正なサイズ
+
+        println!("   無効な公開鍵で暗号化を試行...");
+        let result = service.create_pre_capsule(&invalid_pk, plaintext);
+        assert!(result.is_err(), "Should fail with invalid public key");
+        println!("   ✓ 期待通りエラーが発生");
+
+        if let Err(e) = result {
+            println!("   エラー内容: {:?}", e);
+        }
+
+        // テスト3: 空の平文でのエラーハンドリング
+        println!("\n3. エラーハンドリングテスト (空の平文):");
+        let empty_plaintext = b"";
+
+        println!("   空の平文で暗号化を試行...");
+        let result = service.create_pre_capsule(&owner_pk, empty_plaintext);
+        assert!(result.is_err(), "Should fail with empty plaintext");
+        println!("   ✓ 期待通りエラーが発生");
+
+        // テスト4: ランダム性の検証（同じ平文でも異なる暗号文）
+        println!("\n4. ランダム性の検証:");
+        println!("   同じ平文を2回暗号化...");
+
+        let (capsule1, ciphertext1) = service
+            .create_pre_capsule(&owner_pk, plaintext)
+            .expect("Failed to create first capsule");
+        let (capsule2, ciphertext2) = service
+            .create_pre_capsule(&owner_pk, plaintext)
+            .expect("Failed to create second capsule");
+
+        assert_ne!(
+            capsule1.data, capsule2.data,
+            "Capsules should be different due to randomness"
+        );
+
+        // ランダム性を視覚的に確認
+        println!("\n   カプセル1の先頭16バイト:");
+        print!("     ");
+        for byte in capsule1.data.iter().take(16) {
+            print!("{:02x} ", byte);
+        }
+        println!();
+
+        println!("   カプセル2の先頭16バイト:");
+        print!("     ");
+        for byte in capsule2.data.iter().take(16) {
+            print!("{:02x} ", byte);
+        }
+        println!();
+        assert_ne!(
+            ciphertext1, ciphertext2,
+            "Ciphertexts should be different due to randomness"
+        );
+
+        println!("   ✓ カプセル1 != カプセル2");
+        println!("   ✓ 暗号文1 != 暗号文2");
+        println!("   ✓ ランダム性が確認されました");
+
+        // テスト5: 大きなデータの暗号化
+        println!("\n5. 大容量データの暗号化テスト:");
+        let large_data = vec![0x42u8; 1024]; // 1KB of data
+        println!("   1KBのデータを暗号化中...");
+
+        let (large_capsule, large_ciphertext) = service
+            .create_pre_capsule(&owner_pk, &large_data)
+            .expect("Failed to encrypt large data");
+
+        println!("   ✓ 大容量データの暗号化成功");
+        println!("   ✓ カプセルサイズ: {} bytes", large_capsule.data.len());
+        println!("   ✓ 暗号文サイズ: {} bytes", large_ciphertext.len());
+
+        // 大容量データでもカプセルサイズが一定であることを確認
+        println!("\n   大容量データ用カプセルのサイズ確認:");
+        println!("     通常データ用カプセル: {} bytes", capsule.data.len());
+        println!(
+            "     大容量データ用カプセル: {} bytes",
+            large_capsule.data.len()
+        );
+        assert_eq!(
+            capsule.data.len(),
+            large_capsule.data.len(),
+            "Capsule size should be constant regardless of plaintext size"
+        );
+
+        assert!(!large_capsule.data.is_empty());
+        // 暗号化にはオーバーヘッドがあるため、暗号文は平文より大きくなる
+        assert!(
+            large_ciphertext.len() >= large_data.len(),
+            "Ciphertext should be at least as long as plaintext"
+        );
+        println!(
+            "   ✓ 暗号文オーバーヘッド: {} bytes",
+            large_ciphertext.len() - large_data.len()
+        );
+
+        println!("\n✅ すべてのcreate_pre_capsuleテストが成功しました！");
     }
 }
