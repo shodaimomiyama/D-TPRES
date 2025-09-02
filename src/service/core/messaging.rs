@@ -412,7 +412,7 @@ impl MessageRoutingService for MessageRoutingServiceImpl {
             cfrags.push(CipherFragment {
                 fragment_id: i as u8,
                 capsule_fragment: response.payload.clone(),
-                proof: vec![0u8; 96], // プレースホルダー
+                proof: vec![], // TODO: 実際のproofをデシリアライズ
             });
         }
 
@@ -432,42 +432,42 @@ mod tests {
         println!("【テスト内容】: AOメッセージの一意ID生成機能を検証");
         println!("【テスト対象】: MessageId::new()メソッド");
         println!("【期待結果】: タイムスタンプベースで一意のIDが生成される");
-        
+
         println!("\n1. 最初のメッセージIDを生成...");
         let id1 = MessageId::new();
         println!("   生成されたID: {}", id1.as_str());
-        
+
         // IDの構造を解析
         let id1_parts: Vec<&str> = id1.as_str().split('_').collect();
         if id1_parts.len() == 2 {
             println!("   - プレフィックス: {}", id1_parts[0]);
             println!("   - タイムスタンプ: {} (ミリ秒)", id1_parts[1]);
         }
-        
+
         // 異なるタイムスタンプを保証するため、1ミリ秒待機
         println!("\n2. タイムスタンプの変更を保証するため1ミリ秒待機...");
         std::thread::sleep(std::time::Duration::from_millis(1));
-        
+
         println!("\n3. 2番目のメッセージIDを生成...");
         let id2 = MessageId::new();
         println!("   生成されたID: {}", id2.as_str());
-        
+
         let id2_parts: Vec<&str> = id2.as_str().split('_').collect();
         if id2_parts.len() == 2 {
             println!("   - プレフィックス: {}", id2_parts[0]);
             println!("   - タイムスタンプ: {} (ミリ秒)", id2_parts[1]);
         }
-        
+
         println!("\n4. 一意性の検証:");
         assert_ne!(id1, id2);
         println!("   ✓ ID1とID2は異なる");
-        
+
         if id1_parts.len() == 2 && id2_parts.len() == 2 {
             let timestamp1: u128 = id1_parts[1].parse().unwrap_or(0);
             let timestamp2: u128 = id2_parts[1].parse().unwrap_or(0);
             println!("   ✓ タイムスタンプの差: {}ミリ秒", timestamp2 - timestamp1);
         }
-        
+
         println!("\n✅ テスト成功: メッセージIDは一意に生成されました！");
     }
 
