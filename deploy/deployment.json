@@ -13,9 +13,7 @@
   "mainnet": {
     "owner": {
       "moduleId": "hRvavW-bnwkFiEPEhHgLw5QjQ6nI0_pHMtNdlaZl-gY",
-      "processId": {
-        "error": "bad request"
-      },
+      "processId": "hRvavW-bnwkFiEPEhHgLw5QjQ6nI0_pHMtNdlaZl-gY",
       "role": "owner",
       "walletAddress": "MO1hUZB6t8O364UoEnJkzfObCV6YQ7zb41pc2iKXVek",
       "deployedAt": "2025-09-02T20:09:53.152Z",
