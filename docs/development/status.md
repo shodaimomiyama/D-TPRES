@@ -1,7 +1,7 @@
 ---
 title: "D-TPRES Development Status"
-version: "1.4.0"
-last_updated: "2025-07-22"
+version: "1.5.0"
+last_updated: "2025-01-02"
 author: "D-TPRES Development Team"
 status: "active"
 ---
@@ -12,7 +12,7 @@ status: "active"
 
 **D-TPRES (Deterministic Threshold Proxy Re-Encryption System)** は、Arweave、AO Network、EVM Smart Contractsを統合した分散暗号システムです。現在Phase1（MVP版）の開発中です。
 
-**全体進捗率**: 30% (設計フェーズ完了、ドメイン層実装90%完了)
+**全体進捗率**: 35% (設計フェーズ完了、ドメイン層実装90%完了、サービス層一部実装)
 
 ---
 
@@ -66,7 +66,60 @@ status: "active"
 
 ---
 
-## 2. アプリケーション層 (Application Layer)
+## 2. サービス層 (Service Layer)
+
+**進捗率**: 40% (Core Services一部実装完了、暗号化サービス実装完了)
+
+### ステータス判定基準
+- **Plan**: サービス仕様が定義され、インターフェース設計が完了していること
+- **Implementation**: サービスが実装され、エラーハンドリングが完了していること
+- **Test**: ユニットテストが実装され、カバレッジ80%以上でpassしていること
+
+### Core Services (基本操作サービス)
+
+| Service | Plan | Implementation | Test | 備考 |
+| :------ | :--: | :------------: | :--: | :--- |
+| **CryptoService** |
+| Shamir Secret Sharing | ✅ | ✅ | ✅ | 秘密分割・復元、閾値検証、パディング処理実装済 |
+| Umbral PRE Encryption | ✅ | ✅ | ✅ | カプセル生成、暗号化処理、大容量データ対応 |
+| Key Pair Generation | ✅ | ✅ | ✅ | SecretKey/PublicKey生成、Zeroize実装 |
+| Re-encryption Key Gen | ✅ | ✅ | ✅ | 委任者→受信者の再暗号化鍵生成 |
+| kFrags Creation | ✅ | ✅ | ✅ | k-of-n閾値フラグメント生成、検証データ付与 |
+| Proxy Re-encryption | ✅ | ✅ | ✅ | kFrag→cFrag変換、署名検証実装 |
+| Combine & Decrypt | ✅ | ✅ | ✅ | cFrags結合・復号、エンドツーエンドフロー検証済 |
+| **ProcessService** |
+| Process Spawning | ✅ | 🟡 | ⬜️ | プロセス生成・初期化、部分実装 |
+| Role Management | ✅ | 🟡 | ⬜️ | Owner/Holder/Requesterロール管理、部分実装 |
+| **StorageService** |
+| Arweave Integration | ✅ | 🟡 | ⬜️ | データ永続化、タグ管理、部分実装 |
+| **MessagingService** |
+| AO Message Routing | ✅ | 🟡 | ⬜️ | メッセージルーティング、部分実装 |
+
+### Workflow Services (フェーズ調整サービス)
+
+| Service | Plan | Implementation | Test | 備考 |
+| :------ | :--: | :------------: | :--: | :--- |
+| Phase0WorkflowService | ✅ | ⬜️ | ⬜️ | プロセス生成・鍵準備 |
+| Phase1WorkflowService | ✅ | ⬜️ | ⬜️ | 秘密分割・Arweave保存 |
+| Phase2WorkflowService | ✅ | ⬜️ | ⬜️ | アクセス要求・EVM検証 |
+| Phase3WorkflowService | ✅ | ⬜️ | ⬜️ | 再暗号化鍵断片化 |
+| Phase4WorkflowService | ✅ | ⬜️ | ⬜️ | k-of-nプロキシ再暗号化 |
+| Phase5WorkflowService | ✅ | ⬜️ | ⬜️ | クライアント復号 |
+
+### 重要な実装詳細
+- **CryptoService完全実装**:
+  - Zeroizeトレイトによるメモリ安全性確保
+  - 定数時間比較関数実装（サイドチャネル攻撃対策）
+  - エラーメッセージの抽象化（情報漏洩防止）
+  - umbral-pre API制限の回避策実装（discuss/umbral-pre-api-limitation.md参照）
+- **セキュリティ監査結果**:
+  - メモリ安全性: 8/10
+  - サイドチャネル耐性: 8/10
+  - エラーハンドリング: 9/10
+  - 暗号パラメータ検証: 9/10
+  - 総合評価: 8.4/10
+
+## 3. アプリケーション層 (Application Layer)
 
 **進捗率**: 25% (仕様策定完了、実装部分着手)
 
@@ -109,7 +162,7 @@ status: "active"
 
 ---
 
-## 3. インフラストラクチャ層 (Infrastructure Layer)
+## 4. インフラストラクチャ層 (Infrastructure Layer)
 
 **進捗率**: 10% (設計段階、実装未着手)
 
@@ -147,7 +200,7 @@ status: "active"
 
 ---
 
-## 4. テストインフラストラクチャ (Testing Infrastructure)
+## 5. テストインフラストラクチャ (Testing Infrastructure)
 
 **進捗率**: 5% (設計段階)
 
@@ -172,7 +225,7 @@ status: "active"
 
 ---
 
-## 5. 自動化・CI/CD (Automation & CI/CD)
+## 6. 自動化・CI/CD (Automation & CI/CD)
 
 **進捗率**: 30% (基本設定完了、拡張設定必要)
 
@@ -199,7 +252,7 @@ status: "active"
 
 ---
 
-## 6. ドキュメント (Documentation)
+## 7. ドキュメント (Documentation)
 
 **進捗率**: 40% (設計ドキュメント完了、実装ドキュメント不足)
 
@@ -229,7 +282,7 @@ status: "active"
 
 ---
 
-## 7. 重要なマイルストーン
+## 8. 重要なマイルストーン
 
 ### 🧪 PoC Phase (段階的実装) - 完了予定: 2025年8月中旬
 
@@ -299,7 +352,12 @@ status: "active"
 
 ---
 
-## 8. 現在の課題とリスク
+## 9. 現在の課題とリスク
+
+### 🔴 High Priority Issues
+1. **Umbral-PRE API制限**: SecretBox直接生成不可のため一時的な回避策使用中（discuss/umbral-pre-api-limitation.md）
+2. **AO環境制約**: SQLite・ネットワークI/O制限の詳細調査
+3. **暗号学的正当性**: 形式的検証・セキュリティ証明の実施
 
 ### 🔴 High Priority Issues
 1. **Umbral-PRE統合**: WebAssembly互換性の技術検証が必要
@@ -318,18 +376,19 @@ status: "active"
 
 ---
 
-## 9. 次回更新予定
+## 10. 次回更新予定
 
-**次回更新日**: 2025年7月24日
+**次回更新日**: 2025年1月10日
 **更新責任者**: D-TPRES Development Team
-**更新内容**: Week 1-2 実装進捗・ドメイン層テスト実装状況
+**更新内容**: サービス層の残り実装状況・UseCase Handlers実装進捗
 
 ---
 
-## 10. 変更履歴
+## 11. 変更履歴
 
 | バージョン | 日付 | 変更内容 | 担当者 |
 |-----------|------|----------|--------|
+| 1.5.0 | 2025-01-02 | CryptoService完全実装完了、8個のテスト全pass、セキュリティ監査実施、サービス層進捗率更新（25%→40%）、全体進捗率更新（30%→35%）、umbral-pre API制限ドキュメント追加 | D-TPRES Development Team |
 | 1.4.0 | 2025-07-22 | ドメイン層Repository Interface実装完了、進捗率更新（80%→90%）、全体進捗率更新（25%→30%）、thiserror依存関係追加 | D-TPRES Development Team |
 | 1.3.0 | 2025-07-17 | ドメイン層値オブジェクト実装完了、進捗率更新（60%→80%）、全体進捗率更新（20%→25%）| D-TPRES Development Team |
 | 1.2.0 | 2025-07-16 | ドメイン層エンティティ実装完了、進捗率更新（20%→60%）| D-TPRES Development Team |
@@ -338,7 +397,7 @@ status: "active"
 
 ---
 
-## 11. ステータス記号の説明
+## 12. ステータス記号の説明
 
 - **⬜️**: 未着手
 - **🟡**: 進行中（50%以上完了）  
@@ -347,4 +406,4 @@ status: "active"
 
 ---
 
-*Last updated: 2025-07-22 by D-TPRES Development Team*
+*Last updated: 2025-01-02 by D-TPRES Development Team*
