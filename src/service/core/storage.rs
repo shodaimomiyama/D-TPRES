@@ -357,7 +357,7 @@ mod tests {
         println!("【テスト内容】: Arweaveへのデータ保存と取得機能を検証");
         println!("【テスト対象】: store_data()とretrieve_data()メソッド");
         println!("【期待結果】: データとタグが正しく保存・取得される");
-        
+
         let service = ArweaveStorageServiceImpl::default();
 
         // テストデータの準備
@@ -367,7 +367,7 @@ mod tests {
         println!("   - テキスト: \"{}\"", std::str::from_utf8(data).unwrap());
         println!("   - バイナリ: [{}]", data_hex.join(" "));
         println!("   - サイズ: {} bytes", data.len());
-        
+
         let tags = vec![
             Tag {
                 name: "Type".to_string(),
@@ -394,25 +394,28 @@ mod tests {
         println!("\n4. 保存したデータを取得...");
         let retrieved = service.retrieve_data(&tx_id).unwrap();
         println!("   ✓ 取得成功!");
-        
+
         // 取得したデータの検証
         println!("\n5. 取得したデータを検証:");
         println!("   - データサイズ: {} bytes", retrieved.data.len());
-        println!("   - データ内容: \"{}\"", std::str::from_utf8(&retrieved.data).unwrap());
+        println!(
+            "   - データ内容: \"{}\"",
+            std::str::from_utf8(&retrieved.data).unwrap()
+        );
         println!("   - タグ数: {}", retrieved.tags.len());
-        
+
         assert_eq!(retrieved.data, data);
         println!("   ✓ データが一致");
-        
+
         assert_eq!(retrieved.tags.len(), 2);
         println!("   ✓ タグ数が一致");
-        
+
         // タグの詳細を表示
         println!("\n6. 取得したタグの詳細:");
         for tag in &retrieved.tags {
             println!("   - {}: {}", tag.name, tag.value);
         }
-        
+
         println!("\n✅ テスト成功: データの保存・取得が正常に動作しました！");
     }
 
