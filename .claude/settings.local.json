@@ -1,4 +1,7 @@
 {
+  "env": {
+    "DISABLE_MICROCOMPACT": "true"
+  },
   "permissions": {
     "allow": [
       "Bash(cargo check:*)",
@@ -14,7 +17,19 @@
       "mcp__serena__find_file",
       "mcp__serena__get_symbols_overview",
       "mcp__serena__switch_modes",
-      "mcp__serena__think_about_collected_information"
+      "mcp__serena__think_about_collected_information",
+      "mcp__serena__think_about_whether_you_are_done",
+      "mcp__serena__find_symbol",
+      "mcp__serena__replace_regex",
+      "mcp__serena__search_for_pattern",
+      "WebSearch",
+      "mcp__context7__resolve-library-id",
+      "Bash(cargo add:*)",
+      "Bash(cargo doc:*)",
+      "mcp__context7__get-library-docs",
+      "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:crates.io)",
+      "Read(/Users/momiyamashodai/.cargo/registry/src/**)"
     ],
     "deny": []
   },
