@@ -24,10 +24,12 @@ const arweave = Arweave.init({
 const deploymentFile = path.join(__dirname, 'deployment.json');
 const deployment = JSON.parse(fs.readFileSync(deploymentFile, 'utf-8'));
 const moduleId = deployment.mainnet?.owner?.moduleId;
+const processId = deployment.mainnet?.owner?.processId || moduleId;
 
 console.log('🧪 Direct AO Message Test');
 console.log('=========================\n');
-console.log(`Module/Process ID: ${moduleId}\n`);
+console.log(`Module ID: ${moduleId}`);
+console.log(`Process ID: ${processId}\n`);
 
 // Load wallet
 function loadWallet() {
@@ -48,7 +50,7 @@ async function sendAOMessage(wallet, action, input) {
     
     // Create message data
     const messageData = {
-      Target: moduleId,
+      Target: processId,  // Use process ID instead of module ID
       Action: action,
       Input: JSON.stringify(input),
       Timestamp: Date.now().toString(),
@@ -62,7 +64,7 @@ async function sendAOMessage(wallet, action, input) {
     // Add AO tags
     tx.addTag('Data-Protocol', 'ao');
     tx.addTag('Type', 'Message');
-    tx.addTag('Target', moduleId);
+    tx.addTag('Target', processId);  // Use process ID
     tx.addTag('Action', action);
     tx.addTag('From', address);
     tx.addTag('SDK', 'D-TPRES-CLI');

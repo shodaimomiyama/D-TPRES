@@ -13,12 +13,13 @@
   "mainnet": {
     "owner": {
       "moduleId": "hRvavW-bnwkFiEPEhHgLw5QjQ6nI0_pHMtNdlaZl-gY",
-      "processId": "hRvavW-bnwkFiEPEhHgLw5QjQ6nI0_pHMtNdlaZl-gY",
+      "processId": "fEIf9Fwt19fKRV4a-7yb3bMw9GOXUAjSBBSVQSKmVmQ",
       "role": "owner",
       "walletAddress": "MO1hUZB6t8O364UoEnJkzfObCV6YQ7zb41pc2iKXVek",
       "deployedAt": "2025-09-02T20:09:53.152Z",
       "network": "mainnet",
-      "scheduler": "_GQ33BkPtZrqxA84vM8Zk-N2aO0toNNu_C-l-rawrBA"
+      "scheduler": "_GQ33BkPtZrqxA84vM8Zk-N2aO0toNNu_C-l-rawrBA",
+      "processSpawnedAt": "2025-09-02T21:09:38.252Z"
     }
   }
 }
