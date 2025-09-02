@@ -1,0 +1,29 @@
+{
+  "name": "d-tpres-deploy",
+  "version": "0.1.0",
+  "description": "D-TPRES AO Network Deployment Scripts",
+  "main": "deploy.js",
+  "license": "MIT",
+  "scripts": {
+    "faucet": "node faucet.js",
+    "deploy": "node deploy-proper.js",
+    "deploy:owner": "node deploy-proper.js --role owner",
+    "deploy:holder": "node deploy-proper.js --role holder",
+    "deploy:requester": "node deploy-proper.js --role requester",
+    "deploy:cw": "node deploy-cw.js --role owner",
+    "deploy:original": "node deploy.js --role owner",
+    "test": "node test-process-mvp.js",
+    "test:full": "node test-process.js"
+  },
+  "dependencies": {
+    "@cosmjs/cosmwasm-stargate": "^0.31.0",
+    "arweave": "^1.14.0",
+    "commander": "^11.0.0",
+    "cwao": "^0.5.5",
+    "dotenv": "^16.0.3",
+    "node-fetch": "2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  }
+}

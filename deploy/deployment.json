@@ -1,0 +1,26 @@
+{
+  "testnet": {
+    "owner": {
+      "moduleId": "yblpVdDbk0164lDxVDTxGQr_CWBEw0P1jBUfUcEkE-o",
+      "processId": "yblpVdDbk0164lDxVDTxGQr_CWBEw0P1jBUfUcEkE-o",
+      "role": "owner",
+      "walletAddress": "SySdTgXzMJskGkb5tolpxOZj8VrvG1-kX49oRM1ng80",
+      "deployedAt": "2025-09-02T19:40:02.102Z",
+      "network": "testnet",
+      "scheduler": "_GQ33BkPtZrqxA84vM8Zk-N2aO0toNNu_C-l-rawrBA"
+    }
+  },
+  "mainnet": {
+    "owner": {
+      "moduleId": "hRvavW-bnwkFiEPEhHgLw5QjQ6nI0_pHMtNdlaZl-gY",
+      "processId": {
+        "error": "bad request"
+      },
+      "role": "owner",
+      "walletAddress": "MO1hUZB6t8O364UoEnJkzfObCV6YQ7zb41pc2iKXVek",
+      "deployedAt": "2025-09-02T20:09:53.152Z",
+      "network": "mainnet",
+      "scheduler": "_GQ33BkPtZrqxA84vM8Zk-N2aO0toNNu_C-l-rawrBA"
+    }
+  }
+}
