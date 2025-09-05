@@ -1,232 +1,330 @@
-# D-TPRES
+# D-TPRES MVP - AO Network Deployment Guide
 
-**Deterministic Threshold Proxy Re-Encryption System**
+## 🎯 Overview
 
-[![Rust](https://img.shields.io/badge/rust-1.86.0-blue.svg)](https://www.rust-lang.org/)
-[![Edition](https://img.shields.io/badge/edition-2024-orange.svg)](https://doc.rust-lang.org/edition-guide/)
-[![Arweave](https://img.shields.io/badge/storage-Arweave-green.svg)](https://www.arweave.org/)
-[![AO](https://img.shields.io/badge/compute-AO%20Network-purple.svg)](https://ao.arweave.net/)
+This is the Minimum Viable Product (MVP) implementation of D-TPRES (Deterministic Threshold Proxy Re-Encryption System) for the AO Network hackathon. The MVP demonstrates the core functionality of threshold proxy re-encryption with O-Browser and Owner-Process components.
 
-A decentralized key management system that implements threshold proxy re-encryption for secure, permissionless access control over encrypted data stored on Arweave.
-
-## Overview
-
-D-TPRES combines three distinct infrastructure layers to create a truly decentralized key management system:
-
-- **Arweave**: Immutable storage for encrypted data and capsules
-- **AO Network**: WebAssembly-based distributed execution environment  
-- **EVM Smart Contracts**: Deterministic access control verification
-
-The system enables data owners to encrypt and store data on Arweave while allowing authorized users to decrypt it through a k-of-n threshold proxy re-encryption scheme, all without requiring persistent key management servers.
-
-## Key Features
-
-### Threshold Proxy Re-Encryption (TPRE)
-- Uses Umbral PRE library for cryptographic operations
-- k-of-n distributed secret sharing using Shamir's Secret Sharing
-- No single point of failure for key management
-
-### Fully Decentralized
-- **Permissionless**: EVM smart contracts define access conditions deterministically
-- **Stateless**: All processes are ephemeral and can be recreated
-- **Trustless**: Consensus unified across storage and access control layers
-
-### Multi-Role WebAssembly Architecture
-Single Rust codebase compiles to WebAssembly and runs on AO with different roles:
-- **Owner-Process (P<)**: Manages secret key shares and re-encryption key generation
-- **Holder-Process (H|)**: Stores key fragments and performs re-encryption  
-- **Requester-Process (R-Proc)**: Coordinates access requests and collects cipher fragments
-
-## Concept diagram
-
-![D-TPRES Concept Diagram](images/D-TPRES_Concept.png)
-
-
-## Technical Documentation
-
-For detailed technical information about the AO platform integration:
-- [AO Process Model and Stateless Execution](docs/development/ao/ao_process_model.md)
-- [Domain Layer Architecture](docs/development/domain/domain_overview.md)
-
-## Architecture
-
-```mermaid
-flowchart TD
-    subgraph Browser
-        OB[O-Browser]
-        AB[A-Browser]
-    end
-
-    subgraph Ethereum
-        SC[verifyAccess]
-    end
-
-    subgraph AO_Network
-        subgraph P_Group
-            PO[Owner-Process]
-        end
-        subgraph RP_Group
-            RP[Requester-Process]
-        end
-        subgraph Holder_Group
-            H1[Holder 1]
-            H2[Holder 2]
-            H3[Holder 3]
-        end
-    end
-
-    OB -->|spawn| PO
-    OB -->|upload| AR[Arweave]
-    AB -->|spawn| RP
-    AB -->|verify| SC
-    SC -->|event| elciao[elciao]
-    elciao --> RP
-    RP --> PO
-    PO -->|split| H1 & H2 & H3
-    RP -->|wrap| H1 & H2 & H3
-    H1 & H2 & H3 -->|frag| RP
-    RP -->|capsule| AB
-    AB -->|decrypt| s
-```
-
-## Cryptographic Flow
-
-The system operates through 6 distinct phases:
-
-### Phase 0: Process Spawning & Key Preparation
-Users spawn identical WebAssembly processes on AO with role-specific configurations.
-
-### Phase 1: Secret Splitting & Public Storage  
-- Owner generates Shamir secret shares (k-of-n)
-- Creates encrypted capsules using Proxy Re-Encryption
-- Stores capsules and encrypted shares on Arweave
-
-### Phase 2: Access Request & EVM Verification
-- Accessor generates key pair and submits verification to EVM smart contract
-- Contract verifies conditions (e.g., token ownership) and emits verification event
-- elciao bridge captures event and creates ProofPkg for AO processes
-
-### Phase 3: Re-encryption Key Fragmentation
-- Owner-Process generates re-encryption key from secret key to accessor's public key
-- Splits re-encryption key into k-fragments using Shamir sharing
-- Distributes fragments to online Holder processes
-
-### Phase 4: k-of-n Proxy Re-encryption
-- Requester-Process coordinates with Holder processes
-- Each Holder performs proxy re-encryption on their key fragment
-- Returns cipher fragments to Requester-Process
-
-### Phase 5: Client Decryption & Secret Reconstruction
-- Accessor collects k cipher fragments and original capsules
-- Combines fragments to reconstruct the re-encrypted capsule
-- Decrypts with private key to recover the original secret
-
-## Development
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Rust 1.86.0 (managed via `rust-toolchain.toml`)
-- Make
+- Rust (with wasm32-unknown-unknown target)
+- Node.js (v16+)
+- Arweave wallet with AR tokens
+- npm or yarn
 
-### Commands
+### 1. Build the WebAssembly Module
 
 ```bash
-# Check compilation
+# Install wasm32 target if not already installed
+rustup target add wasm32-unknown-unknown
+
+# Build the WASM module
+./build.sh
+```
+
+### 2. Setup Deployment
+
+```bash
+cd deploy
+
+# Install dependencies with yarn
+yarn install
+
+# Create your .env file from the example
+cp .env.example .env
+
+# Add your Arweave wallet
+# Download from https://arweave.app/wallet and save as wallet.json
+```
+
+### 2.5. Get Testnet Tokens
+
+```bash
+# Request testnet AR tokens
+npm run faucet
+
+# This will show your wallet address and provide links to faucets:
+# - https://faucet.arweave.dev/
+# - https://faucet.arconnect.io/
+# - https://bundlr.network/faucet
+
+# After requesting tokens manually, check your balance:
+npm run faucet
+```
+
+### 3. Deploy to AO Network
+
+```bash
+# Deploy Owner-Process to testnet
+npm run deploy:owner
+
+# Or deploy to mainnet
+npm run deploy:owner -- --network mainnet
+```
+
+### 4. Test the Deployment
+
+```bash
+# Run automated tests
+npm run test
+```
+
+### 5. CLI Testing
+
+After deployment, you can test the module functionality using the CLI test scripts:
+
+```bash
+# Test with direct AO messages
+node test-direct.js
+
+# This will send the following messages to your deployed module:
+# - ProcessInfo: Query process information
+# - SetupEncryption: Initialize encryption with secret
+# - StoreKfrags: Store key fragments
+# - GetKfrags: Query stored fragments
+# - ProcessAccessRequest: Request access to encrypted data
+```
+
+#### Example Output
+
+```
+🧪 Direct AO Message Test
+=========================
+
+Module/Process ID: hRvavW-bnwkFiEPEhHgLw5QjQ6nI0_pHMtNdlaZl-gY
+
+📤 Sending test messages to AO module...
+
+1️⃣ Query Process Info
+✅ Message sent: ukvfvIpnLOeGCym4kbfSSXEMdHq7zIVNaMIBk8AUkiA
+
+2️⃣ Setup Encryption
+✅ Message sent: EjSlNTMQ_WT-nhKgM2Wujem_a3FNiu-BPguoIoP3cEM
+
+3️⃣ Store kFrags
+✅ Message sent: CMYQim51A2FPeNVkzVh66bkSmsSEZJ0YZaQwSVKLvKM
+
+4️⃣ Query kFrags
+✅ Message sent: NY8g6-UpX3JTGDaHqUiHOnkgBV-n8Y-3FjnfdXhE9rc
+
+5️⃣ Process Access Request
+✅ Message sent: Jdi0j6SF6hRU5mzW6EGnUqMFJOvKJUIpKaQkvQKOCgY
+```
+
+#### Verify Messages on AO Network
+
+After running the CLI test, you can verify your messages:
+
+1. **Check individual transactions**: 
+   - Visit the Arweave transaction URLs shown in the output
+   - Example: `https://arweave.net/tx/[MESSAGE_ID]`
+
+2. **View on AO Explorer**:
+   - Visit: `https://www.ao.link/#/message/[MODULE_ID]`
+   - This shows all messages sent to your module
+
+3. **Check module status**:
+   - Run: `node check-module.js`
+   - This verifies your module is accessible on various gateways
+
+**Note**: Message processing on AO network may take 1-2 minutes. The CLI test sends messages but doesn't wait for responses.
+
+## 📦 MVP Features
+
+### Implemented Features
+
+1. **O-Browser Functionality** (Simulated in Owner-Process)
+   - Key pair generation (sk_O, pk_O)
+   - Secret splitting using Shamir's Secret Sharing
+   - Share encryption with symmetric key k_O
+   - Capsule creation (k_O encrypted with pk_O)
+   - Re-encryption key generation
+   - kFrag creation and distribution
+
+2. **Owner-Process**
+   - kFrag storage and management
+   - Access request processing (auto-approval for MVP)
+   - CosmWasm contract interface
+   - AO message handling
+
+3. **Cryptographic Operations**
+   - Umbral PRE implementation
+   - Shamir's Secret Sharing
+   - Key fragment management
+
+### Simplified for MVP
+
+- **Auto-generated Requester Keys**: pk_A is automatically generated instead of being shared
+- **Auto-approval**: Access requests are automatically approved without smart contract verification
+- **In-memory Storage**: Uses in-memory storage instead of Arweave for testing
+
+## 🏗️ Architecture
+
+```
+src/
+├── lib.rs                 # CosmWasm entry points
+├── service/
+│   └── core/
+│       └── crypto.rs      # Cryptographic operations (existing)
+├── usecase/
+│   └── owner/
+│       └── handlers.rs    # Owner-Process message handlers
+├── ao/
+│   ├── mod.rs            # AO integration
+│   ├── message.rs        # Message routing
+│   └── state.rs          # State management
+└── domain/               # Domain entities
+```
+
+## 📝 Usage Examples
+
+### Setup Encryption (O-Browser Simulation)
+
+```javascript
+// Send SetupEncryption message to Owner-Process
+const message = {
+  action: 'SetupEncryption',
+  input: {
+    secret: [/* secret bytes */],
+    threshold: 2,
+    total_shares: 3
+  }
+};
+
+await cwao.message({
+  process: processId,
+  data: message,
+  tags: [{ name: 'Action', value: 'SetupEncryption' }]
+});
+```
+
+### Query kFrags
+
+```javascript
+// Query stored kFrags
+const result = await cwao.query({
+  process: processId,
+  data: { query: 'GetKfrags' }
+});
+
+console.log(`kFrags available: ${result.kfrags.length}`);
+```
+
+### Process Access Request
+
+```javascript
+// Request access to encrypted data
+const message = {
+  action: 'ProcessAccessRequest',
+  input: {
+    requester_id: 'requester_123',
+    capsule_id: 'capsule_456'
+  }
+};
+
+await cwao.message({
+  process: processId,
+  data: message,
+  tags: [{ name: 'Action', value: 'ProcessAccessRequest' }]
+});
+```
+
+## 🔍 Monitoring
+
+Monitor your deployed process on AO Explorer:
+```
+https://ao.arweave.dev/#/process/[YOUR_PROCESS_ID]
+```
+
+## 🛠️ Development
+
+### Run Tests
+
+```bash
+# Rust tests
+cargo test
+
+# Integration tests
+cd deploy && npm test
+```
+
+### Local Development
+
+```bash
+# Check code
 make check
 
-# Format code  
+# Format code
 make fmt
 
 # Run linter
 make clippy
 
-# Format and lint
-make lint
-
-# Run tests
-make test
-
-# Run all checks
+# All checks
 make all
 ```
 
-### Individual Cargo Commands
+## 📚 Documentation
 
-```bash
-cargo check
-cargo fmt --all
-cargo clippy -- -A dead_code -A clippy::module_inception -A unused_variables -A unused_imports -A unused_mut -A unused_assignments -D warnings
-cargo test
-```
+For detailed documentation, see:
+- `docs/PRD.md` - Product Requirements
+- `docs/development/` - Development documentation
+- `CLAUDE.md` - AI assistant instructions
 
-## Technology Stack
+## 🚨 Important Notes
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Cryptography | `umbral-pre`, `sssa`, `aes-gcm` | Threshold PRE, secret sharing, encryption |
-| Runtime | AO + HyperBEAM | WebAssembly execution environment |
-| Storage | Arweave, ao-sqlite | Persistent data and state storage |
-| Blockchain Bridge | elciao | EVM event integration with Arweave |
-| Frontend | WebCrypto API, ethers.js | Browser-based key generation and cryptography |
-| Deployment | ao-deploy | Arweave process deployment |
+1. **Testnet First**: Always test on testnet before mainnet deployment
+2. **Wallet Security**: Keep your Arweave wallet secure
+3. **Gas Costs**: Ensure sufficient AR tokens for deployment
+4. **MVP Limitations**: This is a simplified MVP - not production-ready
 
-## Security
+## 🎉 Next Steps
 
-### Security Properties
-- **Confidentiality**: IND-CPA security based on discrete logarithm problem (X25519, 128-bit)
-- **Threshold Fault Tolerance**: Supports up to k-1 node failures with Shamir(k,n) sharing
-- **Collusion Resistance**: Requires k fragments to reconstruct keys
-- **Non-transferability**: Re-encryption keys are bound to specific public keys
-- **Perfect Forward Secrecy**: Ephemeral processes with immediate key wiping
+After successful MVP deployment:
 
-### Security Assumptions
-- TPRE (Umbral) security based on RLWE 128-bit / ECC X25519
-- AES-GCM 128-bit symmetric encryption
-- Ed25519 signatures for message integrity
-- Formal security proofs from Umbral research (Berm�dez et al.)
+1. **Test the core functionality**: Verify encryption, kFrag generation, and access control
+2. **Integrate with frontend**: Build O-Browser as a proper web interface
+3. **Implement Holder-Process**: Add the holder role for distributed storage
+4. **Add EVM verification**: Integrate smart contract access control
+5. **Production hardening**: Implement proper error handling and security measures
 
-## Current Status
+## ⚠️ Troubleshooting
 
-This project is in early development phase. The current implementation includes:
+### Common Issues
 
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Project Structure | ✅ | Basic documentation and code organization |
-| Rust Toolchain | ✅ | Version 1.86.0 configuration |
-| Core Architecture | ✅ | Multi-role WebAssembly design |
-| Cryptographic Primitives | 🟡 | Umbral-PRE integration in progress |
-| AO Process Implementation | 🟡 | Basic process spawning implemented |
-| EVM Smart Contracts | ⬜️ | Access control contracts pending |
-| Browser Frontend | ⬜️ | WebCrypto API integration planned |
-| End-to-End Testing | ⬜️ | Test framework setup pending |
+1. **getrandom WASM compilation error**
+   - Solution: The project uses conditional compilation to exclude crypto libraries from WASM build
+   - Crypto operations are mocked in WASM and should be performed off-chain
 
-Legend:
-- ✅ Completed
-- 🟡 In Progress
-- ⬜️ Not Started
+2. **rust-toolchain.toml conflicts**
+   - Solution: The build script automatically handles this by temporarily moving the file
 
-## Documentation
+3. **Package not found errors**
+   - Solution: Use yarn instead of npm for better compatibility
+   - Run `yarn install` in the deploy directory
 
-- [Product Requirements Document](docs/PRD.md) - Detailed system requirements and specifications
-- [Development Status](docs/development/status.md) - Current progress and milestones  
-- [Domain Model](docs/development/models/domain_model.md) - System entities and relationships
-- [Service Documentation](docs/development/services/) - Individual component specifications
+4. **Build failures**
+   - Ensure you're using Rust edition 2021
+   - Check that wasm32-unknown-unknown target is installed
+   - Try cleaning with `cargo clean` before rebuilding
 
-## Contributing
+### WASM Limitations
 
-1. Ensure Rust 1.86.0 is installed
-2. Run `make all` to verify setup
-3. Follow existing code conventions and formatting rules
-4. All contributions must pass linting and tests
+- **Cryptographic operations**: All actual crypto operations (Umbral PRE, Shamir) are mocked in WASM
+- **O-Browser responsibility**: Real encryption happens in the browser (local environment)
+- **Owner-Process role**: Only stores and manages kFrags, doesn't perform actual crypto
 
-## License
+## 📄 License
 
-[License information to be added]
+MIT License - See LICENSE file in the root directory.
 
-## Acknowledgments
+## 🤝 Support
 
-Built on top of:
-- [Umbral Proxy Re-Encryption](https://github.com/nucypher/umbral-pre)
-- [Arweave](https://www.arweave.org/) permanent storage
-- [AO Network](https://ao.arweave.net/) distributed compute
-- [elciao](https://github.com/weaveVM/elciao) EVM bridge
+For issues or questions:
+- GitHub Issues: [Create an issue](https://github.com/your-repo/issues)
+- Documentation: See `docs/` directory
+
+---
+
+**Built for AO Network Hackathon** 🚀
