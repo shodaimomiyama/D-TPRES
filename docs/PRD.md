@@ -6,7 +6,7 @@
 Deterministic Threshold Proxy Re-Encryption System (D-TPRES)
 
 **Purpose**
-D-TPRES は、Threshold Proxy Re-Encryption（TPRE）とシャミア秘密分散を組み合わせた分散型秘密管理システムです。暗号学的な秘密の分散・再暗号化・復元機能をローカルとオンチェーン環境のみで実行するDecentralized Key Managementレイヤーを提供します。
+D-TPRES は、Threshold Proxy Re-Encryption（TPRE）とシャミア秘密分散を組み合わせた分散型秘密管理ライブラリです。暗号学的な秘密の分散・再暗号化・復元機能をローカルとオンチェーン環境のみで実行するDecentralized Key ManagementライブラリをOSSとして提供します。
 
 ***分散型閾値暗号の実現***
 k-of-n 閾値スキームを採用し、n個の独立したプロセスのうちk個が協調することで秘密復元を可能にします。単一障害点を完全に排除し、k未満のプロセスでは暗号学的に情報が一切漏洩しない堅牢なセキュリティを提供します。
@@ -156,74 +156,22 @@ flowchart TD
 
 ## 4. Detailed Requirements
 
-### 4.1 Browser Components
+docs/development/services/*に各サービスの詳細設計は記述
 
-#### 4.1.1 O-Browser (Data Owner Browser)
+以下は要求定義
 
-**機能要件:**
-- Umbral PRE 鍵ペア生成 (skₒ, pkₒ)
-- シャミア秘密分散による秘密分割
-- AES-GCM による暗号化シェア生成
-- PRE カプセル生成
-- 外部システムからの Requester 公開鍵受信
-- 再暗号化キー生成とkFrag分散
-- Arweave へのデータアップロード
+| コンポーネント                | 機能要件                                         | 実装方法                             |
+| ---------------------- | -------------------------------------------- | -------------------------------- |
+| Owner-Process          | kFrag受信 → RandAO選出 → kFrag配布            | Rust WASM (`umbral-pre` + `sssa`) |
+| Holder-Process         | kFrag受信・保存、cFrag生成・Arweave保存          | Rust WASM + ao-sqlite             |
+| Requester-Process      | cFrag収集、閾値チェック、R-Browserに送信        | Rust WASM                        |
+| O-Browser              | 秘密分散 → Capsule化 → rekey生成 → kFrag分割   | Rust WASM (`umbral-pre` + `sssa`) |
+| R-Browser              | cFrag収集、Capsule再構築、復号・秘密復元        | Rust WASM (`umbral-pre` + `sssa`) |
 
-**非機能要件:**
-- WebCrypto API を使用したセキュアな鍵生成
-- メモリ内秘密鍵の適切な zeroize
-- 1MB ファイルの暗号化処理時間 < 5秒
 
-#### 4.1.2 R-Browser (Requester Browser)
-
-**機能要件:**
-- Umbral PRE 鍵ペア生成 (skᴬ, pkᴬ)
-- Requester-Process の spawn
-- cFrag 収集と Capsule 再構築
-- PRE 復号処理
-- シャミア補間による秘密復元
-
-**非機能要件:**
-- k-of-n 閾値での確実な秘密復元
-- 復号処理時間 < 10秒
-
-### 4.2 AO Process Components
-
-#### 4.2.1 Owner-Process
-
-**機能要件:**
-- O-Browser からの kFrag 受信
-- RandAO を使用した Holder 選出
-- kFrag の分散配布と署名
-
-#### 4.2.2 Holder-Process
-
-**機能要件:**
-- kFrag の受信・検証・保存
-- Capsule を使用した cFrag 生成
-- cFrag の Arweave 保存
-
-#### 4.2.3 Requester-Process
-
-**機能要件:**
-- 複数 Holder からの cFrag 収集
-- 閾値チェックと R-Browser への送信
-
-### 4.3 Storage Requirements
-
-#### 4.3.1 Arweave Storage
-
-**保存データ:**
-- Capsule (PRE 暗号化された共通鍵)
-- 暗号化シェア Cᵢ (AES-GCM 暗号文)
-- kFrag (再暗号化キーフラグメント)
-- cFrag (再暗号化されたフラグメント)
-
-**タグ構造:**
-- Data-Type: "capsule" | "share" | "kfrag" | "cfrag"
-- Owner-ID: オーナーの識別子
-- Secret-ID: 秘密の識別子
-- Fragment-Index: フラグメント番号
+| 方針                                                                                         | メリット                                                                                                          | 留意点                                                     |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Rust で `dtpres_core` を実装し、<br>**Owner / Holder / Requester** の 3 ロールを<br>1 つの Wasm バイナリに同居 | - Arweave へのデプロイは **Tx 1 本**<br>- すべて同じコードハッシュ → **検証容易**<br>- ハンドラ分岐は **`msg.role`** や **`process.tag`** で実現 | - バイナリサイズ増 ⇒ 1Tx の手数料が上がる<br>- Wasm 内でロール判定ロジックを明確化する必要 |
 
 ## 5. Technology & Tools
 
@@ -231,63 +179,68 @@ flowchart TD
 
 | Component | Technology | Purpose |
 |-----------|------------|---------|
-| **Cryptography** | umbral-pre | Threshold Proxy Re-Encryption |
-| | shamir-secret-sharing | k-of-n 秘密分散 |
-| | WebCrypto API | ブラウザ暗号化操作 |
-| **Runtime** | AO Network | 分散 WebAssembly 実行環境 |
-| | Rust WASM | プロセス実装言語 |
-| **Storage** | Arweave | 永続的データ保存 |
-| **Browser** | TypeScript/Vite | フロントエンド実装 |
+| **Cryptography** | umbral-pre | すべての暗号化操作（鍵生成、PRE、暗号化・復号化） |
+| | sssa | Shamir Secret Sharing (k-of-n 秘密分散) |
+| | aes-gcm | シェア暗号化用対称暗号 |
+| **Runtime** | Rust WASM (@src/) | 単一バイナリでAOプロセスとブラウザ両方で実行 |
+| | AO Network | 分散 WebAssembly 実行環境 |
+| | CosmWasm-ao | AOプロセスデプロイフレームワーク |
+| **Storage** | Arweave | 永続的データ保存・WASMモジュール配布 |
+| **Client Library** | JavaScript/TypeScript | プロセスspawn・WASMモジュール呼び出しライブラリ |
 
 ### 5.2 Development Tools
 
 | Tool | Purpose |
 |------|---------|
-| wasm-pack | WebAssembly ビルド |
-| ao-dev-cli | AO ローカル開発環境 |
-| arweave-js | Arweave クライアント |
+| wasm-pack | Rust → WebAssembly ビルド |
+| CosmWasm-ao | AOへのWASMデプロイ |
+| npm/yarn | JavaScript/TypeScriptライブラリパッケージ管理 |
 
 ## 6. Security & Compliance
 
-### 6.1 暗号学的セキュリティ
+### 6.1 セキュリティ要件
 
-**鍵管理:**
-- 秘密鍵はブラウザローカル環境でのみ生成・使用
-- zeroize による適切なメモリクリア
-- 秘密鍵のネットワーク送信は一切行わない
+| 評価軸 | チェック項目 | 考察 |
+|--------|-------------|------|
+| **機密性** | 公開データから秘密到達可否 | 公開セット {Capsuleₒ, Cᵢ, kFragⱼ, cFragⱼ} は **IND-CPA**。`Capsule′` から kₒ を得るには skᴬ が必須 → 離散対数問題 (X25519, 128-bit) |
+| **しきい値耐故障** | Holder t < k ダウン時 | Shamir(k,n) ⇒ 最大 n-k ノード故障時でも秘密復元可能 |
+| **共謀耐性** | k-1 Holder + 攻撃者 | kFrag は Shamir分割；k-1 では rekey 再構成不能、秘密復元不可 |
+| **非転送性** | 攻撃者が pkᴮ へ再委譲 | ReKeyGen には skₒ が必須。kFrag は pkᴬ 固定で他者への転送不可 |
+| **暗号基盤** | 安全仮定 | TPRE (Umbral) = ECIES (secp256k1) / AES-256-GCM |
+| **転送完全性** | cFrag 改ざん検出 | PRE 仕様内で暗号学的検証；AO メッセージはArweaveで不変記録 |
+| **メモリ露出** | RAM ダンプ | 秘密鍵・平文は瞬間的にのみ存在；`zeroize` による即時メモリクリア |
+| **DoS 耐性** | Holder 不応答 | n=5, k=3 → 最大2ノード不応答まで許容。動的Holder選択機構 |
+| **Sybil 耐性** | 攻撃者 Holder 独占 | RandAOによるランダム選択、将来的にStake/Reputation実装予定 |
+| **形式的証明** | Provable security | Umbral は IND-CPA & Collusion Safety を論文証明済み |
 
-**暗号化強度:**
-- Umbral PRE による確率的暗号化
-- AES-256-GCM による対称暗号化
-- k-of-n 閾値による分散セキュリティ
+### 6.2 リスク残存ポイント & 推奨対策
 
-### 6.2 システムセキュリティ
-
-**外部依存の最小化:**
-- アクセス制御は外部システムに完全委譲
-- D-TPRES は純粋に暗号学的処理のみ実装
-
-**監査可能性:**
-- Arweave 上のすべての操作は不変記録
-- 暗号学的検証による整合性保証
+| リスク | 現状 | 推奨強化策 |
+|--------|------|-----------|
+| **Sybil Holder 独占** | RandAO選択のみ | *将来実装*: Stake要件・Reputation システム導入 |
+| **大量リクエストDoS** | 制限なし | レート制限機構の実装、リクエスト毎のコスト設定 |
+| **乱数生成の弱さ** | Rust標準乱数 | `rand::rngs::OsRng` 使用、ブラウザは `crypto.getRandomValues` |
+| **実装バグ** | 未監査 | セキュリティ監査、形式検証ツール導入予定 |
+| **サイドチャネル攻撃** | 対策なし | constant-time実装、将来的にTEE環境対応 |
+| **鍵漏洩時の影響** | 全データ露出リスク | 定期的な鍵ローテーション機構の検討 |
 
 ## 7. Implementation Phases
 
-### Phase 1: Core Cryptographic Engine (Week 1-2)
+### Phase 1: Core Cryptographic Library
 - [ ] Umbral PRE WebAssembly 統合
 - [ ] シャミア秘密分散実装
-- [ ] ブラウザ暗号化処理実装
+- [ ] Rust WASM暗号化ライブラリ実装
 
-### Phase 2: AO Process Implementation (Week 3-4)
+### Phase 2: AO Process Implementation
 - [ ] Owner/Holder/Requester プロセス実装
 - [ ] プロセス間メッセージング
 - [ ] Arweave 統合
 
-### Phase 3: Integration & Testing (Week 5-6)
-- [ ] E2E フロー統合
+### Phase 3: Client Library & Testing
+- [ ] JavaScript/TypeScriptクライアントライブラリ
 - [ ] セキュリティテスト
-- [ ] パフォーマンス最適化
+- [ ] OSS公開準備
 
 ---
 
-このPRDは、D-TPRESを純粋な暗号学的秘密管理システムとして定義し、アクセス制御を外部システムに委譲することで、システムの複雑性を大幅に削減し、実装とテストを簡素化します。
+このPRDは、D-TPRESを純粋な暗号学的秘密管理OSSライブラリとして定義し、アクセス制御を外部システムに委譲することで、システムの複雑性を大幅に削減し、実装とテストを簡素化します。開発者はこのライブラリを使用してプロセスのspawnと暗号化処理を統合できます。
