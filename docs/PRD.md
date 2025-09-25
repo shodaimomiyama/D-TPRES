@@ -241,6 +241,47 @@ docs/development/services/*に各サービスの詳細設計は記述
 - [ ] セキュリティテスト
 - [ ] OSS公開準備
 
+## 8. アーキテクチャ戦略
+
+### 8.1 ビルドターゲット分離アプローチ
+
+D-TPRESは単一リポジトリで管理されますが、実行環境に応じて異なるビルドターゲットを持つアーキテクチャを採用します：
+
+| ディレクトリ | ビルドターゲット | 実行環境 | 役割 |
+|------------|---------------|---------|------|
+| **src/** | wasm32-unknown-unknown | AO Network (Arweave) | Phase 2のHolder-Process実装、メッセージ処理、状態管理 |
+| **local/** | wasm32-unknown-unknown (wasm-pack) | ブラウザ | Phase 1のO-Browser実装、Phase 3のR-Browser実装 |
+| **dtpres-sdk/** | Node.js/ブラウザ | JavaScript環境 | 統合SDK、local/とsrc/の橋渡し |
+
+### 8.2 JavaScript統合SDK (dtpres-sdk/)
+
+dtpres-sdk/ディレクトリは、D-TPRES全体の統合SDKとしての役割を担います：
+
+**主要機能:**
+1. **ローカル処理の実行**: local/配下のWASMモジュールを呼び出し、暗号化処理を実行
+2. **AOプロセスとの連携**: ローカル処理の出力をAOメッセージとしてフォーマットし、src/配下のプロセスに送信
+3. **統一API提供**: 開発者に対して一貫したJavaScript/TypeScript APIを提供
+
+**処理フロー例:**
+```javascript
+// Phase 1: O-Browser (local/実行)
+const result = await dtpres.local.owner.splitSecret(secret);
+// → { capsule, shares, kFrags }
+
+// Phase 2: AOプロセスへ送信 (src/実行)
+await dtpres.ao.spawn.ownerProcess();
+await dtpres.ao.message.send({
+  action: 'Store-KFrag',
+  data: result.kFrags
+});
+
+// Phase 3: R-Browser (local/実行)
+const cFrags = await dtpres.ao.message.collectCFrags();
+const secret = await dtpres.local.requester.recoverSecret(cFrags);
+```
+
+この統合アプローチにより、ブラウザでの暗号処理とAOでの分散処理をシームレスに連携させ、開発者は実装の複雑性を意識することなくD-TPRESを利用できます。
+
 ---
 
 このPRDは、D-TPRESを純粋な暗号学的秘密管理OSSライブラリとして定義し、アクセス制御を外部システムに委譲することで、システムの複雑性を大幅に削減し、実装とテストを簡素化します。開発者はこのライブラリを使用してプロセスのspawnと暗号化処理を統合できます。
