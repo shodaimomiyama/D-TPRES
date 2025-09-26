@@ -143,210 +143,13 @@ async fn execute_secret_sharing(&self, secret_data: &[u8]) -> Result<(), Workflo
 }
 ```
 
-## 4. ProcessManagementService
+## 4. MessageRoutingService
 
 ### 4.1 概要
 
-ProcessManagementServiceは、ProcessEntityの管理とマルチロール状態管理を担当します。AO環境でのプロセスライフサイクル管理を提供します。
-
-### 4.2 インターフェース定義
-
-```rust
-use async_trait::async_trait;
-use crate::domain::entity::{ProcessEntity, ProcessRole, ProcessConfig};
-use crate::domain::error::ProcessError;
-use crate::domain::repository::ProcessEntityRepository;
-
-#[async_trait]
-pub trait ProcessManagementService: Send + Sync {
-    // プロセス初期化（ビジネスロジックを含む）
-    async fn initialize_process_with_validation(
-        &self,
-        process_id: &str,
-        initial_roles: &[ProcessRole],
-        config: ProcessConfig,
-    ) -> Result<ProcessEntity, ProcessError>;
-    
-    // ロール追加（互換性チェックを含む）
-    async fn validate_and_add_role(
-        &self,
-        process_id: &str,
-        role: ProcessRole,
-        role_data: RoleData,
-    ) -> Result<(), ProcessError>;
-    
-    // パフォーマンスメトリクス分析
-    async fn analyze_performance_metrics(
-        &self,
-        process_id: &str,
-        time_range: TimeRange,
-    ) -> Result<PerformanceAnalysis, ProcessError>;
-    
-    // マルチロール最適化（ビジネスロジック）
-    async fn optimize_role_distribution(
-        &self,
-        process_ids: &[String],
-    ) -> Result<RoleDistributionPlan, ProcessError>;
-    
-    // 信頼性スコア計算（ビジネスロジック）
-    async fn calculate_reliability_score(
-        &self,
-        process_id: &str,
-    ) -> Result<f64, ProcessError>;
-}
-```
-
-### 4.3 実装ガイドライン
-
-#### 4.3.1 Repository層との連携
-
-```rust
-pub struct ProcessManagementServiceImpl {
-    process_repository: Arc<dyn ProcessEntityRepository>,
-}
-
-impl ProcessManagementServiceImpl {
-    pub fn new(process_repository: Arc<dyn ProcessEntityRepository>) -> Self {
-        Self { process_repository }
-    }
-    
-    async fn initialize_process_with_validation(
-        &self,
-        process_id: &str,
-        initial_roles: &[ProcessRole],
-        config: ProcessConfig,
-    ) -> Result<ProcessEntity, ProcessError> {
-        // ビジネスロジック：ロール検証
-        for role in initial_roles {
-            self.validate_initial_role(role)?;
-        }
-        
-        // ビジネスロジック：設定検証
-        self.validate_config(&config)?;
-        
-        // ProcessEntityの作成
-        let process = ProcessEntity {
-            process_id: process_id.to_string(),
-            active_roles: initial_roles.to_vec(),
-            config,
-            // ... その他フィールド
-        };
-        
-        // Repositoryに保存
-        self.process_repository.create(&process).await?;
-        
-        Ok(process)
-    }
-}
-```
-
-#### 4.3.2 ビジネスロジック実装例
-
-```rust
-#[derive(Debug, Clone)]
-pub struct PerformanceAnalysis {
-    pub average_response_time: f64,
-    pub success_rate: f64,
-    pub peak_load: u64,
-    pub recommendations: Vec<String>,
-}
-
-impl ProcessManagementServiceImpl {
-    async fn validate_and_add_role(
-        &self,
-        process_id: &str,
-        new_role: ProcessRole,
-        role_data: RoleData,
-    ) -> Result<(), ProcessError> {
-        // Repositoryから現在の状態を取得
-        let mut process = self.process_repository
-            .find_by_id(process_id)
-            .await?
-            .ok_or(ProcessError::NotFound)?;
-        
-        // ビジネスロジック：ロール互換性チェック
-        match (&new_role, &process.active_roles) {
-            (ProcessRole::Owner, roles) if roles.iter().any(|r| matches!(r, ProcessRole::Owner)) => {
-                return Err(ProcessError::RoleConflict("Owner role already exists".into()));
-            }
-            (ProcessRole::Holder { capacity }, _) => {
-                // キャパシティ検証
-                if *capacity < MIN_HOLDER_CAPACITY {
-                    return Err(ProcessError::ValidationError("Insufficient capacity".into()));
-                }
-            }
-            _ => {}
-        }
-        
-        // プロセス更新
-        process.active_roles.push(new_role);
-        self.process_repository.update(&process).await?;
-        
-        Ok(())
-    }
-    
-    async fn calculate_reliability_score(
-        &self,
-        process_id: &str,
-    ) -> Result<f64, ProcessError> {
-        let process = self.process_repository
-            .find_by_id(process_id)
-            .await?
-            .ok_or(ProcessError::NotFound)?;
-        
-        // ビジネスロジック：信頼性スコア計算
-        let base_score = 1.0;
-        let uptime_factor = process.metrics.uptime_percentage / 100.0;
-        let success_factor = process.metrics.success_rate / 100.0;
-        let penalty = process.metrics.failed_operations as f64 * 0.01;
-        
-        let score = (base_score * uptime_factor * success_factor) - penalty;
-        Ok(score.max(0.0).min(1.0))
-    }
-}
-```
-
-### 4.4 使用例
-
-```rust
-// ビジネスロジックを含むプロセス初期化
-let process = process_mgmt_service
-    .initialize_process_with_validation(
-        "process-123",
-        &[ProcessRole::Owner],
-        ProcessConfig {
-            max_secrets: 100,
-            performance_tracking: true,
-        },
-    )
-    .await?;
-
-// ロール追加（互換性チェック付き）
-process_mgmt_service
-    .validate_and_add_role(
-        "process-123",
-        ProcessRole::Holder { capacity: 50 },
-        RoleData::Holder(HolderData {
-            storage_capacity: 50,
-            online_status: true,
-        }),
-    )
-    .await?;
-
-// 信頼性スコア計算
-let score = process_mgmt_service
-    .calculate_reliability_score("process-123")
-    .await?;
-println!("Reliability score: {:.2}", score);
-```
-
-## 5. MessageRoutingService
-
-### 5.1 概要
-
 MessageRoutingServiceは、AOプロセス間の非同期メッセージングとルーティングを管理します。プロセス発見、メッセージ配信、応答収集機能を提供します。
 
-### 5.2 インターフェース定義
+### 4.2 インターフェース定義
 
 ```rust
 use async_trait::async_trait;
@@ -400,9 +203,9 @@ pub trait MessageRoutingService: Send + Sync {
 }
 ```
 
-### 5.3 実装ガイドライン
+### 4.3 実装ガイドライン
 
-#### 5.3.1 非同期メッセージング
+#### 4.3.1 非同期メッセージング
 
 ```rust
 pub struct MessageRoutingServiceImpl {
@@ -432,7 +235,7 @@ impl MessageRoutingServiceImpl {
 }
 ```
 
-#### 5.3.2 応答収集パターン
+#### 4.3.2 応答収集パターン
 
 ```rust
 impl MessageRoutingServiceImpl {
@@ -476,7 +279,7 @@ impl MessageRoutingServiceImpl {
 }
 ```
 
-### 5.4 使用例
+### 4.4 使用例
 
 ```rust
 // Holder群へのkFrag配布
@@ -505,64 +308,36 @@ let responses = routing_service
     .await?;
 ```
 
-## 6. Core Service間の連携
+## 5. Core Service間の連携
 
-### 6.1 サービス間依存関係
+### 5.1 サービス間依存関係
 
 ```mermaid
 graph LR
     CS1[CryptoService]
-    CS2[ProcessManagementService]
     CS3[MessageRoutingService]
     R[Repository Layer]
-    
-    CS2 --> R
-    CS3 --> CS2
+    D[Domain Layer]
+
     CS3 --> R
+    CS1 --> D
+    CS3 --> D
 ```
 
 Core Service層は、各サービスが独立した責務を持ちながら、必要に応じて連携します：
 - **CryptoService**: 暗号化計算に特化、他サービスから独立
-- **ProcessManagementService**: ビジネスロジックとRepository操作の調整
 - **MessageRoutingService**: プロセス間通信とRepository経由での状態確認
 
-### 6.2 連携パターン
+プロセス管理機能は、Domain層のProcessEntityとRepository層で実装されます。
 
-#### 6.2.1 ProcessManagementとRepository
+### 5.2 連携パターン
 
-```rust
-impl ProcessManagementServiceImpl {
-    process_repository: Arc<dyn ProcessEntityRepository>,
-    
-    async fn validate_and_add_role(
-        &self,
-        process_id: &str,
-        new_role: ProcessRole,
-    ) -> Result<(), ProcessError> {
-        // Repositoryから現在の状態を取得
-        let process = self.process_repository
-            .find_by_id(process_id)
-            .await?
-            .ok_or(ProcessError::NotFound)?;
-        
-        // ビジネスロジック：ロール互換性チェック
-        self.validate_role_compatibility(&process.active_roles, &new_role)?;
-        
-        // 更新されたプロセスをRepositoryに保存
-        let updated_process = self.add_role_to_process(process, new_role);
-        self.process_repository.update(&updated_process).await?;
-        
-        Ok(())
-    }
-}
-```
-
-#### 6.2.2 MessageRoutingとProcessManagement
+#### 5.2.1 MessageRoutingとRepository層
 
 ```rust
 impl MessageRoutingServiceImpl {
     process_repository: Arc<dyn ProcessEntityRepository>,
-    
+
     async fn discover_holders_with_capacity(
         &self,
         min_capacity: u64,
@@ -571,7 +346,7 @@ impl MessageRoutingServiceImpl {
         let holder_processes = self.process_repository
             .find_processes_with_holder_capability()
             .await?;
-        
+
         let eligible_holders = holder_processes
             .into_iter()
             .filter(|p| {
@@ -583,15 +358,49 @@ impl MessageRoutingServiceImpl {
             })
             .map(|p| ProcessInfo::from(p))
             .collect();
-        
+
         Ok(eligible_holders)
     }
 }
 ```
 
-## 7. テスト戦略
+#### 5.2.2 Domain層でのプロセス管理
 
-### 7.1 単体テスト
+プロセス管理のビジネスロジックは、ProcessEntityのメソッドとして実装されます：
+
+```rust
+// domain/entities/process.rs
+impl ProcessEntity {
+    pub fn validate_role_compatibility(&self, new_role: &ProcessRole) -> Result<(), DomainError> {
+        // ロール互換性チェックロジック
+        match new_role {
+            ProcessRole::Owner if self.has_owner_role() => {
+                return Err(DomainError::business_rule_violation(
+                    "owner_unique",
+                    "Owner role already exists"
+                ));
+            }
+            _ => Ok(())
+        }
+    }
+
+    pub fn calculate_reliability_score(&self) -> f64 {
+        let metrics = &self.performance_metrics;
+        let total_operations = metrics.successful_operations + metrics.failed_operations;
+        let success_factor = if total_operations > 0 {
+            metrics.successful_operations as f64 / total_operations as f64
+        } else {
+            1.0
+        };
+        let penalty = metrics.failed_operations as f64 * 0.01;
+        (success_factor - penalty).max(0.0).min(1.0)
+    }
+}
+```
+
+## 6. テスト戦略
+
+### 6.1 単体テスト
 
 ```rust
 #[cfg(test)]
@@ -633,7 +442,7 @@ mod tests {
 }
 ```
 
-### 7.2 統合テスト
+### 6.2 統合テスト
 
 ```rust
 #[tokio::test]
@@ -650,26 +459,39 @@ async fn test_process_management_with_repository() {
 }
 ```
 
-## 8. パフォーマンス考慮事項
+## 7. パフォーマンス考慮事項
 
-### 8.1 キャッシング戦略
+### 7.1 キャッシング戦略
 
-- ProcessEntity: インメモリキャッシュ with TTL
+- ProcessEntity: AOステートレス環境では適用不可
 - 暗号化操作結果: 結果のキャッシングは避ける（セキュリティ）
-- Arweaveクエリ結果: 短期間キャッシュ
+- メッセージ配信: バッチ処理による効率化
 
-### 8.2 並列処理
+### 7.2 並列処理
 
 - メッセージブロードキャスト: 並列送信
 - バッチストレージ操作: 並列トランザクション作成
 - cFrag収集: 並列応答待機
 
-## 9. まとめ
+## 8. まとめ
 
 Core Service層は、D-TPRESの基盤機能を提供する重要な層です。各サービスは明確な責務を持ち：
 
 1. **CryptoService**: 暗号化計算処理に特化
-2. **ProcessManagementService**: ビジネスロジックとRepository操作の調整
-3. **MessageRoutingService**: AOプロセス間の非同期通信
+2. **MessageRoutingService**: AOプロセス間の非同期通信
 
-データ永続化はRepository層に委譲することで、関心の分離と保守性の向上を実現しています。AO環境の特性を考慮した実装により、高性能で信頼性の高いシステムを実現します。
+### 主要な設計原則
+
+1. **AOステートレス環境への適応**
+   - 複雑な状態管理サービスを排除
+   - プロセス管理はDomain層とRepository層で実装
+
+2. **シンプルな責務分担**
+   - 暗号化とメッセージングの基本機能に集約
+   - ビジネスロジックはWorkflow層とDomain層で処理
+
+3. **Repository層との直接連携**
+   - データ永続化の責任を明確化
+   - 関心の分離と保守性の向上
+
+この設計により、AOプラットフォームの制約に適合し、高性能で信頼性の高いD-TPRES暗号システムを実現します。

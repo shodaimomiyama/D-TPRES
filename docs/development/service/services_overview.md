@@ -57,7 +57,7 @@ graph TB
         C1[MessageHandler]
         C2[Browser Controller]
     end
-    
+
     subgraph "Service Layer"
         subgraph "Workflow Services"
             WS1[SecretSharingWorkflow]
@@ -65,41 +65,37 @@ graph TB
             WS3[ReencryptionWorkflow]
             WS4[SecretRecoveryWorkflow]
         end
-        
+
         subgraph "Core Services"
             CS1[CryptoService]
-            CS2[ProcessManagementService]
             CS3[MessageRoutingService]
-            CS4[ArweaveStorageService]
         end
     end
-    
+
     subgraph "Domain Layer"
         D1[Entities]
         D2[Repository Interfaces]
     end
-    
+
     C1 --> WS1
     C1 --> WS2
     C1 --> WS3
     C1 --> WS4
     C2 --> WS1
     C2 --> WS4
-    
+
     WS1 --> CS1
-    WS1 --> CS2
-    WS1 --> CS4
+    WS1 --> D2
     WS2 --> CS3
-    WS2 --> CS2
+    WS2 --> D2
     WS3 --> CS1
     WS3 --> CS3
+    WS3 --> D2
     WS4 --> CS1
-    WS4 --> CS4
-    
+    WS4 --> D2
+
     CS1 --> D1
-    CS2 --> D1
     CS3 --> D1
-    CS4 --> D2
 ```
 
 ### 3.2 Core Services
@@ -111,20 +107,10 @@ graph TB
    - Shamir Secret Sharing
    - 暗号化・復号化処理
 
-2. **ProcessManagementService**
-   - ProcessEntityの管理
-   - マルチロール状態管理
-   - メトリクス収集
-
-3. **MessageRoutingService**
+2. **MessageRoutingService**
    - AOプロセス間メッセージング
    - ブロードキャスト通信
    - オンラインプロセス発見
-
-4. **ArweaveStorageService**
-   - Arweaveへのデータ永続化
-   - トランザクション管理
-   - データ取得と検証
 
 ### 3.3 Workflow Services
 
@@ -158,8 +144,8 @@ graph TB
 |---------|------|-----|
 | Controller | メッセージ受信・検証・レスポンス生成 | MessageHandler, BrowserController |
 | Workflow Service | ビジネスフロー制御・トランザクション管理 | Phase別の処理フロー |
-| Core Service | 基本操作・共通機能 | 暗号化、ストレージ操作 |
-| Domain | エンティティ・ビジネスルール | ProcessEntity, ShareEntity |
+| Core Service | 基本操作・共通機能 | 暗号化、メッセージング |
+| Domain | エンティティ・ビジネスルール・プロセス管理 | ProcessEntity, ShareEntity |
 
 ### 4.2 依存関係の原則
 
@@ -174,6 +160,24 @@ graph TB
 3. **疎結合**
    - サービス間は最小限のインターフェースで連携
    - 将来の拡張性を確保
+
+### 4.3 プロセス管理のアプローチ
+
+D-TPRESでは、従来のProcessManagementServiceは実装せず、以下のアプローチでプロセス管理を行います：
+
+1. **Domain層でのビジネスロジック**
+   - ProcessEntityがプロセス状態管理のメソッドを提供
+   - ロール互換性チェック、信頼性スコア計算などはエンティティメソッドで実装
+
+2. **Repository層での永続化**
+   - ProcessEntityRepositoryがプロセス状態の保存・取得を担当
+   - AOステートレス環境に適した状態管理
+
+3. **Workflow層での直接管理**
+   - 各WorkflowServiceがRepository層を直接利用
+   - 必要なビジネスロジックをワークフロー内で実装
+
+これにより、AOのメッセージ駆動・ステートレス実行環境に適合した、シンプルで保守性の高い設計を実現します。
 
 ## 5. エラーハンドリング戦略
 
@@ -268,4 +272,20 @@ pub enum SystemException {
 
 ## 9. まとめ
 
-D-TPRESのService層は、TERASOLUNAガイドラインに基づきながら、AO環境の特性を考慮した独自の設計を採用しています。Core ServiceとWorkflow Serviceの2層構造により、高い再利用性と保守性を実現し、将来の拡張にも対応可能な柔軟なアーキテクチャとなっています。
+D-TPRESのService層は、TERASOLUNAガイドラインに基づきながら、AO環境の特性を考慮した独自の設計を採用しています。
+
+### 主要な設計特徴
+
+1. **AOステートレス環境への適応**
+   - メッセージ駆動・ステートレス実行に最適化
+   - 複雑な状態管理サービスを排除し、ドメイン層とRepository層で管理
+
+2. **シンプルなCore Service構成**
+   - CryptoServiceとMessageRoutingServiceの2つに集約
+   - 各サービスの責務を明確化
+
+3. **Workflow中心のビジネスロジック**
+   - PRDフェーズ別の処理をWorkflow Serviceで実装
+   - Core ServiceとDomain層を直接組み合わせて柔軟性を確保
+
+この設計により、高い再利用性と保守性を実現し、AOプラットフォームの制約下でも効率的なD-TPRES暗号システムを構築できます。

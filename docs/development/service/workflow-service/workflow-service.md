@@ -22,34 +22,47 @@ graph TB
         WS3[ReencryptionWorkflow]
         WS4[SecretRecoveryWorkflow]
     end
-    
+
     subgraph "Core Services"
         CS1[CryptoService]
-        CS2[ProcessManagementService]
         CS3[MessageRoutingService]
     end
-    
+
     subgraph "Repository Layer"
         R[Repository Interfaces]
     end
-    
+
     WS1 --> CS1
-    WS1 --> CS2
     WS1 --> R
-    
-    WS2 --> CS2
+
     WS2 --> CS3
     WS2 --> R
-    
+
     WS3 --> CS1
-    WS3 --> CS2
     WS3 --> CS3
     WS3 --> R
-    
+
     WS4 --> CS1
-    WS4 --> CS3
     WS4 --> R
 ```
+
+### 2.3 プロセス管理のアプローチ
+
+D-TPRESでは、AOのステートレス実行環境に適応するため、ProcessManagementServiceを実装せず、以下のアプローチでプロセス管理を行います：
+
+1. **Domain層でのビジネスロジック**
+   - ProcessEntityがプロセス状態管理のメソッドを提供
+   - ロール互換性チェック、信頼性スコア計算などはエンティティメソッドで実装
+
+2. **Repository層での永続化**
+   - ProcessEntityRepositoryがプロセス状態の保存・取得を担当
+   - AOステートレス環境に適した状態管理
+
+3. **Workflow層での直接管理**
+   - 各WorkflowServiceがRepository層を直接利用
+   - 必要なビジネスロジックをワークフロー内で実装
+
+これにより、AOのメッセージ駆動・ステートレス実行環境に適合した、シンプルで保守性の高い設計を実現します。
 
 ## 3. SecretSharingWorkflowService (Phase 1)
 
@@ -123,7 +136,6 @@ pub struct SecretSharingResult {
 ```rust
 pub struct SecretSharingWorkflowServiceImpl {
     crypto_service: Arc<dyn CryptoService>,
-    process_service: Arc<dyn ProcessManagementService>,
     share_repository: Arc<dyn ShareEntityRepository>,
     capsule_repository: Arc<dyn CapsuleEntityRepository>,
     secret_details_repository: Arc<dyn SecretDetailsEntityRepository>,
@@ -220,19 +232,20 @@ impl SecretSharingWorkflowService for SecretSharingWorkflowServiceImpl {
         
         arweave_txs.push(format!("secret-details-{}", secret_id));
         
-        // 6. ProcessEntityの更新（Repository経由）
+        // 6. ProcessEntityの更新（Repository層で直接管理）
         let mut process = self.process_repository
             .find_by_id(&secret_details.owner_process_id)
             .await
             .map_err(|e| WorkflowError::RepositoryError(e))?
             .ok_or(WorkflowError::ValidationError("Process not found".into()))?;
-        
+
+        // ProcessEntityのドメインメソッドを使用
         process.add_secret_index(SecretIndex {
             secret_id: secret_id.clone(),
             created_at: current_timestamp(),
             status: SecretStatus::Active,
-        });
-        
+        })?;
+
         self.process_repository
             .update(&process)
             .await
@@ -355,10 +368,10 @@ pub struct VerificationContext {
 
 ```rust
 pub struct AccessRequestWorkflowServiceImpl {
-    process_service: Arc<dyn ProcessManagementService>,
     routing_service: Arc<dyn MessageRoutingService>,
     secret_details_repository: Arc<dyn SecretDetailsEntityRepository>,
     proof_package_repository: Arc<dyn ProofPackageRepository>,
+    process_repository: Arc<dyn ProcessEntityRepository>,
 }
 
 #[async_trait]
@@ -528,11 +541,12 @@ pub struct ReencryptionRequest {
 ```rust
 pub struct ReencryptionWorkflowServiceImpl {
     crypto_service: Arc<dyn CryptoService>,
-    process_service: Arc<dyn ProcessManagementService>,
     routing_service: Arc<dyn MessageRoutingService>,
     kfrag_repository: Arc<dyn KeyFragmentEntityRepository>,
     cfrag_set_repository: Arc<dyn CFragSetEntityRepository>,
     capsule_repository: Arc<dyn CapsuleEntityRepository>,
+    process_repository: Arc<dyn ProcessEntityRepository>,
+    secret_details_repository: Arc<dyn SecretDetailsEntityRepository>,
 }
 
 impl ReencryptionWorkflowServiceImpl {
@@ -557,11 +571,13 @@ impl ReencryptionWorkflowServiceImpl {
             )
             .await?;
         
-        // 3. Holder選定
-        let holders = self.select_holders(
-            request.total_fragments as usize,
-            MIN_HOLDER_CAPACITY,
-        ).await?;
+        // 3. Holder選定（Repository層を直接使用）
+        let holders = self.routing_service
+            .discover_online_processes(
+                Some(ProcessRole::Holder { capacity: 0 }),
+                Some(MIN_HOLDER_CAPACITY),
+            )
+            .await?;
         
         // 4. kFrag配布
         let mut distribution_results = Vec::new();
