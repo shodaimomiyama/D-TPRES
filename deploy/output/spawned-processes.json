@@ -1,0 +1,38 @@
+{
+  "metadata": {
+    "createdAt": 1758923509628,
+    "version": "0.1.0-mvp",
+    "description": "D-TPRES MVP Process Registry"
+  },
+  "processes": {
+    "owner": {
+      "id": "dtpres-owner-1758923509627-f54b5127",
+      "type": "owner",
+      "status": "active",
+      "tags": {
+        "Data-Protocol": "DTPRES",
+        "Type": "Owner-Process",
+        "Version": "0.1.0-mvp"
+      },
+      "spawnedAt": 1758923509628,
+      "lastActivity": 1758923509628
+    },
+    "holders": [
+      {
+        "id": "dtpres-holder-0-1758923509628-9f5a17cd",
+        "type": "holder",
+        "index": 0,
+        "status": "active",
+        "tags": {
+          "Data-Protocol": "DTPRES",
+          "Type": "Holder-Process",
+          "Index": "0",
+          "Version": "0.1.0-mvp"
+        },
+        "spawnedAt": 1758923509628,
+        "lastActivity": 1758923509628,
+        "storedKFrags": []
+      }
+    ]
+  }
+}

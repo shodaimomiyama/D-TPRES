@@ -12,6 +12,10 @@ use cosmwasm_std::{
 pub mod domain;
 pub mod usecase;
 pub mod ao;
+pub mod crypto_core;
+
+#[cfg(feature = "local")]
+pub mod local;
 
 // Conditional compilation for service module
 #[cfg(not(target_arch = "wasm32"))]
@@ -22,7 +26,7 @@ pub mod service;
 pub mod service;
 
 // Import crypto service
-use crate::service::core::crypto::{CryptoService, CryptoServiceImpl};
+use crate::crypto_core::{CryptoService, CryptoServiceImpl};
 
 /// Contract instantiation message
 #[cw_serde]
@@ -246,9 +250,9 @@ fn execute_setup_encryption(
     let serialized_kfrags: Vec<SerializedKeyFragment> = kfrags.into_iter()
         .map(|kf| SerializedKeyFragment {
             id: kf.id,
-            key_data: kf.key_data,
-            verification_data: kf.verification_data,
-            precursor: kf.precursor,
+            key_data: kf.key_data.clone(),
+            verification_data: kf.verification_data.clone(),
+            precursor: kf.precursor.clone(),
         })
         .collect();
     
