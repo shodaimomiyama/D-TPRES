@@ -6,12 +6,32 @@
 
 ### 1.1 秘密データの重要性
 
-D-TPRESにおける秘密データは、システムの中核となる保護対象です：
+D-TPRESにおける秘密データは、分散型暗号学的秘密管理ライブラリの中核となる保護対象です：
 
 - **機密性**: Threshold Proxy Re-Encryptionによる保護
 - **可用性**: k-of-n閾値による分散管理
 - **完全性**: 暗号学的検証による改ざん防止
 - **追跡可能性**: 全操作の監査ログ
+- **AOステートレス対応**: メッセージ間でのメモリ非持続性への対応
+- **外部アクセス制御前提**: pk_A検証は外部システムで完了済みと仮定
+
+### 1.2 アーキテクチャ概要
+
+D-TPRESの秘密ライフサイクルは、以下のコンポーネント間で管理されます：
+
+#### ブラウザ環境
+- **O-Browser**: 秘密の作成、分割、暗号化を実行するデータ所有者のフロントエンド
+- **R-Browser**: cFrag収集、復号、秘密復元を実行するデータ利用者のフロントエンド
+
+#### AOプロセス群
+- **Owner-Process**: kFragの配布とHolder選択を担当
+- **Holder-Process**: kFragの保管と再暗号化（cFrag生成）を実行
+- **Requester-Process**: cFragの収集とR-Browserへの配信を調整
+
+#### 実行環境の特性
+- **メッセージベース動的ロール**: 単一WASMバイナリがメッセージの役割指定により異なる動作を実行
+- **ステートレス実行**: AOネットワークではメッセージ間でメモリが持続しない
+- **Arweave永続化**: 全ての状態とデータはArweaveに永続的に保存
 
 ## 2. 秘密データライフサイクル全体像
 
@@ -20,713 +40,663 @@ D-TPRESにおける秘密データは、システムの中核となる保護対�
 ```mermaid
 stateDiagram-v2
     [*] --> Creating: Create Secret
-    
+
     Creating --> Encrypting: Encrypt Data
     Encrypting --> Splitting: Generate Shares
     Splitting --> Distributing: Distribute kFrags
     Distributing --> Accessible: All kFrags Stored
-    
+
     Accessible --> Requesting: Access Request
-    Requesting --> Verifying: EVM Verification
+    Requesting --> Verifying: External Verification
     Verifying --> Reencrypting: Approved
     Verifying --> Denied: Rejected
-    
+
     Reencrypting --> Collecting: Generate cFrags
     Collecting --> Recovering: Threshold Met
     Recovering --> Recovered: Secret Restored
-    
+
     Accessible --> Expiring: TTL Expired
     Expiring --> Expired: Grace Period End
-    
+
     Recovered --> Destroying: Delete Request
     Expired --> Destroying: Cleanup
     Denied --> Accessible: New Request
-    
+
     Destroying --> Destroyed: All Fragments Deleted
     Destroyed --> [*]
-    
+
+    note right of Creating
+        O-Browser: ローカル秘密作成
+        PRD PHASE 1 開始
+    end note
+
+    note right of Encrypting
+        O-Browser: Umbral暗号化
+        Capsule生成
+    end note
+
+    note right of Splitting
+        O-Browser: Shamir分散
+        暗号化シェア生成
+    end note
+
+    note right of Distributing
+        Owner-Process: kFrag配布
+        RandAO Holder選択
+    end note
+
     note right of Accessible
         秘密がアクセス可能な定常状態
         複数の同時アクセス要求を処理可能
+        外部アクセス制御は検証済み前提
     end note
-    
+
     note right of Reencrypting
-        k-of-n Holderによる
-        並列再暗号化処理
+        Holder-Process: 並列再暗号化
+        Requester-Process: 調整
+        PRD PHASE 3 実行
+    end note
+
+    note right of Recovering
+        R-Browser: 秘密復元
+        PRD PHASE 3 完了
     end note
 ```
 
 ### 2.2 フェーズ定義
 
-| フェーズ | 状態 | 説明 | 責任ロール |
-|---------|------|------|-----------|
-| **Phase 1** | Creating | 秘密データの作成開始 | Owner |
-| **Phase 1** | Encrypting | Umbralによる暗号化 | Owner |
-| **Phase 1** | Splitting | Shamir Secret Sharingによる分割 | Owner |
-| **Phase 3** | Distributing | kFragの配布 | Owner → Holders |
-| **Phase 2-5** | Accessible | アクセス可能な定常状態 | All |
-| **Phase 2** | Requesting | アクセス要求の作成 | Requester |
-| **Phase 2** | Verifying | スマートコントラクト検証 | System |
-| **Phase 4** | Reencrypting | プロキシ再暗号化 | Holders |
-| **Phase 4** | Collecting | cFragの収集 | Requester |
-| **Phase 5** | Recovering | 秘密の復元処理 | Requester |
-| **Phase 5** | Recovered | 復元完了 | Requester |
+| PRDフェーズ | 状態 | 説明 | 責任コンポーネント |
+|-----------|------|------|-------------------|
+| **PHASE 1** | Creating | 秘密データの作成開始 | O-Browser |
+| **PHASE 1** | Encrypting | Umbralによる暗号化 | O-Browser |
+| **PHASE 1** | Splitting | Shamir Secret Sharingによる分割 | O-Browser |
+| **PHASE 2** | Distributing | kFragの配布 | Owner-Process → Holder-Process |
+| **- ** | Accessible | アクセス可能な定常状態 | All Components |
+| **PHASE 3** | Requesting | アクセス要求の作成 | R-Browser |
+| **PHASE 3** | Verifying | 外部アクセス制御検証（完了済み前提） | External System |
+| **PHASE 3** | Reencrypting | プロキシ再暗号化 | Holder-Process |
+| **PHASE 3** | Collecting | cFragの収集 | Requester-Process |
+| **PHASE 3** | Recovering | 秘密の復元処理 | R-Browser |
+| **PHASE 3** | Recovered | 復元完了 | R-Browser |
 | **管理** | Expiring | 有効期限切れ処理中 | System |
 | **管理** | Expired | 有効期限切れ | System |
-| **管理** | Denied | アクセス拒否 | System |
-| **終了** | Destroying | 破棄処理中 | Owner/System |
+| **管理** | Denied | アクセス拒否 | External System |
+| **終了** | Destroying | 破棄処理中 | Owner-Process/System |
 | **終了** | Destroyed | 破棄完了 | System |
 
-## 3. Phase 1: 秘密の作成と分割
+## 3. Phase 1: 秘密の作成と分割（PRD PHASE 1）
 
-### 3.1 Create Secret
+PRD.mdのPHASE 1に対応する処理フローです。O-Browserでローカル処理を行い、Owner-ProcessでkFragの配布を実行します。
+
+### 3.1 秘密生成（O-Browser）
 
 ```rust
-/// 秘密作成の初期化
-pub async fn initialize_secret_creation(
-    owner_id: &ProcessId,
-    secret_params: SecretCreationParams,
-) -> Result<SecretId, CreationError> {
-    // Ownerロールの検証
-    let owner_process = verify_owner_role(owner_id).await?;
-    
-    // 秘密IDの生成
-    let secret_id = SecretId::generate();
-    
-    // 初期メタデータの作成
-    let metadata = SecretMetadata {
-        secret_id: secret_id.clone(),
-        owner_id: owner_id.clone(),
-        created_at: SystemTime::now(),
-        threshold_k: secret_params.threshold_k,
-        threshold_n: secret_params.threshold_n,
-        access_conditions: secret_params.access_conditions,
-        expiration: secret_params.expiration,
-        state: SecretState::Creating,
-    };
-    
-    // メタデータの永続化
-    save_secret_metadata(&metadata).await?;
-    
-    Ok(secret_id)
+/// O-Browserでの秘密生成 - PRD Step 1-1
+pub fn generate_owner_keys_and_secret(
+    secret_data: &[u8],
+) -> Result<OwnerSecrets, CreationError> {
+    // PRE鍵ペアの生成：秘密鍵 skₒ(PRE), 公開鍵 pkₒ(PRE)
+    let (signing_key, verifying_key) = generate_pre_keypair()?;
+
+    // 共通鍵 kₒ の生成
+    let common_key = generate_symmetric_key()?;
+
+    // 秘密 f(0) = secret の設定
+    let secret = Secret::new(secret_data.to_vec());
+
+    Ok(OwnerSecrets {
+        pre_signing_key: signing_key,
+        pre_verifying_key: verifying_key,
+        common_key,
+        secret,
+        created_at: current_timestamp(),
+    })
 }
 ```
 
-### 3.2 Encrypt Data
+### 3.2 シャミア秘密分散（O-Browser）
 
 ```rust
-/// Umbral暗号化の実行
-pub async fn encrypt_secret_data(
-    secret_id: &SecretId,
-    plaintext: &[u8],
-    owner_public_key: &PublicKey,
-) -> Result<EncryptionResult, EncryptionError> {
-    // 状態確認
-    verify_secret_state(secret_id, SecretState::Creating).await?;
-    update_secret_state(secret_id, SecretState::Encrypting).await?;
-    
-    // Umbral暗号化
-    let (ciphertext, capsule) = umbral_encrypt(plaintext, owner_public_key)?;
-    
-    // 暗号化結果の構造体
-    let result = EncryptionResult {
-        secret_id: secret_id.clone(),
-        ciphertext,
-        capsule: capsule.clone(),
-        ciphertext_hash: compute_hash(&ciphertext),
-        encryption_timestamp: SystemTime::now(),
-    };
-    
-    // カプセルの永続化
-    let capsule_entity = CapsuleEntity {
-        capsule_id: generate_capsule_id(&capsule),
-        secret_id: secret_id.clone(),
-        capsule_data: serialize_capsule(&capsule)?,
-        verifying_key: derive_verifying_key(owner_public_key),
-        created_at: SystemTime::now(),
-    };
-    
-    save_capsule_entity(&capsule_entity).await?;
-    
-    Ok(result)
-}
-```
-
-### 3.3 Split Secret
-
-```rust
-/// Shamir Secret Sharingによる秘密分割
-pub async fn split_secret(
-    secret_id: &SecretId,
-    secret_key: &SecretKey,
+/// シャミア秘密分散による秘密分割 - PRD Step 1-2
+pub fn split_secret_with_shamir(
+    secret: &Secret,
     threshold_k: u8,
     threshold_n: u8,
-) -> Result<SplitResult, SplitError> {
+) -> Result<ShamirShares, SplitError> {
     // パラメータ検証
-    validate_threshold_params(threshold_k, threshold_n)?;
-    
-    // 状態更新
-    update_secret_state(secret_id, SecretState::Splitting).await?;
-    
-    // Shamir's Secret Sharing
-    let shares = shamir_split(secret_key, threshold_k, threshold_n)?;
-    
-    // 各シェアのエンティティ作成
-    let mut share_entities = Vec::new();
-    for (index, share) in shares.iter().enumerate() {
-        let share_entity = ShareEntity {
-            share_id: generate_share_id(secret_id, index),
-            secret_id: secret_id.clone(),
-            share_index: index as u8,
-            encrypted_share: encrypt_share(share, &get_system_key()).await?,
-            share_hash: compute_share_hash(share),
-            created_at: SystemTime::now(),
-            holder_assignment: None, // 後で割り当て
-        };
-        share_entities.push(share_entity);
+    if threshold_k > threshold_n || threshold_k == 0 {
+        return Err(SplitError::InvalidThreshold);
     }
-    
-    // シェアの永続化
-    batch_save_shares(&share_entities).await?;
-    
-    // 検証情報の生成
-    let verification_data = generate_share_verification_data(&shares)?;
-    
-    Ok(SplitResult {
-        secret_id: secret_id.clone(),
-        share_count: threshold_n,
-        threshold: threshold_k,
-        share_ids: share_entities.iter().map(|s| s.share_id.clone()).collect(),
-        verification_data,
+
+    // Shamir Secret Sharing: f(0) → f(1)...f(n)
+    let shares = shamir_split(&secret.expose_secret(), threshold_k, threshold_n)?;
+
+    Ok(ShamirShares {
+        threshold_k,
+        threshold_n,
+        shares,
+        generated_at: current_timestamp(),
     })
 }
 ```
 
-### 3.4 Generate and Distribute kFrags
+### 3.3 暗号化シェア生成（O-Browser）
 
 ```rust
-/// 再暗号化キーフラグメントの生成と配布
-pub async fn generate_and_distribute_kfrags(
-    secret_id: &SecretId,
-    owner_signing_key: &SigningKey,
-    holder_public_keys: Vec<(ProcessId, PublicKey)>,
-) -> Result<DistributionResult, DistributionError> {
-    // 状態更新
-    update_secret_state(secret_id, SecretState::Distributing).await?;
-    
-    // カプセルの取得
-    let capsule = load_capsule(secret_id).await?;
-    
-    // 各Holder用のkFrag生成
-    let mut distributions = Vec::new();
-    for (holder_id, holder_pub_key) in holder_public_keys {
-        // 再暗号化キーの生成
-        let reencryption_key = generate_reencryption_key(
-            owner_signing_key,
-            &holder_pub_key,
-        )?;
-        
-        // kFragの生成
-        let kfrag = generate_kfrag(
-            &reencryption_key,
-            &capsule,
-            owner_signing_key,
-            &holder_pub_key,
-        )?;
-        
-        // kFragエンティティの作成
-        let kfrag_entity = RekeyFragmentEntity {
-            kfrag_id: generate_kfrag_id(secret_id, &holder_id),
-            secret_id: secret_id.clone(),
-            holder_id: holder_id.clone(),
-            encrypted_kfrag: encrypt_kfrag(&kfrag, &holder_pub_key)?,
-            kfrag_signature: sign_kfrag(&kfrag, owner_signing_key)?,
-            created_at: SystemTime::now(),
-            expires_at: calculate_kfrag_expiration(),
-            is_active: true,
-        };
-        
-        // Holderへの配布メッセージ
-        let distribution_msg = create_kfrag_distribution_message(
-            &holder_id,
-            &kfrag_entity,
-        );
-        
-        distributions.push((kfrag_entity, distribution_msg));
-    }
-    
-    // バッチ保存と配布
-    let saved_kfrags = batch_save_kfrags(
-        distributions.iter().map(|(e, _)| e.clone()).collect()
-    ).await?;
-    
-    // 非同期配布
-    let distribution_futures: Vec<_> = distributions.into_iter()
-        .map(|(entity, msg)| async move {
-            distribute_kfrag_to_holder(entity, msg).await
-        })
-        .collect();
-    
-    let distribution_results = futures::future::join_all(distribution_futures).await;
-    
-    // 成功したHolder IDのリスト
-    let successful_holders = distribution_results.iter()
-        .filter_map(|r| r.as_ref().ok())
-        .cloned()
-        .collect::<Vec<_>>();
-    
-    // 閾値チェック
-    if successful_holders.len() < secret_id.threshold_k as usize {
-        return Err(DistributionError::InsufficientHolders {
-            required: secret_id.threshold_k,
-            successful: successful_holders.len(),
+/// 暗号化シェア生成とカプセル作成 - PRD Step 1-3, 1-4
+pub fn create_encrypted_shares_and_capsule(
+    shares: &ShamirShares,
+    common_key: &SymmetricKey,
+    pre_verifying_key: &VerifyingKey,
+) -> Result<EncryptedSharesAndCapsule, EncryptionError> {
+    // 暗号化シェア生成: n個の Cᵢ = AES_GCM(kₒ, f(i))
+    let mut encrypted_shares = Vec::new();
+    for (index, share) in shares.shares.iter().enumerate() {
+        let encrypted_share = aes_gcm_encrypt(common_key, share)?;
+        encrypted_shares.push(EncryptedShare {
+            index: index as u8 + 1, // f(1)からf(n)
+            ciphertext: encrypted_share,
+            tag: generate_share_tag(index as u8 + 1),
         });
     }
-    
-    // 状態をAccessibleに更新
-    update_secret_state(secret_id, SecretState::Accessible).await?;
-    
-    Ok(DistributionResult {
-        secret_id: secret_id.clone(),
-        total_holders: holder_public_keys.len(),
-        successful_distributions: successful_holders.len(),
-        failed_distributions: distribution_results.iter().filter(|r| r.is_err()).count(),
-        distribution_map: successful_holders,
+
+    // カプセル生成: Capsuleₒ = PRE_Enc(pkₒ, kₒ)
+    let capsule = pre_encrypt(common_key.as_bytes(), pre_verifying_key)?;
+
+    Ok(EncryptedSharesAndCapsule {
+        encrypted_shares,
+        capsule,
+        threshold_k: shares.threshold_k,
+        threshold_n: shares.threshold_n,
+        created_at: current_timestamp(),
     })
 }
+```
 
-/// Holderへの非同期kFrag配布
-async fn distribute_kfrag_to_holder(
-    kfrag_entity: RekeyFragmentEntity,
-    message: Message,
-) -> Result<ProcessId, DistributionError> {
-    // タイムアウト付き送信
-    match timeout(DISTRIBUTION_TIMEOUT, send_to_holder(message)).await {
-        Ok(Ok(response)) if is_acknowledgment(&response) => {
-            Ok(kfrag_entity.holder_id)
+### 3.4 再暗号化キー生成（O-Browser）
+
+```rust
+/// 再暗号化キー生成 - PRD Step 1-5, 1-6, 1-7
+pub fn generate_reencryption_key_fragments(
+    pre_signing_key: &SigningKey,
+    requester_public_key: &VerifyingKey, // 外部アクセス制御で検証済みのpkᴬ
+    threshold_k: u8,
+    threshold_n: u8,
+) -> Result<KFragCollection, ReKeyError> {
+    // 再暗号化キー生成: rekey = PRE_ReKey(skₒ → pkᴬ)
+    let rekey = generate_reencryption_key(pre_signing_key, requester_public_key)?;
+
+    // kFrag生成: kFragⱼ = Shamir_Split(rekey, k, n)
+    let kfrags = shamir_split_rekey(&rekey, threshold_k, threshold_n)?;
+
+    Ok(KFragCollection {
+        kfrags,
+        threshold_k,
+        threshold_n,
+        requester_public_key: requester_public_key.clone(),
+        generated_at: current_timestamp(),
+    })
+}
+```
+
+### 3.5 Owner-Process配布（AO Network）
+
+```rust
+/// Owner-ProcessでのkFrag配布 - PRD Step 1-8
+pub fn handle_owner_distribute_kfrags(
+    msg: AOMessage,
+    repository: &dyn Repository,
+) -> Result<AOResponse, HandlerError> {
+    // メッセージから配布データを取得
+    let kfrag_data: KFragCollection = serde_json::from_slice(&msg.data)?;
+
+    // RandAOを利用してn個のHolder-Processを選出
+    let selected_holders = select_holders_with_randao(
+        kfrag_data.threshold_n,
+        &repository.get_available_holders()?
+    )?;
+
+    // 各Holder-Processに kFragⱼ と署名を送信
+    let mut distribution_results = Vec::new();
+    for (holder_id, kfrag) in selected_holders.into_iter().zip(kfrag_data.kfrags.iter()) {
+        let distribution_msg = create_holder_message(
+            "store-kfrag",
+            &DistributeKFragData {
+                kfrag: kfrag.clone(),
+                signature: sign_kfrag(kfrag, &msg.sender)?,
+                expiration: calculate_expiration(),
+            }
+        )?;
+
+        // メッセージ送信（AO Network）
+        let result = send_ao_message(&holder_id, distribution_msg)?;
+        distribution_results.push((holder_id, result));
+    }
+
+    Ok(AOResponse::success("kFrags distributed successfully"))
+}
+```
+
+### 3.6 Arweave永続化
+
+```rust
+/// CapsuleとCᵢをArweaveに保存 - PRD Step 1-9
+pub async fn store_capsule_and_shares_to_arweave(
+    capsule: &Capsule,
+    encrypted_shares: &[EncryptedShare],
+    tags: &ArweaveTags,
+) -> Result<ArweaveStorageResult, StorageError> {
+    // Capsuleₒの保存
+    let capsule_tx_id = store_data_to_arweave(
+        &serialize_capsule(capsule)?,
+        &create_capsule_tags(tags)
+    ).await?;
+
+    // n個のCᵢの保存
+    let mut share_tx_ids = Vec::new();
+    for (index, share) in encrypted_shares.iter().enumerate() {
+        let share_tx_id = store_data_to_arweave(
+            &share.ciphertext,
+            &create_share_tags(tags, index as u8 + 1)
+        ).await?;
+        share_tx_ids.push(share_tx_id);
+    }
+
+    Ok(ArweaveStorageResult {
+        capsule_tx_id,
+        share_tx_ids,
+        stored_at: current_timestamp(),
+    })
+}
+```
+
+## 4. PHASE 2: キーフラグメントの分散管理（PRD PHASE 2）
+
+PRD.mdのPHASE 2に対応：Holder-ProcessでのkFrag受信、保存、cFrag生成を実行します。
+
+### 4.1 Holder-ProcessでのkFrag受信・保存
+
+```rust
+/// Holder-ProcessでのkFrag受信・保存 - PRD Step 2-3
+pub fn handle_holder_store_kfrag(
+    msg: AOMessage,
+    repository: &dyn Repository,
+) -> Result<AOResponse, HandlerError> {
+    // kFragデータの取得
+    let kfrag_data: DistributeKFragData = serde_json::from_slice(&msg.data)?;
+
+    // 署名検証
+    verify_kfrag_signature(&kfrag_data.kfrag, &kfrag_data.signature, &msg.sender)?;
+
+    // kFragをArweaveに保存
+    let storage_result = repository.store_kfrag(KFragEntity {
+        kfrag_id: generate_kfrag_id(),
+        holder_process_id: msg.process_id.clone(),
+        owner_process_id: msg.sender.clone(),
+        encrypted_kfrag: kfrag_data.kfrag,
+        signature: kfrag_data.signature,
+        stored_at: current_timestamp(),
+        expires_at: kfrag_data.expiration,
+        status: KFragStatus::Active,
+    })?;
+
+    Ok(AOResponse::success("kFrag stored successfully"))
+}
+```
+
+### 4.2 Capsule取得と準備
+
+```rust
+/// ArweaveからCapsuleₒを取得 - PRD Step 2-4
+pub fn handle_holder_prepare_reencryption(
+    msg: AOMessage,
+    repository: &dyn Repository,
+) -> Result<AOResponse, HandlerError> {
+    let request_data: PrepareReencryptionData = serde_json::from_slice(&msg.data)?;
+
+    // ArweaveからCapsuleₒを取得
+    let capsule = repository.load_capsule_by_tags(&request_data.capsule_tags)?;
+
+    // kFragの存在確認
+    let kfrag = repository.load_kfrag(&request_data.kfrag_id)?;
+
+    // 準備完了状態に更新
+    repository.update_holder_status(
+        &msg.process_id,
+        HolderStatus::ReadyForReencryption {
+            capsule: capsule.clone(),
+            kfrag_id: request_data.kfrag_id,
         }
-        Ok(Ok(_)) => Err(DistributionError::InvalidResponse),
-        Ok(Err(e)) => Err(DistributionError::SendFailed(e)),
-        Err(_) => Err(DistributionError::Timeout),
+    )?;
+
+    Ok(AOResponse::success("Ready for reencryption"))
+}
+```
+
+### 4.3 cFrag生成
+
+```rust
+/// cFrag生成と保存 - PRD Step 2-5, 2-6
+pub fn handle_holder_generate_cfrag(
+    msg: AOMessage,
+    repository: &dyn Repository,
+) -> Result<AOResponse, HandlerError> {
+    let reencryption_request: ReencryptionRequest = serde_json::from_slice(&msg.data)?;
+
+    // Holder状態の確認
+    let holder_status = repository.load_holder_status(&msg.process_id)?;
+
+    match holder_status {
+        HolderStatus::ReadyForReencryption { capsule, kfrag_id } => {
+            // kFragの取得
+            let kfrag_entity = repository.load_kfrag(&kfrag_id)?;
+
+            // cFrag生成: cFragⱼ = PRE_ReEnc(kFragⱼ, Capsuleₒ)
+            let cfrag = pre_reencrypt(
+                &kfrag_entity.encrypted_kfrag,
+                &capsule,
+                &reencryption_request.requester_public_key
+            )?;
+
+            // cFragをArweaveに保存
+            let cfrag_entity = CFragEntity {
+                cfrag_id: generate_cfrag_id(),
+                holder_process_id: msg.process_id.clone(),
+                requester_process_id: reencryption_request.requester_process_id,
+                cfrag_data: cfrag,
+                generated_at: current_timestamp(),
+                associated_kfrag_id: kfrag_id,
+            };
+
+            repository.store_cfrag(cfrag_entity.clone())?;
+
+            Ok(AOResponse::success_with_data(
+                "cFrag generated and stored",
+                &cfrag_entity.cfrag_id
+            ))
+        }
+        _ => Err(HandlerError::InvalidState("Holder not ready for reencryption"))
     }
 }
 ```
 
-## 4. Phase 2-5: アクセスと復元
+## 5. PHASE 3: 秘密の復元（PRD PHASE 3）
 
-### 4.1 Access Request
+PRD.mdのPHASE 3に対応：R-Browserでのアクセス要求、cFrag収集、秘密復元を実行します。
+
+### 5.1 R-Browserでのアクセス要求
 
 ```rust
-/// アクセス要求の作成
-pub async fn create_access_request(
+/// R-Browserでの復元要求 - PRD Step 3-1
+pub fn initiate_recovery_request(
+    requester_private_key: &SigningKey,
+    requester_public_key: &VerifyingKey, // 外部アクセス制御で検証済み
     secret_id: &SecretId,
-    requester_id: &ProcessId,
-    access_params: AccessRequestParams,
-) -> Result<AccessRequestId, RequestError> {
-    // 秘密の存在とアクセス可能性の確認
-    let secret = load_secret_metadata(secret_id).await?;
-    if secret.state != SecretState::Accessible {
-        return Err(RequestError::SecretNotAccessible);
-    }
-    
-    // 有効期限チェック
-    if let Some(expiration) = secret.expiration {
-        if SystemTime::now() > expiration {
-            return Err(RequestError::SecretExpired);
-        }
-    }
-    
-    // アクセス要求の作成
-    let request_id = AccessRequestId::generate();
-    let access_request = AccessRequestEntity {
-        request_id: request_id.clone(),
+) -> Result<RecoveryRequest, RequestError> {
+    // 外部アクセス制御は完了済み前提
+    // pk_Aは既に検証されているものとする
+
+    let recovery_request = RecoveryRequest {
         secret_id: secret_id.clone(),
-        requester_id: requester_id.clone(),
-        requester_public_key: access_params.requester_public_key,
-        access_conditions: access_params.conditions,
-        proof_commitment: access_params.proof_commitment,
-        created_at: SystemTime::now(),
-        expires_at: SystemTime::now() + ACCESS_REQUEST_TTL,
-        state: AccessState::Requesting,
-        threshold: secret.threshold_k,
+        requester_public_key: requester_public_key.clone(),
+        request_timestamp: current_timestamp(),
+        recovery_session_id: generate_session_id(),
     };
-    
-    // 永続化
-    save_access_request(&access_request).await?;
-    
-    // 状態更新（秘密は複数の同時アクセスを許可）
-    record_active_access_request(secret_id, &request_id).await?;
-    
-    Ok(request_id)
+
+    Ok(recovery_request)
 }
 ```
 
-### 4.2 EVM Verification
+### 5.2 Requester-ProcessでのcFrag収集
 
 ```rust
-/// スマートコントラクト検証
-pub async fn verify_access_with_evm(
-    request_id: &AccessRequestId,
-    proof: &EVMProof,
-) -> Result<VerificationResult, VerificationError> {
-    // アクセス要求の取得
-    let request = load_access_request(request_id).await?;
-    update_access_state(request_id, AccessState::Verifying).await?;
-    
-    // EVM検証の実行
-    let verification_result = match execute_evm_verification(
-        &request.access_conditions,
-        proof,
-        &request.requester_id,
-    ).await {
-        Ok(true) => {
-            // アクセス承認
-            update_access_state(request_id, AccessState::Approved).await?;
-            
-            // 再暗号化の準備
-            prepare_reencryption_context(&request).await?;
-            
-            VerificationResult::Approved {
-                request_id: request_id.clone(),
-                approved_at: SystemTime::now(),
-                valid_until: request.expires_at,
+/// Requester-ProcessでのcFrag収集 - PRD Step 3-2
+pub fn handle_requester_collect_cfrags(
+    msg: AOMessage,
+    repository: &dyn Repository,
+) -> Result<AOResponse, HandlerError> {
+    let recovery_request: RecoveryRequest = serde_json::from_slice(&msg.data)?;
+
+    // 利用可能なHolder-Processを特定
+    let available_holders = repository.find_holders_with_kfrags(&recovery_request.secret_id)?;
+
+    // k個以上のHolder-Processから cFragⱼ を収集
+    let mut collected_cfrags = Vec::new();
+    let required_threshold = repository.get_secret_threshold(&recovery_request.secret_id)?;
+
+    for holder_id in available_holders.iter() {
+        if collected_cfrags.len() >= required_threshold as usize {
+            break;
+        }
+
+        // Holder-Processにcfrag生成を要求
+        let cfrag_request = create_cfrag_request(
+            &recovery_request.secret_id,
+            &recovery_request.requester_public_key,
+            &msg.process_id
+        )?;
+
+        match send_ao_message(holder_id, cfrag_request) {
+            Ok(response) => {
+                if let Some(cfrag_id) = extract_cfrag_id(&response) {
+                    collected_cfrags.push(cfrag_id);
+                }
+            }
+            Err(e) => {
+                // ログ記録して次のHolderを試行
+                log_holder_error(holder_id, &e);
             }
         }
-        Ok(false) => {
-            // アクセス拒否
-            update_access_state(request_id, AccessState::Denied).await?;
-            
-            VerificationResult::Denied {
-                request_id: request_id.clone(),
-                reason: "Conditions not met".to_string(),
-                can_retry: true,
-            }
-        }
-        Err(e) => {
-            // 検証エラー
-            update_access_state(request_id, AccessState::Failed).await?;
-            
-            return Err(VerificationError::EVMError(e));
-        }
-    };
-    
-    // 監査ログ
-    audit_access_verification(&request, &verification_result).await?;
-    
-    Ok(verification_result)
-}
+    }
 
-/// EVM検証の実行
-async fn execute_evm_verification(
-    conditions: &AccessConditions,
-    proof: &EVMProof,
-    requester_id: &ProcessId,
-) -> Result<bool, EVMError> {
-    // elciao経由でのEVM呼び出し
-    let evm_provider = get_evm_provider().await?;
-    
-    // ProofPkgの構築
-    let proof_pkg = ProofPkg {
-        requester: requester_id.to_ethereum_address()?,
-        conditions: conditions.to_contract_format()?,
-        proof_data: proof.data.clone(),
-        timestamp: current_block_timestamp().await?,
-    };
-    
-    // スマートコントラクト呼び出し
-    let result = evm_provider
-        .verify_access(proof_pkg)
-        .await?;
-    
-    Ok(result)
-}
-```
-
-### 4.3 Proxy Re-encryption
-
-```rust
-/// プロキシ再暗号化の調整
-pub async fn coordinate_reencryption(
-    request_id: &AccessRequestId,
-) -> Result<ReencryptionResult, ReencryptionError> {
-    // アクセス要求の確認
-    let request = load_approved_request(request_id).await?;
-    update_secret_state(&request.secret_id, SecretState::Reencrypting).await?;
-    
-    // 利用可能なHolderの選択
-    let available_holders = select_available_holders(
-        &request.secret_id,
-        request.threshold * REDUNDANCY_FACTOR,
-    ).await?;
-    
-    // 並列再暗号化要求
-    let reencryption_futures: Vec<_> = available_holders
-        .into_iter()
-        .map(|holder_id| {
-            request_holder_reencryption(
-                holder_id,
-                request_id.clone(),
-                request.requester_public_key.clone(),
-            )
-        })
-        .collect();
-    
-    // タイムアウト付き収集
-    let collected_cfrags = collect_cfrags_with_timeout(
-        reencryption_futures,
-        request.threshold as usize,
-        REENCRYPTION_TIMEOUT,
-    ).await?;
-    
     // 閾値チェック
-    if collected_cfrags.len() < request.threshold as usize {
-        return Err(ReencryptionError::InsufficientCFrags {
-            required: request.threshold,
+    if collected_cfrags.len() < required_threshold as usize {
+        return Err(HandlerError::InsufficientCFrags {
+            required: required_threshold,
             collected: collected_cfrags.len(),
         });
     }
-    
-    // 状態更新
-    update_secret_state(&request.secret_id, SecretState::Accessible).await?;
-    update_access_state(request_id, AccessState::CFragsReady).await?;
-    
-    Ok(ReencryptionResult {
-        request_id: request_id.clone(),
-        cfrags_collected: collected_cfrags.len(),
-        threshold_met: true,
-        ready_for_recovery: true,
-    })
-}
 
-/// Holderへの再暗号化要求
-async fn request_holder_reencryption(
-    holder_id: ProcessId,
-    request_id: AccessRequestId,
-    requester_public_key: PublicKey,
-) -> Result<CipherFragment, ReencryptionError> {
-    let message = Message {
-        tags: vec![
-            ("Action", "Perform-Reencryption"),
-            ("Request-Id", &request_id.to_string()),
-            ("Requester-Public-Key", &base64::encode(&requester_public_key)),
-        ].into_iter()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect(),
-        data: vec![],
-        ..Default::default()
+    Ok(AOResponse::success_with_data(
+        "cFrags collected successfully",
+        &collected_cfrags
+    ))
+}
+```
+
+### 5.3 Requester-ProcessからR-Browserへの送信
+
+```rust
+/// Capsuleₒとk個のcFragⱼをR-Browserに送信 - PRD Step 3-3
+pub fn handle_requester_send_to_browser(
+    msg: AOMessage,
+    repository: &dyn Repository,
+) -> Result<AOResponse, HandlerError> {
+    let send_request: SendToBrowserRequest = serde_json::from_slice(&msg.data)?;
+
+    // Capsuleₒの取得
+    let capsule = repository.load_capsule(&send_request.secret_id)?;
+
+    // 収集されたcFragsの取得
+    let cfrags = repository.load_cfrags_by_ids(&send_request.cfrag_ids)?;
+
+    // データパッケージの作成
+    let recovery_package = RecoveryPackage {
+        capsule: capsule.clone(),
+        cfrags: cfrags.clone(),
+        secret_id: send_request.secret_id.clone(),
+        threshold_met: cfrags.len() >= send_request.required_threshold as usize,
+        package_id: generate_package_id(),
     };
-    
-    match send_to_process(&holder_id, message).await {
-        Ok(response) if is_cfrag_response(&response) => {
-            extract_cfrag_from_response(response)
-        }
-        Ok(_) => Err(ReencryptionError::InvalidHolderResponse),
-        Err(e) => Err(ReencryptionError::HolderCommunicationError(e)),
-    }
+
+    // R-Browserへの配信（実装は環境依存）
+    deliver_to_browser(&send_request.browser_endpoint, recovery_package)?;
+
+    Ok(AOResponse::success("Recovery package sent to R-Browser"))
 }
 ```
 
-### 4.4 Secret Recovery
+### 5.4 R-Browserでの秘密復元
 
 ```rust
-/// 秘密の復元
-pub async fn recover_secret(
-    request_id: &AccessRequestId,
-    requester_private_key: &PrivateKey,
-) -> Result<RecoveryResult, RecoveryError> {
-    // アクセス要求とcFragsの取得
-    let request = load_access_request(request_id).await?;
-    let cfrags = load_collected_cfrags(request_id).await?;
-    
-    // 状態更新
-    update_secret_state(&request.secret_id, SecretState::Recovering).await?;
-    update_access_state(request_id, AccessState::Recovering).await?;
-    
-    // カプセルとシェアの取得
-    let capsule = load_capsule(&request.secret_id).await?;
-    let encrypted_shares = load_encrypted_shares(&request.secret_id).await?;
-    
-    // Umbral復号（cFragsを使用）
-    let decrypted_key = umbral_decrypt_with_cfrags(
-        &capsule,
-        &cfrags,
-        requester_private_key,
+/// R-Browserでの秘密復元 - PRD Step 3-4〜3-8
+pub fn recover_secret_in_browser(
+    recovery_package: &RecoveryPackage,
+    requester_private_key: &SigningKey,
+) -> Result<RecoveredSecret, RecoveryError> {
+    // Capsule′結合処理: Capsule′ = PRE_Combine(Capsuleₒ, cFrag₁…k)
+    let combined_capsule = pre_combine_capsule_with_cfrags(
+        &recovery_package.capsule,
+        &recovery_package.cfrags
     )?;
-    
-    // シェアの復号
-    let decrypted_shares: Vec<_> = encrypted_shares
-        .into_iter()
-        .map(|share| decrypt_share(&share, &decrypted_key))
-        .collect::<Result<_, _>>()?;
-    
-    // Shamir's Secret Sharingによる秘密復元
-    let recovered_secret = shamir_reconstruct(
-        &decrypted_shares,
-        request.threshold,
-    )?;
-    
-    // 復元結果の検証
-    verify_recovered_secret(&recovered_secret, &request.secret_id).await?;
-    
-    // 状態更新
-    update_secret_state(&request.secret_id, SecretState::Recovered).await?;
-    update_access_state(request_id, AccessState::Completed).await?;
-    
-    // 監査ログ
-    audit_secret_recovery(&request, &recovered_secret).await?;
-    
-    Ok(RecoveryResult {
-        request_id: request_id.clone(),
-        secret_id: request.secret_id.clone(),
-        recovered_at: SystemTime::now(),
-        verification_hash: compute_secret_hash(&recovered_secret),
-    })
-}
 
-/// 復元された秘密の検証
-async fn verify_recovered_secret(
-    recovered_secret: &[u8],
-    secret_id: &SecretId,
-) -> Result<(), VerificationError> {
-    // メタデータから期待されるハッシュを取得
-    let metadata = load_secret_metadata(secret_id).await?;
-    
-    if let Some(expected_hash) = metadata.secret_hash {
-        let actual_hash = compute_secret_hash(recovered_secret);
-        if actual_hash != expected_hash {
-            return Err(VerificationError::HashMismatch {
-                expected: expected_hash,
-                actual: actual_hash,
-            });
+    // 復号処理: kₒ = PRE_Dec(skᴬ, Capsule′)
+    let common_key = pre_decrypt(&combined_capsule, requester_private_key)?;
+
+    // ArweaveからtagsベースでCᵢ (i=1...n)を取得
+    let encrypted_shares = fetch_encrypted_shares_from_arweave(&recovery_package.secret_id)?;
+
+    // シェア復号: f(i) = AES_DEC(kₒ, Cᵢ)でk個分復号
+    let mut decrypted_shares = Vec::new();
+    for (i, encrypted_share) in encrypted_shares.iter().enumerate() {
+        if decrypted_shares.len() >= recovery_package.cfrags.len() {
+            break; // k個のシェアで充分
         }
-    }
-    
-    Ok(())
-}
-```
 
-## 5. 有効期限管理
-
-### 5.1 Expiration Handling
-
-```rust
-/// 有効期限管理タスク
-pub async fn manage_secret_expiration() {
-    loop {
-        // 期限切れ間近の秘密を検索
-        let expiring_secrets = find_expiring_secrets(EXPIRATION_WARNING_PERIOD).await;
-        
-        for secret_id in expiring_secrets {
-            handle_expiring_secret(&secret_id).await;
-        }
-        
-        // 期限切れの秘密を処理
-        let expired_secrets = find_expired_secrets().await;
-        
-        for secret_id in expired_secrets {
-            handle_expired_secret(&secret_id).await;
-        }
-        
-        // 定期実行間隔
-        tokio::time::sleep(EXPIRATION_CHECK_INTERVAL).await;
-    }
-}
-
-/// 期限切れ間近の秘密の処理
-async fn handle_expiring_secret(secret_id: &SecretId) -> Result<(), ExpirationError> {
-    let metadata = load_secret_metadata(secret_id).await?;
-    
-    // 既に処理中の場合はスキップ
-    if metadata.state == SecretState::Expiring {
-        return Ok(());
-    }
-    
-    // 状態更新
-    update_secret_state(secret_id, SecretState::Expiring).await?;
-    
-    // オーナーへの通知
-    notify_owner_of_expiration(&metadata.owner_id, secret_id, &metadata.expiration).await?;
-    
-    // アクティブなアクセス要求の確認
-    let active_requests = find_active_access_requests(secret_id).await?;
-    
-    if !active_requests.is_empty() {
-        // 猶予期間の設定
-        extend_expiration_grace_period(secret_id, GRACE_PERIOD_DURATION).await?;
-        
-        // アクセス要求者への通知
-        for request in active_requests {
-            notify_requester_of_expiration(&request.requester_id, secret_id).await?;
-        }
-    }
-    
-    Ok(())
-}
-
-/// 期限切れ秘密の処理
-async fn handle_expired_secret(secret_id: &SecretId) -> Result<(), ExpirationError> {
-    // 状態更新
-    update_secret_state(secret_id, SecretState::Expired).await?;
-    
-    // 新規アクセス要求のブロック
-    block_new_access_requests(secret_id).await?;
-    
-    // 自動破棄ポリシーの確認
-    let metadata = load_secret_metadata(secret_id).await?;
-    
-    if metadata.auto_destroy_on_expiration {
-        // 自動破棄のスケジュール
-        schedule_automatic_destruction(secret_id, DESTRUCTION_DELAY).await?;
-    } else {
-        // オーナーへの破棄要求通知
-        request_owner_destruction_decision(&metadata.owner_id, secret_id).await?;
-    }
-    
-    Ok(())
-}
-```
-
-## 6. 秘密の破棄
-
-### 6.1 Destroy Secret
-
-```rust
-/// 秘密の破棄プロセス
-pub async fn destroy_secret(
-    secret_id: &SecretId,
-    destroyer_id: &ProcessId,
-    destruction_params: DestructionParams,
-) -> Result<DestructionResult, DestructionError> {
-    // 権限確認
-    verify_destruction_permission(secret_id, destroyer_id).await?;
-    
-    // 状態更新
-    update_secret_state(secret_id, SecretState::Destroying).await?;
-    
-    // アクティブなアクセスの確認
-    let active_accesses = find_active_accesses(secret_id).await?;
-    
-    if !active_accesses.is_empty() && !destruction_params.force {
-        return Err(DestructionError::ActiveAccessesExist {
-            count: active_accesses.len(),
+        let decrypted_share = aes_gcm_decrypt(&common_key, &encrypted_share.ciphertext)?;
+        decrypted_shares.push(ShamirShare {
+            index: encrypted_share.index,
+            data: decrypted_share,
         });
     }
-    
-    // 破棄プロセスの実行
-    let destruction_log = execute_destruction(secret_id).await?;
-    
-    // 状態を最終更新
-    update_secret_state(secret_id, SecretState::Destroyed).await?;
-    
-    // 破棄証明の生成
-    let destruction_proof = generate_destruction_proof(&destruction_log)?;
-    
-    Ok(DestructionResult {
-        secret_id: secret_id.clone(),
-        destroyed_at: SystemTime::now(),
-        destruction_proof,
-        permanent: true,
+
+    // シャミア補間で秘密f(0)を復元
+    let recovered_secret = shamir_reconstruct(&decrypted_shares)?;
+
+    Ok(RecoveredSecret {
+        secret_data: recovered_secret,
+        recovered_at: current_timestamp(),
+        verification_hash: compute_hash(&recovered_secret),
+        recovery_session_id: recovery_package.package_id.clone(),
     })
+}
+```
+
+## 6. 有効期限管理
+
+### 6.1 有効期限管理の概要
+
+D-TPRESライブラリ内での有効期限管理は、外部システムとの責任分界を明確にしながら実装されます。
+
+### 6.2 AOメッセージベース期限管理
+
+```rust
+/// AOメッセージによる期限管理 - ステートレス対応
+pub fn handle_expiration_check_message(
+    msg: AOMessage,
+    repository: &dyn Repository,
+) -> Result<AOResponse, HandlerError> {
+    let check_request: ExpirationCheckRequest = serde_json::from_slice(&msg.data)?;
+
+    // Arweaveから現在の秘密状態をロード
+    let secret_metadata = repository.load_secret_metadata(&check_request.secret_id)?;
+
+    // 期限チェック
+    let current_time = current_timestamp();
+    match secret_metadata.expiration {
+        Some(expiration) if current_time > expiration => {
+            // 期限切れ処理
+            handle_expired_secret_message(&check_request.secret_id, repository)?;
+        }
+        Some(expiration) if current_time + EXPIRATION_WARNING_PERIOD > expiration => {
+            // 期限切れ警告処理
+            handle_expiring_secret_message(&check_request.secret_id, repository)?;
+        }
+        _ => {
+            // 期限内：何もしない
+        }
+    }
+
+    Ok(AOResponse::success("Expiration check completed"))
+}
+
+/// 期限切れ警告の処理（AOメッセージベース）
+fn handle_expiring_secret_message(
+    secret_id: &SecretId,
+    repository: &dyn Repository,
+) -> Result<(), HandlerError> {
+    // 状態更新
+    repository.update_secret_state(secret_id, SecretState::Expiring)?;
+
+    // Owner-Processへの通知メッセージ送信
+    let notification_msg = create_expiration_warning_message(secret_id)?;
+    send_ao_message(&repository.get_owner_process_id(secret_id)?, notification_msg)?;
+
+    Ok(())
+}
+
+/// 期限切れ秘密の処理（AOメッセージベース）
+fn handle_expired_secret_message(
+    secret_id: &SecretId,
+    repository: &dyn Repository,
+) -> Result<(), HandlerError> {
+    // 状態更新
+    repository.update_secret_state(secret_id, SecretState::Expired)?;
+
+    // 新規アクセス要求のブロック
+    repository.block_new_access_requests(secret_id)?;
+
+    // 自動破棄設定の確認
+    let metadata = repository.load_secret_metadata(secret_id)?;
+
+    if metadata.auto_destroy_on_expiration {
+        // 自動破棄メッセージのスケジュール
+        schedule_destruction_message(secret_id, DESTRUCTION_DELAY)?;
+    }
+
+    Ok(())
+}
+```
+
+## 7. 秘密の破棄
+
+### 7.1 AOメッセージベース破棄処理
+
+```rust
+/// AOメッセージによる秘密破棄処理 - ステートレス対応
+pub fn handle_destroy_secret_message(
+    msg: AOMessage,
+    repository: &dyn Repository,
+) -> Result<AOResponse, HandlerError> {
+    let destruction_request: DestructionRequest = serde_json::from_slice(&msg.data)?;
+
+    // 権限確認（Owner-Processからのメッセージか確認）
+    verify_destruction_permission(&destruction_request.secret_id, &msg.sender, repository)?;
+
+    // 現在の状態をロード
+    let mut secret_metadata = repository.load_secret_metadata(&destruction_request.secret_id)?;
+
+    // 破棄不可能な状態チェック
+    if !can_destroy_secret(&secret_metadata, &destruction_request) {
+        return Err(HandlerError::InvalidState("Cannot destroy secret in current state"));
+    }
+
+    // 状態を破棄中に更新
+    secret_metadata.state = SecretState::Destroying;
+    repository.save_secret_metadata(&secret_metadata)?;
+
+    // 破棄プロセスの実行
+    let destruction_result = execute_destruction_process(&destruction_request.secret_id, repository)?;
+
+    // 最終状態の更新
+    secret_metadata.state = SecretState::Destroyed;
+    secret_metadata.destroyed_at = Some(current_timestamp());
+    repository.save_secret_metadata(&secret_metadata)?;
+
+    Ok(AOResponse::success_with_data(
+        "Secret destroyed successfully",
+        &destruction_result.destruction_id
+    ))
 }
 
 /// 破棄処理の実行
@@ -804,9 +774,68 @@ async fn secure_delete_share(share: &ShareEntity) -> Result<(), SecureDeleteErro
 }
 ```
 
-## 7. エラー処理とリカバリー
+## 8. エラー処理とリカバリー
 
-### 7.1 状態不整合の検出と修復
+### 8.1 AOステートレス環境でのエラー処理
+
+AOネットワークのステートレス実行環境に特化したエラー処理パターンです。
+
+### 8.2 メッセージベースエラーハンドリング
+
+```rust
+/// AOメッセージ処理でのエラーハンドリングパターン
+pub fn handle_message_with_error_recovery(
+    msg: AOMessage,
+    repository: &dyn Repository,
+) -> Result<AOResponse, HandlerError> {
+    // 1. 状態ロード（エラー時は初期状態とする）
+    let mut process_state = repository.load_process_state(&msg.process_id)
+        .unwrap_or_else(|_| ProcessState::default());
+
+    // 2. メッセージ処理の試行
+    let result = match process_message(&msg, &mut process_state, repository) {
+        Ok(response) => {
+            // 成功時：状態を永続化
+            repository.save_process_state(&msg.process_id, &process_state)?;
+            Ok(response)
+        }
+        Err(e) => {
+            // 失敗時：エラーに応じた回復処理
+            handle_processing_error(e, &msg, &mut process_state, repository)
+        }
+    };
+
+    result
+}
+
+/// 処理エラーの回復
+fn handle_processing_error(
+    error: ProcessingError,
+    msg: &AOMessage,
+    state: &mut ProcessState,
+    repository: &dyn Repository,
+) -> Result<AOResponse, HandlerError> {
+    match error {
+        ProcessingError::StateCorruption => {
+            // 状態破損：Arweaveから最新状態を再取得
+            *state = repository.recover_state_from_arweave(&msg.process_id)?;
+            Ok(AOResponse::error("State recovered, please retry"))
+        }
+        ProcessingError::InsufficientData => {
+            // データ不足：必要なデータを再要求
+            Ok(AOResponse::error("Insufficient data, please provide complete information"))
+        }
+        ProcessingError::CryptoError(crypto_err) => {
+            // 暗号エラー：セキュリティ監査ログに記録
+            audit_crypto_error(&crypto_err, &msg.process_id);
+            Err(HandlerError::CryptographicFailure)
+        }
+        _ => Err(HandlerError::UnrecoverableError(error))
+    }
+}
+```
+
+### 8.3 状態不整合の検出と修復
 
 ```rust
 /// 秘密の状態整合性チェック
@@ -901,7 +930,7 @@ pub async fn attempt_auto_repair(
 }
 ```
 
-## 8. セキュリティ考慮事項
+## 9. セキュリティ考慮事項
 
 ### 8.1 暗号学的保証
 
@@ -1015,7 +1044,7 @@ impl PrivacyProtection {
 }
 ```
 
-## 9. パフォーマンス最適化
+## 10. パフォーマンス最適化
 
 ### 9.1 並列処理の活用
 
@@ -1080,7 +1109,7 @@ impl SecretCache {
 }
 ```
 
-## 10. 監査とコンプライアンス
+## 11. 監査とコンプライアンス
 
 ### 10.1 包括的な監査ログ
 
@@ -1154,17 +1183,28 @@ pub async fn persist_audit_log(log: SecretAuditLog) -> Result<(), AuditError> {
 
 ## まとめ
 
-秘密データのライフサイクル管理は、D-TPRESシステムのセキュリティと信頼性の中核です。各フェーズにおける厳密な制御により：
+D-TPRESの秘密データライフサイクル管理は、PRD.mdの更新に合わせて分散型暗号学的秘密管理ライブラリとして最適化されました。
 
-1. **機密性**: 暗号学的に保護された状態遷移
-2. **可用性**: k-of-n閾値による耐障害性
-3. **完全性**: 全フェーズでの検証可能性
-4. **監査性**: 包括的なログとトレーサビリティ
+### 主要な更新点
 
-これらの特性により、分散環境でも安全な秘密管理を実現します。
+1. **ブラウザ・AOプロセス分離**: O-Browser/R-BrowserとAOプロセス群の明確な役割分担
+2. **外部アクセス制御前提**: pk_A検証を外部システムに委譲し、システム複雑性を削減
+3. **AOステートレス対応**: メッセージ間でのメモリ非持続性に対応した実装パターン
+4. **PRDフェーズ整合**: PHASE 1-3との完全な対応関係を確立
+
+### セキュリティ特性の保証
+
+1. **機密性**: Threshold Proxy Re-Encryptionによる暗号学的保護
+2. **可用性**: k-of-n閾値による分散耐障害性
+3. **完全性**: 全フェーズでの暗号学的検証
+4. **監査性**: D-TPRES内部処理の完全なトレーサビリティ
+5. **外部連携**: 外部アクセス制御システムとの明確な責任分界
+
+これらの特性により、純粋な暗号学的ライブラリとして、実装とテストが簡素化された安全な秘密管理を実現します。
 
 ---
 
-**Document Status**: Secret Lifecycle Specification  
-**Version**: 1.0  
-**Last Updated**: 2025-01-09
+**Document Status**: Secret Lifecycle Specification (Updated for PRD v2.0)
+**Version**: 2.0
+**Last Updated**: 2025-01-26
+**Dependencies**: PRD.md, lifecycle_overview.md
