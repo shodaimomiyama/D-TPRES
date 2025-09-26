@@ -14,13 +14,16 @@ D-TPRESは、Threshold Proxy Re-Encryption (TPRE) を用いた分散型鍵管理
 graph TB
     subgraph "External Systems"
         subgraph "Browser Applications"
-            OB[O-Browser<br/>データ所有者UI]
-            AB[A-Browser<br/>アクセス者UI]
+            OB[O-Browser<br/>クライアントライブラリ]
+            RB[R-Browser<br/>クライアントライブラリ]
         end
-        
-        subgraph "Storage & Blockchain"
+
+        subgraph "External Access Control"
+            EXT[External Access Control System<br/>pk_A検証済み]
+        end
+
+        subgraph "Storage"
             AR[Arweave<br/>Immutable Storage]
-            EVM[EVM Networks<br/>Smart Contracts]
         end
     end
     
@@ -50,7 +53,6 @@ graph TB
                 CS1[CryptoService]
                 CS2[ProcessService]
                 CS3[StorageService]
-                CS4[EVMVerificationService]
             end
         end
         
@@ -75,7 +77,6 @@ graph TB
                 RI[ArweaveRepositoryImpl<br/>ProcessEntityRepositoryImpl<br/>ShareEntityRepositoryImpl<br/>etc.]
             end
             subgraph "External Adapters"
-                EL[elciao Bridge]
                 AC[ArweaveClient]
             end
         end
@@ -83,7 +84,8 @@ graph TB
     
     %% Browser to UseCase
     OB --> OH
-    AB --> RH
+    RB --> RH
+    EXT -.->|pk_A verified| OB
     
     %% UseCase to Controller
     OH --> MH
@@ -104,7 +106,7 @@ graph TB
     WS1 --> CS1
     WS1 --> CS2
     WS2 --> CS3
-    WS3 --> CS4
+    WS3 --> CS1
     
     %% Service to Domain
     CS1 --> E1
@@ -127,8 +129,6 @@ graph TB
     %% Infrastructure to External Systems
     RI --> AC
     AC --> AR
-    CS4 --> EL
-    EL --> EVM
     
     %% Inter-process communication within AO
     OH -.->|kFrag配布| HH
@@ -143,13 +143,21 @@ graph TB
 
 ### 1.2 暗号化フロー
 
-**Phase 0-5の完全な暗号化ワークフロー**:
-1. **Phase 0**: プロセス生成・鍵準備
-2. **Phase 1**: 秘密分割・公開ストレージ
-3. **Phase 2**: アクセス要求・EVM検証
-4. **Phase 3**: 再暗号化鍵のkFrag分割
-5. **Phase 4**: k-of-n プロキシ再暗号化
-6. **Phase 5**: クライアント復号・秘密復元
+**Phase 1-3の簡潔な暗号化ワークフロー**:
+1. **Phase 1**: 秘密の分割と初期配布
+   - O-Browserで秘密分散・暗号化・Capsule作成
+   - 再暗号化キー生成とkFrag分割
+   - ArweaveへのCapsule・暗号化シェア保存
+
+2. **Phase 2**: キーフラグメントの分散管理
+   - Owner-ProcessによるHolder選出
+   - kFrag配布とHolder側での再暗号化
+   - cFragのArweave保存
+
+3. **Phase 3**: 秘密の復元
+   - Requester-ProcessによるcFrag収集
+   - R-BrowserでのCapsule結合・復号
+   - シャミア補間による秘密復元
 
 ## 2. アーキテクチャ設計
 
@@ -187,9 +195,8 @@ D-TPRES/
 │   │   ├── workflow/              # Workflow Services (Phaseオーケストレーション)
 │   │   │   ├── mod.rs
 │   │   │   ├── secret_sharing.rs  # Phase 1: SecretSharingWorkflowService
-│   │   │   ├── access_request.rs  # Phase 2: AccessRequestWorkflowService
-│   │   │   ├── reencryption.rs    # Phase 3-4: ReencryptionWorkflowService
-│   │   │   └── secret_recovery.rs # Phase 5: SecretRecoveryWorkflowService
+│   │   │   ├── key_distribution.rs  # Phase 2: KeyDistributionWorkflowService
+│   │   │   └── secret_recovery.rs   # Phase 3: SecretRecoveryWorkflowService
 │   │   ├── core/                  # Core Services (基本操作)
 │   │   │   ├── mod.rs
 │   │   │   ├── crypto.rs          # CryptoService (TPRE, Shamir)
@@ -234,8 +241,7 @@ D-TPRES/
 │   │   │   └── reencryption_impl.rs # ReencryptionEntityRepositoryImpl
 │   │   ├── external/              # 外部システムアダプター
 │   │   │   ├── mod.rs
-│   │   │   ├── arweave_client.rs  # ArweaveClient
-│   │   │   └── evm_bridge.rs      # elciao EVM bridge
+│   │   │   └── arweave_client.rs  # ArweaveClient
 │   │   ├── cache.rs               # メッセージスコープキャッシュ
 │   │   └── errors.rs              # Infrastructure層エラー定義
 │   │
@@ -251,20 +257,56 @@ D-TPRES/
 │       ├── time.rs                # タイムスタンプユーティリティ
 │       └── constants.rs           # システム定数
 │
-├── browser/                       # ブラウザフロントエンド
-│   ├── packages/
-│   │   ├── core/                  # 共通ライブラリ
-│   │   │   ├── crypto/            # WebCrypto + WASM統合
-│   │   │   ├── ao/                # AO通信ライブラリ
-│   │   │   └── types/             # 共通型定義
-│   │   ├── o-browser/             # データ所有者UI
-│   │   └── a-browser/             # アクセス者UI
-│   ├── shared/                    # 共通コンポーネント
-│   └── package.json
-├── contracts/                     # EVM Smart Contracts
-│   ├── src/
-│   │   └── VerifyAccess.sol
-│   └── package.json
+├── local/                         # ローカル環境用Rust実装 (O-Browser/R-Browser)
+│   ├── Cargo.toml                 # ローカル環境用Cargo設定
+│   ├── build.rs                   # wasm-pack ビルド設定
+│   └── src/
+│       ├── lib.rs                 # ローカルエントリーポイント
+│       ├── wasm_bindings.rs       # wasm-bindgen API
+│       ├── owner/                 # O-Browser実装
+│       │   ├── mod.rs
+│       │   ├── key_generation.rs  # 鍵生成（skₒ, pkₒ, kₒ）
+│       │   ├── secret_sharing.rs  # シャミア秘密分散
+│       │   ├── encryption.rs      # AES-GCM暗号化
+│       │   ├── capsule.rs         # Capsule生成
+│       │   └── rekey.rs           # 再暗号化キー生成
+│       ├── requester/             # R-Browser実装
+│       │   ├── mod.rs
+│       │   ├── capsule_combine.rs # Capsule再構築
+│       │   ├── decryption.rs      # PRE復号・AES復号
+│       │   ├── secret_recovery.rs # シャミア補間
+│       │   └── cfrag_collection.rs # cFrag収集
+│       ├── crypto/                # 暗号プリミティブ共通実装
+│       │   ├── mod.rs
+│       │   ├── umbral.rs          # umbral-preラッパー
+│       │   ├── shamir.rs          # Shamir Secret Sharing
+│       │   └── aes.rs             # AES-GCM
+│       ├── storage/               # ローカルストレージ
+│       │   ├── mod.rs
+│       │   ├── arweave_client.rs  # Arweaveアップロード/取得
+│       │   └── local_cache.rs     # ブラウザキャッシュ
+│       └── types/                 # 共通型定義
+│           ├── mod.rs
+│           ├── keys.rs            # 鍵型定義
+│           ├── shares.rs          # シェア型定義
+│           └── capsule.rs         # Capsule型定義
+│
+├── dtpres-sdk/                   # JavaScript/TypeScript 統合SDK
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── src/
+│       ├── index.ts               # 統合エクスポート
+│       ├── types/                 # TypeScript型定義
+│       ├── owner/                 # O-Browser SDK
+│       │   ├── index.ts
+│       │   └── OBrowser.ts
+│       ├── requester/             # R-Browser SDK
+│       │   ├── index.ts
+│       │   └── RBrowser.ts
+│       └── ao/                    # AOプロセス操作SDK
+│           ├── index.ts
+│           ├── spawn.ts
+│           └── message.ts
 ├── wasm/                          # WebAssembly ビルド成果物
 │   ├── umbral_wasm.js
 │   └── umbral_wasm.wasm
@@ -276,47 +318,49 @@ D-TPRES/
 
 | Layer | Component | Technology |
 |-------|-----------|------------|
-| **Browser** | UI Framework | TypeScript + Vite |
-| | Cryptography | WebCrypto API + umbral-pre WASM |
-| | Wallet | MetaMask (ethers.js) |
+| **Client Library** | Core Library | JavaScript/TypeScript (OSS) |
+| | Cryptography | Rust WASM (umbral-pre + sssa + aes-gcm) |
 | | Storage | IndexedDB (暗号化) |
-| **AO** | Runtime | Rust WebAssembly |
-| | Cryptography | umbral-pre + shamir-secret-sharing |
+| | Deployment | CosmWasm-ao (プロセスspawn) |
+| **AO Runtime** | Process Engine | Rust WebAssembly (単一バイナリ) |
+| | Cryptography | umbral-pre + sssa + aes-gcm |
 | | Communication | AO Message Protocol |
-| **Storage** | Persistent | Arweave (Capsule + 暗号化シェア) |
-| | Access Control | EVM Smart Contract |
-| | Bridge | elciao (EVM ↔ AO) |
+| | Role Support | Owner/Holder/Requester (マルチロール) |
+| **Storage** | Persistent | Arweave (Capsule + 暗号化シェア + WASMモジュール) |
+| | Access Control | 外部システム (検証済みpk_A受信) |
+| **Package Distribution** | Client Library | npm パッケージ |
+| | WASM Module | Arweave 永続保存 |
 
 ## 3. PoC実装計画
 
 ### 3.1 最小実装フロー
 
-**目標**: Phase 0-5の基本フローを最小限の機能で実現
+**目標**: Phase 1-3の基本フローを最小限の機能で実現（外部アクセス制御前提）
 
-#### PoC Phase 1: 基本暗号化 (Week 1-2)
-- [ ] umbral-pre WebAssembly ビルド
-- [ ] O-Browser: 鍵生成・Capsule作成・Arweave投稿
-- [ ] A-Browser: 鍵生成・復号処理
+#### PoC Phase 1: Core Cryptographic Library (Week 1-2)
+- [ ] umbral-pre + sssa + aes-gcm WebAssembly ビルド
+- [ ] O-Browser Library: 鍵生成・Capsule作成・kFrag分割
+- [ ] R-Browser Library: cFrag結合・復号・秘密復元
 - [ ] 暗号化→復号の単体テスト
 
-#### PoC Phase 2: AO統合 (Week 3-4)
-- [ ] Owner-Process: 基本的な再暗号化鍵生成
-- [ ] Holder-Process: kFrag保持・プロキシ再暗号化
-- [ ] Requester-Process: cFrag収集・バッチ送信
+#### PoC Phase 2: AO Process Implementation (Week 3-4)
+- [ ] Owner-Process: kFrag受信・Holder選出・配布
+- [ ] Holder-Process: kFrag保持・再暗号化・cFrag生成
+- [ ] Requester-Process: cFrag収集・Browserへ送信
 - [ ] AO Network上での動作確認
 
-#### PoC Phase 3: EVM連携 (Week 5-6)
-- [ ] VerifyAccess スマートコントラクト
-- [ ] elciao連携による ProofPkg 生成
-- [ ] E2E フロー統合テスト
+#### PoC Phase 3: Client Library & Testing (Week 5-6)
+- [ ] JavaScript/TypeScript クライアントライブラリ実装
+- [ ] npm パッケージ化・OSS公開準備
+- [ ] E2E フロー統合テスト（外部アクセス制御システム連携）
 
 ### 3.2 検証項目
 
 #### 技術的実現可能性
-- ✅ umbral-pre の WebAssembly 変換
+- ✅ umbral-pre + sssa + aes-gcm の WebAssembly 変換
 - ✅ AO Network での Rust WebAssembly 実行
-- ✅ ブラウザ WebCrypto API との統合
-- ✅ MetaMask による EVM トランザクション
+- ✅ 単一WASMバイナリでの ブラウザ・AO両対応
+- ✅ CosmWasm-ao による プロセスデプロイ
 
 #### パフォーマンス要件
 - WebAssembly 読み込み時間 < 3秒
@@ -353,8 +397,8 @@ browser-dev:
 browser-build:
 	cd browser && npm run build
 	
-contracts-compile:
-	cd contracts && npm run compile
+client-lib-build:
+	cd client-lib && npm run build
 	
 poc-test:
 	make test && make wasm && cd browser && npm test
@@ -553,9 +597,9 @@ cd browser && npm test
 ### 7.2 統合テスト
 
 #### E2E フロー
-1. O-Browser での暗号化・アップロード
-2. A-Browser でのアクセス要求・復号
-3. AO Process間の連携確認
+1. O-Browser ライブラリでの秘密分散・暗号化・アップロード
+2. R-Browser ライブラリでの復号・秘密復元
+3. AO Process間の連携確認（Owner→Holder→Requester）
 
 #### テストシナリオ
 - 正常系: k-of-n 閾値での秘密復元
@@ -574,12 +618,12 @@ cd browser && npm test
 
 #### 開発環境
 - ローカル AO Network（ao-dev-cli）
-- ローカル Ethereum ネットワーク（Hardhat）
-- 静的ホスティング（Vite dev server）
+- 外部アクセス制御システムのモックサーバー
+- 静的ホスティング（npm パッケージ配布準備）
 
 #### テスト環境
 - AO Testnet
-- Ethereum Sepolia
+- 外部アクセス制御システムとの統合テスト
 - Vercel/Netlify デプロイ
 
 ### 8.2 PoC後の展開
