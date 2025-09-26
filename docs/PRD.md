@@ -202,7 +202,7 @@ docs/development/services/*に各サービスの詳細設計は記述
 
 | 評価軸 | チェック項目 | 考察 |
 |--------|-------------|------|
-| **機密性** | 公開データから秘密到達可否 | 公開セット {Capsuleₒ, Cᵢ, kFragⱼ, cFragⱼ} は **IND-CPA**。`Capsule′` から kₒ を得るには skᴬ が必須 → 離散対数問題 (X25519, 128-bit) |
+| **機密性** | 公開データから秘密到達可否 | 公開セット {Capsuleₒ, Cᵢ, kFragⱼ, cFragⱼ} は **IND-CPA**。`Capsule′` から kₒ を得るには skᴬ が必須 → 離散対数問題 (secp256k1, 256-bit) |
 | **しきい値耐故障** | Holder t < k ダウン時 | Shamir(k,n) ⇒ 最大 n-k ノード故障時でも秘密復元可能 |
 | **共謀耐性** | k-1 Holder + 攻撃者 | kFrag は Shamir分割；k-1 では rekey 再構成不能、秘密復元不可 |
 | **非転送性** | 攻撃者が pkᴮ へ再委譲 | ReKeyGen には skₒ が必須。kFrag は pkᴬ 固定で他者への転送不可 |

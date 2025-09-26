@@ -554,7 +554,8 @@ pub async fn handle_report_status(msg: Message) -> Response {
             max_kfrags: MAX_KFRAGS_PER_HOLDER,
             current_kfrags: status.active_kfrags,
             available_capacity: calculate_available_capacity(&status),
-            supported_algorithms: vec!["umbral-secp256k1", "umbral-ed25519"],
+            // 注: 現在の実装はsecp256k1のみをサポート。ed25519は将来的な拡張予定
+            supported_algorithms: vec!["umbral-secp256k1"],
             average_response_time: metrics.avg_response_time,
         },
     };
