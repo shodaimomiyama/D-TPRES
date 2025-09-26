@@ -289,7 +289,7 @@ impl SecretSharingWorkflowServiceImpl {
 
 ### 4.1 概要
 
-AccessRequestWorkflowServiceは、PRD Phase 2（アクセス要求とEVM検証）のビジネスロジックを実装します。A-Browserからのアクセス要求を処理し、EVMスマートコントラクトでの検証を経て、ProofPackageを生成します。
+AccessRequestWorkflowServiceは、PRD Phase 2（アクセス要求処理）のビジネスロジックを実装します。R-Browserからのアクセス要求を処理し、外部アクセス制御で検証済みという前提でProofPackageを生成します。
 
 ### 4.2 インターフェース定義
 
@@ -302,13 +302,12 @@ pub trait AccessRequestWorkflowService: Send + Sync {
         request: AccessRequest,
     ) -> Result<AccessRequestResult, WorkflowError>;
     
-    /// EVM検証の実行
-    async fn verify_with_evm(
+    /// 外部検証済み前提でProofPackage作成準備
+    async fn prepare_proof_with_external_verification(
         &self,
         secret_id: &str,
-        accessor_address: &str,
-        conditions: &[String],
-    ) -> Result<VerificationResult, WorkflowError>;
+        accessor_process_id: &str,
+    ) -> Result<VerificationContext, WorkflowError>;
     
     /// ProofPackageの生成
     async fn generate_proof_package(
@@ -330,7 +329,6 @@ pub struct AccessRequest {
     pub secret_id: String,
     pub accessor_process_id: String,
     pub accessor_public_key: Vec<u8>,
-    pub accessor_address: String,  // EVM address
     pub request_metadata: HashMap<String, String>,
 }
 
@@ -339,9 +337,17 @@ pub struct ProofPackage {
     pub request_id: String,
     pub secret_id: String,
     pub accessor_process_id: String,
-    pub verification_result: VerificationResult,
+    pub verification_context: VerificationContext,
     pub owner_signature: Vec<u8>,
     pub timestamp: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct VerificationContext {
+    pub secret_id: String,
+    pub accessor_process_id: String,
+    pub timestamp: u64,
+    pub external_verification_complete: bool,
 }
 ```
 
@@ -353,7 +359,6 @@ pub struct AccessRequestWorkflowServiceImpl {
     routing_service: Arc<dyn MessageRoutingService>,
     secret_details_repository: Arc<dyn SecretDetailsEntityRepository>,
     proof_package_repository: Arc<dyn ProofPackageRepository>,
-    evm_bridge: Arc<dyn EVMBridge>,
 }
 
 #[async_trait]
@@ -372,31 +377,24 @@ impl AccessRequestWorkflowService for AccessRequestWorkflowServiceImpl {
         // 2. アクセス要求の検証
         self.validate_access_request(&request, &secret_details)?;
         
-        // 3. EVM検証の実行
-        let verification_result = self.verify_with_evm(
+        // 3. 外部検証済み前提でProofPackage準備
+        let verification_context = self.prepare_proof_with_external_verification(
             &request.secret_id,
-            &request.accessor_address,
-            &secret_details.access_control_conditions,
+            &request.accessor_process_id,
         ).await?;
-        
-        if !verification_result.is_approved {
-            return Err(WorkflowError::AccessDenied(
-                "EVM verification failed".into()
-            ));
-        }
         
         // 4. Owner Processへの通知
         let owner_response = self.notify_owner(
             &secret_details.owner_process_id,
             &request,
-            &verification_result,
+            &verification_context,
         ).await?;
-        
+
         // 5. ProofPackageの生成
         let proof_package = self.generate_proof_package(
             &request.secret_id,
             &request.accessor_process_id,
-            &verification_result,
+            &verification_context,
         ).await?;
         
         // 6. ProofPackageの保存
@@ -412,31 +410,18 @@ impl AccessRequestWorkflowService for AccessRequestWorkflowServiceImpl {
         })
     }
     
-    async fn verify_with_evm(
+    async fn prepare_proof_with_external_verification(
         &self,
         secret_id: &str,
-        accessor_address: &str,
-        conditions: &[String],
-    ) -> Result<VerificationResult, WorkflowError> {
-        // EVM-AOブリッジを使用した検証
-        let verification_request = EVMVerificationRequest {
+        accessor_process_id: &str,
+    ) -> Result<VerificationContext, WorkflowError> {
+        // 外部アクセス制御で検証済みという前提で動作
+        // pk_A（accessor公開鍵）の検証は外部システムで完了済み
+        Ok(VerificationContext {
             secret_id: secret_id.to_string(),
-            accessor: accessor_address.to_string(),
-            conditions: conditions.to_vec(),
+            accessor_process_id: accessor_process_id.to_string(),
             timestamp: current_timestamp(),
-        };
-        
-        // スマートコントラクト呼び出し
-        let result = self.evm_bridge
-            .verify_access_conditions(verification_request)
-            .await
-            .map_err(|e| WorkflowError::EVMError(e.to_string()))?;
-        
-        Ok(VerificationResult {
-            is_approved: result.approved,
-            verification_data: result.data,
-            block_number: result.block_number,
-            transaction_hash: result.tx_hash,
+            external_verification_complete: true,
         })
     }
 }
@@ -450,7 +435,7 @@ impl AccessRequestWorkflowServiceImpl {
         &self,
         owner_process_id: &str,
         request: &AccessRequest,
-        verification: &VerificationResult,
+        verification: &VerificationContext,
     ) -> Result<OwnerResponse, WorkflowError> {
         let notification = ProcessMessage {
             message_type: MessageType::AccessRequest,
@@ -458,7 +443,7 @@ impl AccessRequestWorkflowServiceImpl {
                 secret_id: request.secret_id.clone(),
                 accessor_process_id: request.accessor_process_id.clone(),
                 accessor_public_key: request.accessor_public_key.clone(),
-                verification_result: verification.clone(),
+                verification_context: verification.clone(),
             })?,
             tags: hashmap! {
                 "Type" => "AccessNotification",
@@ -1006,7 +991,7 @@ sequenceDiagram
     Note over SS,Repository: Phase 1完了
     
     AR->>Repository: Read SecretDetails
-    AR->>EVM: Verify conditions
+    Note over AR: External verification assumed complete
     AR->>Repository: Store ProofPackage
     Note over AR,Repository: Phase 2完了
     
@@ -1035,7 +1020,7 @@ pub enum WorkflowError {
     CryptoError(CryptoError),
     RepositoryError(RepositoryError),
     RoutingError(RoutingError),
-    EVMError(String),
+    ExternalVerificationError(String),
     
     // 回復可能エラー
     TemporaryFailure(String),

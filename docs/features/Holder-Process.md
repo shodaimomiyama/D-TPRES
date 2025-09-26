@@ -1,19 +1,24 @@
-# Holder-Process (Hⱼ) 仕様
+# Holder Role 仕様
 
-> **目的** ― Holder-Process は kFrag を保持し、アクセス要求が来た際に Capsuleᵢ を再暗号化して cFragⱼ を生成・公開するノード役割。
+> **目的** ― Holderロールは、プロセスが kFrag を保持し、他のプロセスからの要求に応じて Capsuleᵢ を再暗号化して cFragⱼ を生成・提供する役割。全てのプロセスがHolderロールを持ち、他のプロセスから呼び出された時に実行される。
 
 ---
 
 ## 概要
 
-* **ロール:** `role = "holder"`
+* **ロール:** `role = "holder"`（全プロセスが保持）
+* **呼び出し元:** OwnerロールまたはRequesterロールを実行中の他プロセス
 * **主な責務:**
 
-  1. kFragⱼ を安全に受信・SQLite に保存。
-  2. Requester-Process から `wrap_share` を受信したら pkᴬ を検証。
-  3. Capsuleᵢ をロードし `cFragⱼ = PRE_ReEnc(kFragⱼ, Capsuleᵢ)` を計算。
-  4. cFragⱼ を自身の SQLite に INSERT し `COMMIT`（＝差分ページが Arweave Tx 化）。
-  5. RP へ cFragⱼ TxID を返信。
+  1. Ownerロールからの kFragⱼ を受信・保存
+  2. Requesterロールからの `wrap_share` 要求に応答
+  3. Capsuleᵢ をロードし `cFragⱼ = PRE_ReEnc(kFragⱼ, Capsuleᵢ)` を計算
+  4. cFragⱼ を生成してRequesterに返信
+
+### 実装パス
+* **Rust実装**: `src/usecase/holder/holder_handlers.rs`
+* **Service層**: `src/service/core/crypto.rs` (PRE_ReEnc実装)
+* **ビルドターゲット**: wasm32-unknown-unknown (AO用)
 
 ---
 
@@ -21,24 +26,26 @@
 
 | 送信元                        | メッセージ (`fn`)         | 内容                           |
 | -------------------------- | -------------------- | ---------------------------- |
-| **Owner-Process (Pᴼ)**     | `holder.store_kfrag` | `{ data_id, kFrag_j, pk_A }` |
-| **Requester-Process (RP)** | `holder.wrap_share`  | `{ data_id, wrap_i, pk_A }`  |
+| **Ownerロールプロセス**     | `msg{role: "holder", action: "store-kfrag"}` | `{ data_id, kFrag_j, pk_A }` |
+| **Requesterロールプロセス** | `msg{role: "holder", action: "wrap-share"}`  | `{ data_id, idx, pk_A }`  |
 
 ---
 
 ## 処理フロー
 
-1. **kFrag 保存 (`holder.store_kfrag`)**
+1. **kFrag 保存 (Ownerロールからの要求)**
 
-   1. `INSERT INTO kfrags(data_id, pk_A, idx, blob)`.
-   2. `COMMIT;` → 差分ページが Arweave に自動アップロード。
-2. **再暗号化 (`holder.wrap_share`)**
+   1. Ownerロールプロセスから `{role: "holder", action: "store-kfrag"}` を受信
+   2. kFrag_j をプロセス内部ストレージに保存
+   3. AOのステートレス制約により、Arweaveに永続化
 
-   1. `SELECT blob FROM kfrags WHERE data_id=? AND pk_A=?` → kFragⱼ。
-   2. Capsuleᵢ を `SELECT`。無ければ Arweave からストリーム取得。
-   3. `cFrag_j = PRE_ReEnc(kFrag_j, Capsuleᵢ)`。
-   4. `INSERT INTO cfrags(data_id, pk_A, idx, blob)` → `COMMIT;`。
-   5. RP へ `holder.cfrag_ready { idx, tx_id }` を送信。
+2. **再暗号化 (Requesterロールからの要求)**
+
+   1. Requesterロールプロセスから `{role: "holder", action: "wrap-share"}` を受信
+   2. 保存された kFrag_j を取得
+   3. Arweaveから Capsuleᵢ を取得
+   4. `cFrag_j = PRE_ReEnc(kFrag_j, Capsuleᵢ)` を計算（`src/` のWASMで実行）
+   5. cFrag_j をRequesterロールプロセスに返信
 
 ---
 
@@ -46,18 +53,22 @@
 
 ```mermaid
 sequenceDiagram
-    participant PO as Pᴼ
-    participant H as Hⱼ
-    participant RP as R-Proc
-    participant DB as SQLite/Arweave
+    participant OP as Process A (Owner Role)
+    participant HP as Process B (Holder Role)
+    participant RP as Process A (Requester Role)
+    participant AR as Arweave
 
-    PO->>H: holder.store_kfrag(kFragⱼ)
-    H->>DB: INSERT kFragⱼ (commit)
-    RP->>H: holder.wrap_share(data_id, pk_A)
-    H->>DB: SELECT kFragⱼ & Capsuleᵢ
-    H->>H: PRE_ReEnc → cFragⱼ
-    H->>DB: INSERT cFragⱼ (commit)
-    H-->>RP: cfrag_ready(idx, tx_id)
+    Note over OP,HP: kFrag配布フェーズ
+    OP->>HP: msg{role: "holder", action: "store-kfrag", data: kFragⱼ}
+    HP->>HP: Holderハンドラー実行
+    HP->>AR: kFragⱼ 永続化
+
+    Note over RP,HP: cFrag生成フェーズ
+    RP->>HP: msg{role: "holder", action: "wrap-share", data: {dataId, pk_A}}
+    HP->>HP: Holderハンドラー実行
+    HP->>AR: Capsuleᵢ 取得
+    HP->>HP: PRE_ReEnc → cFragⱼ
+    HP-->>RP: cFragⱼ 返信
 ```
 
 ---
@@ -73,7 +84,8 @@ sequenceDiagram
 
 ## その他考慮事項
 
-* **検証:** `wrap_share` 内 pkᴬ が kFrag レコードの pkᴬ と一致しない場合は拒否。
+* **パッシブロール:** Holderロールは他のロールから呼び出される受動的な役割。
+* **検証:** `wrap_share` 内 pk_A が kFrag レコードの pk_A と一致しない場合は拒否。
 * **メモリ安全:** kFrag, cFrag 用バッファは `SecretVec` で保持し計算後 `zeroize()`。
-* **再指名:** しきい値未達で RP がタイムアウト検知したら PO が別 Holder を再指名。
-* **サイズ:** 1 cFrag は ≒ 1 kB。5 個で 5 kB < 1 Tx 余裕。
+* **ステートレス実行:** AO のステートレス制約により、各メッセージ処理で Arweave から状態復元。
+* **実装場所:** `src/usecase/holder/` に Holder ハンドラー、`src/service/core/crypto.rs` に PRE_ReEnc 実装。
