@@ -37,6 +37,19 @@ bincode = "1.3"
 zeroize = { version = "1.8", features = ["derive"] }
 secrecy = "0.8"
 
+# WASM 最適化プロファイル
+[profile.release]
+opt-level = "z"          # サイズ最適化
+lto = true               # Link Time Optimization
+codegen-units = 1        # 単一コード生成ユニット（サイズ削減）
+strip = true             # シンボル削除
+panic = "abort"          # panicでabort（サイズ削減）
+overflow-checks = false  # オーバーフローチェック無効化（速度向上）
+
+# CosmWasm/AO 用の最適化プロファイル
+[profile.release.package.d_tpres]
+opt-level = "z"
+
 [dev-dependencies]
 cw-multi-test = "0.13.4"
 tokio = { version = "1.0", features = ["macros", "rt"] }
