@@ -2,16 +2,17 @@
 
 ## 1. はじめに
 
-本ドキュメントは、D-TPRESシステムにおけるアクセス要求のライフサイクルを詳細に定義します。アクセス要求の作成から完了までの全フェーズ、EVM検証、cFrag収集、エラー処理について説明します。
+本ドキュメントは、D-TPRES（分散型暗号学的秘密管理ライブラリ）におけるアクセス要求のライフサイクルを詳細に定義します。アクセス要求の作成から完了までの全フェーズ、外部アクセス制御との連携、cFrag収集、エラー処理について説明します。
 
 ### 1.1 アクセス要求の重要性
 
-アクセス要求は、D-TPRESシステムの中核的なワークフローです：
+アクセス要求は、D-TPRESライブラリの中核的なワークフローです：
 
-- **認可制御**: EVMスマートコントラクトによる分散型認可
+- **認可制御**: 外部アクセス制御システムとの連携（検証済み前提）
 - **プライバシー保護**: 必要最小限の情報開示
-- **監査可能性**: 全アクセスの追跡と検証
+- **監査可能性**: D-TPRES内部処理の追跡と検証
 - **耐障害性**: k-of-n閾値による可用性保証
+- **AOステートレス対応**: メッセージベースの状態管理
 
 ## 2. アクセス要求ライフサイクル全体像
 
@@ -20,16 +21,10 @@
 ```mermaid
 stateDiagram-v2
     [*] --> Initializing: Create Access Request
-    
-    Initializing --> Pending: Request Created
-    Pending --> Submitting: Submit Proof
-    Submitting --> Verifying: Proof Submitted
-    
-    Verifying --> Approved: EVM Success
-    Verifying --> Rejected: EVM Failure
-    
-    Approved --> Preparing: Prepare Reencryption
-    Preparing --> Requesting: Send to Holders
+
+    Initializing --> Requesting: External Verified
+
+    Requesting --> Collecting: Send to Holders
     
     Requesting --> Collecting: Holders Respond
     Collecting --> ThresholdMet: k cFrags Collected
@@ -50,274 +45,200 @@ stateDiagram-v2
     Failed --> [*]
     Abandoned --> [*]
     Cancelled --> [*]
-    
+
+    note right of Initializing
+        R-Browserから開始
+        外部アクセス制御は検証済み前提
+        pk_Aは既に検証されている
+    end note
+
     note right of Collecting
+        Requester-Processが調整
         並列でcFragを収集
         k個に達したら即座に次へ
-    end note
-    
-    note right of Verifying
-        elciao経由でEVM検証
-        オンチェーン条件チェック
     end note
 ```
 
 ### 2.2 フェーズ定義
 
-| フェーズ | 状態 | 説明 | 責任ロール | タイムアウト |
-|---------|------|------|-----------|------------|
-| **Phase 2** | Initializing | アクセス要求の初期化 | Requester | - |
-| **Phase 2** | Pending | 証明待機中 | Requester | 30分 |
-| **Phase 2** | Submitting | 証明提出中 | Requester | - |
-| **Phase 2** | Verifying | EVM検証中 | System | 5分 |
-| **Phase 2** | Approved | アクセス承認済み | System | - |
-| **Phase 2** | Rejected | アクセス拒否 | System | - |
-| **Phase 4** | Preparing | 再暗号化準備中 | Requester | - |
-| **Phase 4** | Requesting | Holder要求中 | Requester | - |
-| **Phase 4** | Collecting | cFrag収集中 | Requester | 10分 |
-| **Phase 4** | ThresholdMet | 閾値達成 | System | - |
-| **Phase 5** | Recovering | 復元処理中 | Requester | 5分 |
-| **Phase 5** | Completed | 完了 | System | - |
+| PRDフェーズ | 状態 | 説明 | 責任コンポーネント | タイムアウト |
+|-----------|------|------|--------------------|------------|
+| **PHASE 3** | Initializing | R-Browserでアクセス要求初期化 | R-Browser | - |
+| **PHASE 3** | Requesting | Requester-ProcessでHolder要求 | Requester-Process | - |
+| **PHASE 3** | Collecting | cFrag収集中 | Requester-Process | 10分 |
+| **PHASE 3** | ThresholdMet | 閾値達成 | Requester-Process | - |
+| **PHASE 3** | Recovering | R-Browserで秘密復元中 | R-Browser | 5分 |
+| **PHASE 3** | Completed | 復元完了 | R-Browser | - |
 | **管理** | Timeout | タイムアウト | System | - |
-| **管理** | Retrying | リトライ中 | Requester | - |
+| **管理** | Retrying | リトライ中 | Requester-Process | - |
 | **エラー** | Failed | 失敗 | System | - |
 | **エラー** | Abandoned | 放棄 | System | - |
-| **エラー** | Cancelled | キャンセル | Requester | - |
+| **エラー** | Cancelled | キャンセル | R-Browser | - |
 
-## 3. Phase 2: アクセス要求の作成と検証
+### 2.3 外部アクセス制御との連携
 
-### 3.1 Create Access Request
+D-TPRESライブラリでは、アクセス制御（pk_A検証）は外部システムで完了済みとして処理します：
+
+- **外部システムの責任**: Requesterの公開鍵pk_Aの正当性検証
+- **D-TPRES内処理**: 検証済みpk_Aを使用した暗号化処理のみ
+- **責任分界**: アクセス制御ロジックは外部、暗号学的処理はD-TPRES内部
+
+## 3. PHASE 3: 秘密の復元（PRD PHASE 3）
+
+PRD.mdのPHASE 3に対応：R-Browserでのアクセス要求、cFrag収集、秘密復元を実行します。
+
+### 3.1 R-Browserでのアクセス要求作成
 
 ```rust
-/// アクセス要求の作成ハンドラー
-pub async fn handle_access_request(msg: Message) -> Response {
-    // Requesterロール検証
-    let requester = verify_requester_role(&msg.sender).await?;
-    
-    // 状態を初期化中に設定
-    let request_id = AccessRequestId::generate();
-    create_access_state(request_id.clone(), AccessState::Initializing).await?;
-    
-    // パラメータ抽出
-    let params = match extract_access_params(&msg) {
-        Ok(p) => p,
-        Err(e) => {
-            update_access_state(&request_id, AccessState::Failed).await;
-            return error_response(e);
-        }
+/// R-Browserでのアクセス要求作成 - PRD Step 3-1
+pub fn create_access_request_in_browser(
+    requester_private_key: &SigningKey,
+    requester_public_key: &VerifyingKey, // 外部アクセス制御で検証済みのpk_A
+    secret_id: &SecretId,
+) -> Result<AccessRequest, RequestError> {
+    // 外部アクセス制御は完了済み前提
+    // pk_Aは既に検証されているものとする
+
+    let access_request = AccessRequest {
+        request_id: generate_request_id(),
+        secret_id: secret_id.clone(),
+        requester_private_key: requester_private_key.clone(),
+        requester_public_key: requester_public_key.clone(),
+        created_at: current_timestamp(),
+        session_id: generate_session_id(),
     };
-    
-    // アクセス要求の作成
-    match create_access_request_internal(request_id.clone(), requester, params).await {
-        Ok(request) => {
-            update_access_state(&request_id, AccessState::Pending).await;
-            
-            // タイムアウト設定
-            schedule_timeout(&request_id, PENDING_TIMEOUT).await;
-            
-            success_response(AccessRequestCreated {
-                request_id,
-                secret_id: request.secret_id,
-                expires_at: request.expires_at,
-                proof_required: true,
-            })
-        }
-        Err(e) => {
-            update_access_state(&request_id, AccessState::Failed).await;
-            error_response(e)
-        }
-    }
+
+    Ok(access_request)
 }
 
-/// 内部的なアクセス要求作成
-async fn create_access_request_internal(
-    request_id: AccessRequestId,
-    requester: ProcessEntity,
-    params: AccessRequestParams,
-) -> Result<AccessRequestEntity, RequestError> {
-    // 秘密の存在確認
-    let secret = verify_secret_accessible(&params.secret_id).await?;
-    
-    // 重複リクエストチェック
-    if has_active_request(&requester.process_id, &params.secret_id).await? {
-        return Err(RequestError::DuplicateRequest);
-    }
-    
-    // 前提条件の確認
-    verify_request_preconditions(&secret, &requester).await?;
-    
-    // エンティティ作成
-    let request = AccessRequestEntity {
-        request_id: request_id.clone(),
-        secret_id: params.secret_id.clone(),
-        requester_id: requester.process_id.clone(),
-        requester_public_key: params.requester_public_key,
-        capsule_id: secret.capsule_id.clone(),
-        access_conditions: merge_conditions(
-            &secret.access_conditions,
-            &params.additional_conditions,
-        )?,
-        proof_commitment: params.proof_commitment,
-        threshold: secret.threshold_k,
-        created_at: SystemTime::now(),
-        updated_at: SystemTime::now(),
-        expires_at: SystemTime::now() + ACCESS_REQUEST_TTL,
-        state: AccessState::Pending,
-        attempts: 0,
-        collected_cfrags: HashMap::new(),
-        recovery_data: None,
-    };
-    
-    // 永続化
-    save_access_request(&request).await?;
-    
-    // 監査ログ
-    audit_access_request_created(&request).await?;
-    
-    Ok(request)
-}
+```
 
-/// 前提条件の検証
-async fn verify_request_preconditions(
-    secret: &SecretMetadata,
-    requester: &ProcessEntity,
-) -> Result<(), PreconditionError> {
-    // 秘密の状態確認
-    if secret.state != SecretState::Accessible {
-        return Err(PreconditionError::SecretNotAccessible);
-    }
-    
-    // 有効期限確認
-    if let Some(expiration) = secret.expiration {
-        if SystemTime::now() > expiration {
-            return Err(PreconditionError::SecretExpired);
-        }
-    }
-    
-    // Requesterの信頼スコア確認
-    if requester.trust_score < MIN_REQUESTER_TRUST_SCORE {
-        return Err(PreconditionError::InsufficientTrustScore);
-    }
-    
-    // Rate limiting
-    check_request_rate_limit(&requester.process_id).await?;
-    
-    Ok(())
+### 3.2 Requester-Processでのメッセージ送信
+
+```rust
+/// RequesterのspawnとcFrag収集要求 - PRD Step 3-2
+pub fn send_cfrag_collection_request(
+    access_request: &AccessRequest,
+    requester_process_id: &ProcessId,
+) -> Result<CollectionRequest, MessageError> {
+    // Requester-Processにcfrag収集メッセージを送信
+    let collection_message = AOMessage {
+        process_id: requester_process_id.clone(),
+        action: "collect-cfrags".to_string(),
+        role: "requester".to_string(),
+        data: serde_json::to_vec(&CollectCFragsData {
+            secret_id: access_request.secret_id.clone(),
+            requester_public_key: access_request.requester_public_key.clone(),
+            session_id: access_request.session_id.clone(),
+            threshold_required: get_secret_threshold(&access_request.secret_id)?,
+        })?,
+        timestamp: current_timestamp(),
+    };
+
+    send_ao_message(collection_message)?;
+
+    Ok(CollectionRequest {
+        request_id: access_request.request_id.clone(),
+        sent_at: current_timestamp(),
+        expected_response_timeout: COLLECTION_TIMEOUT,
+    })
 }
 ```
 
-### 3.2 Submit Proof
+## 4. Requester-ProcessでのcFrag収集（AO Network）
+
+### 4.1 cFrag収集メッセージハンドラー
 
 ```rust
-/// EVM証明提出ハンドラー
-pub async fn handle_submit_proof(msg: Message) -> Response {
-    // リクエストIDの取得
-    let request_id = extract_request_id(&msg)?;
-    
-    // 現在の状態確認
-    let request = load_access_request(&request_id).await?;
-    if request.state != AccessState::Pending {
-        return error_response("Invalid state for proof submission");
-    }
-    
-    // 状態更新
-    update_access_state(&request_id, AccessState::Submitting).await?;
-    
-    // 証明の抽出と基本検証
-    let proof = match extract_and_validate_proof(&msg, &request).await {
-        Ok(p) => p,
-        Err(e) => {
-            update_access_state(&request_id, AccessState::Pending).await;
-            return error_response(e);
-        }
-    };
-    
-    // EVM検証の実行
-    match submit_proof_to_evm(request, proof).await {
-        Ok(verification_result) => {
-            handle_verification_result(&request_id, verification_result).await
-        }
-        Err(e) => {
-            update_access_state(&request_id, AccessState::Failed).await;
-            error_response(e)
-        }
-    }
-}
+/// Requester-ProcessでのcFrag収集 - PRD Step 3-2
+pub fn handle_requester_collect_cfrags(
+    msg: AOMessage,
+    repository: &dyn Repository,
+) -> Result<AOResponse, HandlerError> {
+    let collection_data: CollectCFragsData = serde_json::from_slice(&msg.data)?;
 
-/// EVM証明の検証と提出
-async fn submit_proof_to_evm(
-    request: AccessRequestEntity,
-    proof: EVMProof,
-) -> Result<VerificationResult, VerificationError> {
-    // 状態更新
-    update_access_state(&request.request_id, AccessState::Verifying).await?;
-    
-    // ProofPkgの構築
-    let proof_pkg = ProofPkg {
-        request_id: request.request_id.to_bytes(),
-        requester: request.requester_id.to_ethereum_address()?,
-        secret_id: request.secret_id.to_bytes(),
-        conditions: encode_conditions(&request.access_conditions)?,
-        proof_data: proof.data,
-        timestamp: current_block_timestamp().await?,
-        nonce: generate_nonce(),
-    };
-    
-    // elciao経由でのEVM呼び出し
-    let evm_result = match call_verify_access_contract(proof_pkg).await {
-        Ok(result) => result,
-        Err(e) => {
-            // EVM呼び出しエラー
-            return Err(VerificationError::EVMCallFailed(e));
-        }
-    };
-    
-    // 結果の解析
-    parse_verification_result(evm_result, &request).await
-}
+    // 利用可能なHolder-Processを特定
+    let available_holders = repository.find_holders_with_kfrags(&collection_data.secret_id)?;
 
-/// 検証結果の処理
-async fn handle_verification_result(
-    request_id: &AccessRequestId,
-    result: VerificationResult,
-) -> Response {
-    match result {
-        VerificationResult::Approved { valid_until, .. } => {
-            // 承認処理
-            update_access_state(request_id, AccessState::Approved).await;
-            
-            // 再暗号化の準備をスケジュール
-            schedule_reencryption_preparation(request_id).await;
-            
-            success_response(ProofAccepted {
-                request_id: request_id.clone(),
-                approved_at: SystemTime::now(),
-                valid_until,
-                next_action: "Request-Reencryption",
-            })
+    // k個以上のHolder-Processから cFragⱼ を収集
+    let mut collected_cfrags = Vec::new();
+    let required_threshold = collection_data.threshold_required;
+
+    for holder_id in available_holders.iter() {
+        if collected_cfrags.len() >= required_threshold as usize {
+            break;
         }
-        VerificationResult::Rejected { reason, can_retry } => {
-            // 拒否処理
-            update_access_state(request_id, AccessState::Rejected).await;
-            
-            if can_retry {
-                // リトライ可能な場合は元の状態に戻す
-                schedule_state_reset(request_id, AccessState::Pending).await;
+
+        // Holder-Processにcfrag生成を要求
+        let cfrag_request = create_cfrag_request(
+            &collection_data.secret_id,
+            &collection_data.requester_public_key,
+            &msg.process_id
+        )?;
+
+        match send_ao_message(holder_id, cfrag_request) {
+            Ok(response) => {
+                if let Some(cfrag_id) = extract_cfrag_id(&response) {
+                    collected_cfrags.push(cfrag_id);
+                }
             }
-            
-            error_response(ProofRejected {
-                request_id: request_id.clone(),
-                reason,
-                can_retry,
-            })
+            Err(e) => {
+                // ログ記録して次のHolderを試行
+                log_holder_error(holder_id, &e);
+            }
         }
     }
+
+    // 閾値チェック
+    if collected_cfrags.len() < required_threshold as usize {
+        return Err(HandlerError::InsufficientCFrags {
+            required: required_threshold,
+            collected: collected_cfrags.len(),
+        });
+    }
+
+    Ok(AOResponse::success_with_data(
+        "cFrags collected successfully",
+        &collected_cfrags
+    ))
 }
 ```
 
-## 4. Phase 4: 再暗号化とcFrag収集
+### 4.2 R-Browserへのデータ送信
 
-### 4.1 Request Reencryption
+```rust
+/// Requester-ProcessからR-Browserへのデータ送信 - PRD Step 3-3
+pub fn handle_requester_send_to_browser(
+    msg: AOMessage,
+    repository: &dyn Repository,
+) -> Result<AOResponse, HandlerError> {
+    let send_request: SendToBrowserRequest = serde_json::from_slice(&msg.data)?;
+
+    // Capsuleₒの取得
+    let capsule = repository.load_capsule(&send_request.secret_id)?;
+
+    // 収集されたcFragsの取得
+    let cfrags = repository.load_cfrags_by_ids(&send_request.cfrag_ids)?;
+
+    // データパッケージの作成
+    let recovery_package = RecoveryPackage {
+        capsule: capsule.clone(),
+        cfrags: cfrags.clone(),
+        secret_id: send_request.secret_id.clone(),
+        threshold_met: cfrags.len() >= send_request.required_threshold as usize,
+        package_id: generate_package_id(),
+    };
+
+    // R-Browserへの配信（実装は環境依存）
+    deliver_to_browser(&send_request.browser_endpoint, recovery_package)?;
+
+    Ok(AOResponse::success("Recovery package sent to R-Browser"))
+}
+```
+
+## 5. R-Browserでの秘密復元（PRD PHASE 3完了）
+
+### 5.1 秘密復元処理
 
 ```rust
 /// 再暗号化要求ハンドラー
@@ -1516,17 +1437,27 @@ impl AccessLoadSimulator {
 
 ## まとめ
 
-アクセス要求のライフサイクル管理は、D-TPRESシステムの使いやすさとセキュリティのバランスを実現します：
+D-TPRESのアクセス要求ライフサイクル管理は、PRD.mdの更新に合わせて分散型暗号学的秘密管理ライブラリとして最適化されました。
 
-1. **段階的な検証**: 各フェーズでの適切なセキュリティチェック
-2. **並列処理**: 効率的なcFrag収集による高速化
-3. **フォールトトレランス**: 部分的な失敗からの回復
-4. **完全な監査**: すべての操作の追跡可能性
+### 主要な更新点
 
-これらの設計により、安全で効率的なアクセス制御を実現します。
+1. **外部アクセス制御の前提化**: EVM検証を外部システムの責任に委譲し、pk_A検証完了を前提とした設計
+2. **ブラウザ・AOプロセス分離**: R-BrowserでのUI処理とRequester-ProcessでのcFrag収集の明確な分担
+3. **PRD PHASE 3統合**: アクセス要求から秘密復元までを単一フェーズとして整合
+4. **AOステートレス対応**: メッセージベースのハンドラーパターンと同期処理への変更
+
+### ライフサイクルの簡素化
+
+1. **外部アクセス制御**: pk_A検証は外部システムで完了済みと仮定
+2. **cFrag収集**: Requester-ProcessがHolder-Processと協調してcFrag収集
+3. **秘密復元**: R-Browserでの暗号学的復元処理
+4. **責任分界**: D-TPRES内部は純粋な暗号処理、アクセス制御は外部
+
+これらの変更により、実装とテストが簡素化された効率的なアクセス要求管理を実現します。
 
 ---
 
-**Document Status**: Access Lifecycle Specification  
-**Version**: 1.0  
-**Last Updated**: 2025-01-09
+**Document Status**: Access Lifecycle Specification (Updated for PRD v2.0)
+**Version**: 2.0
+**Last Updated**: 2025-01-26
+**Dependencies**: PRD.md, lifecycle_overview.md, secret_lifecycle.md
