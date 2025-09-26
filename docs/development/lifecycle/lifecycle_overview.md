@@ -325,10 +325,11 @@ D-TPRESライブラリ内でのアクセス制御要素：
 
 ```rust
 /// 簡素化されたD-TPRESプロセス状態
+/// 注: これはセクション5.1の正式な定義と同一
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProcessState {
     Spawned,
-    Active { process_id: ProcessId },
+    Active { current_role: Option<ProcessRole> },
     Terminated,
 }
 
@@ -339,7 +340,10 @@ impl MessageHandler for DtpresProcess {
 
     fn can_handle(&self, state: &ProcessState, msg: &Self::Message) -> bool {
         match state {
-            ProcessState::Active { .. } => true,
+            ProcessState::Active { current_role: _ } => {
+                // メッセージのroleとcurrent_roleの整合性チェック可能
+                true
+            }
             ProcessState::Spawned => matches!(msg.action.as_str(), "initialize"),
             ProcessState::Terminated => false,
         }
@@ -347,9 +351,18 @@ impl MessageHandler for DtpresProcess {
 
     fn handle(&self, state: &mut ProcessState, msg: Self::Message) -> Result<Self::Response, HandlerError> {
         match (state, msg.role.as_str(), msg.action.as_str()) {
-            (ProcessState::Active { .. }, "owner", "store-kfrags") => self.handle_owner_store_kfrags(msg),
-            (ProcessState::Active { .. }, "holder", "get-cfrag") => self.handle_holder_get_cfrag(msg),
-            (ProcessState::Active { .. }, "requester", "collect-cfrags") => self.handle_requester_collect_cfrags(msg),
+            (ProcessState::Active { current_role }, "owner", "store-kfrags") => {
+                *current_role = Some(ProcessRole::Owner);
+                self.handle_owner_store_kfrags(msg)
+            }
+            (ProcessState::Active { current_role }, "holder", "get-cfrag") => {
+                *current_role = Some(ProcessRole::Holder);
+                self.handle_holder_get_cfrag(msg)
+            }
+            (ProcessState::Active { current_role }, "requester", "collect-cfrags") => {
+                *current_role = Some(ProcessRole::Requester);
+                self.handle_requester_collect_cfrags(msg)
+            }
             _ => Err(HandlerError::UnsupportedOperation),
         }
     }
