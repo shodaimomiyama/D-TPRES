@@ -19,14 +19,16 @@ D-TPRESは分散型の暗号化システムであり、以下の理由からラ�
 
 ```mermaid
 graph TB
-    subgraph "Process Lifecycle"
-        P1[初期化] --> P2[ロール設定]
-        P2 --> P3[アクティブ]
-        P3 --> P4[休止]
-        P4 --> P3
-        P3 --> P5[終了]
+    subgraph "Browser Environment"
+        OB[O-Browser]
+        RB[R-Browser]
     end
-    
+
+    subgraph "Process Lifecycle"
+        P1[プロセス生成] --> P2[アクティブ]
+        P2 --> P3[終了]
+    end
+
     subgraph "Secret Lifecycle"
         S1[作成] --> S2[分割]
         S2 --> S3[配布]
@@ -36,26 +38,30 @@ graph TB
         S5 --> S7[破棄]
         S6 --> S7
     end
-    
+
     subgraph "Access Lifecycle"
-        A1[要求作成] --> A2[EVM検証]
-        A2 --> A3[承認]
-        A3 --> A4[cFrag収集]
-        A4 --> A5[閾値達成]
-        A5 --> A6[復元完了]
-        A2 --> A7[拒否]
-        A4 --> A8[タイムアウト]
+        A1[要求作成] --> A2[外部検証済み前提]
+        A2 --> A3[cFrag収集]
+        A3 --> A4[閾値達成]
+        A4 --> A5[復元完了]
+        A3 --> A6[タイムアウト]
     end
+
+    OB --> P2
+    RB --> P2
+    P2 -.->|動的ロール切り替え| S1
+    P2 -.->|動的ロール切り替え| A1
 ```
 
 ### 2.2 ライフサイクル間の相互作用
 
 各ライフサイクルは独立して管理されますが、以下の相互作用があります：
 
-1. **プロセス → 秘密**: Ownerプロセスのみが秘密を作成可能
-2. **プロセス → アクセス**: Requesterプロセスのみがアクセス要求を作成
-3. **秘密 → アクセス**: アクセス可能状態の秘密のみが要求対象
-4. **アクセス → プロセス**: Holderプロセスが再暗号化を実行
+1. **ブラウザ → プロセス**: O-BrowserまたはR-Browserがプロセスを初期化・利用
+2. **プロセス → 秘密**: メッセージでOwnerロールを指定して秘密を作成
+3. **プロセス → アクセス**: メッセージでRequesterロールを指定してアクセス要求
+4. **秘密 → アクセス**: アクセス可能状態の秘密のみが要求対象
+5. **アクセス → プロセス**: メッセージでHolderロールを指定して再暗号化を実行
 
 ## 3. フェーズ定義と遷移マトリクス
 
@@ -63,10 +69,8 @@ graph TB
 
 | フェーズ | 説明 | 許可される操作 | 次の遷移先 |
 |---------|------|--------------|-----------|
-| **Uninitialized** | プロセス生成直後 | Initialize-Process | Initialized |
-| **Initialized** | ロール未設定 | Set-Role | Active |
-| **Active** | 通常稼働中 | ロール固有の全操作 | Suspended, Terminated |
-| **Suspended** | 一時停止 | Resume, Get-Status | Active, Terminated |
+| **Spawned** | プロセス生成後 | Initialize-Process | Active |
+| **Active** | 通常稼働中 | メッセージベースの全ロール操作 | Terminated |
 | **Terminated** | 終了済み | なし | なし |
 
 ### 3.2 秘密ライフサイクルのフェーズ
@@ -86,105 +90,112 @@ graph TB
 
 | フェーズ | 説明 | 許可される操作 | 次の遷移先 |
 |---------|------|--------------|-----------|
-| **Requested** | 要求作成 | Submit-Proof | Verifying |
-| **Verifying** | EVM検証中 | なし | Approved, Rejected |
-| **Approved** | 承認済み | Request-Reencryption | Collecting |
+| **Requested** | 要求作成 | 外部アクセス制御で検証済み前提 | Collecting |
 | **Collecting** | cFrag収集中 | Collect-CFrag | ThresholdMet, Timeout |
 | **ThresholdMet** | 閾値達成 | Recover-Secret | Completed |
 | **Completed** | 完了 | なし | なし |
-| **Rejected** | 拒否 | なし | なし |
 | **Timeout** | タイムアウト | Retry-Request | Collecting, Failed |
 | **Failed** | 失敗 | なし | なし |
 
 ## 4. ロール別の責務マッピング
 
-### 4.1 Owner Role
+### 4.1 Owner Role (メッセージベース)
 
 ```mermaid
 graph LR
-    subgraph "Owner Responsibilities"
+    subgraph "Owner Message Handlers"
         O1[プロセス初期化]
         O2[秘密作成・分割]
         O3[kFrag配布]
-        O4[アクセス制御管理]
-        O5[秘密破棄]
+        O4[秘密破棄]
     end
-    
-    O1 --> |Phase 0| Process_Init
-    O2 --> |Phase 1| Secret_Create
-    O3 --> |Phase 3| KFrag_Distribute
-    O4 --> |管理| Access_Control
-    O5 --> |終了| Secret_Destroy
+
+    O1 --> |spawn process| Process_Init
+    O2 --> |msg: owner/store-kfrags| Secret_Create
+    O3 --> |select holders| KFrag_Distribute
+    O4 --> |cleanup| Secret_Destroy
+
+    note1["O-Browserからのメッセージ:
+    {role: 'owner', action: 'store-kfrags'}"]
 ```
 
-### 4.2 Holder Role
+### 4.2 Holder Role (メッセージベース)
 
 ```mermaid
 graph LR
-    subgraph "Holder Responsibilities"
-        H1[プロセス初期化]
-        H2[kFrag受信・保存]
-        H3[再暗号化実行]
-        H4[cFrag送信]
-        H5[ステータス報告]
+    subgraph "Holder Message Handlers"
+        H1[kFrag受信・保存]
+        H2[再暗号化実行]
+        H3[cFrag送信]
     end
-    
-    H1 --> |Phase 0| Process_Init
-    H2 --> |Phase 3| KFrag_Store
-    H3 --> |Phase 4| Reencryption
-    H4 --> |Phase 4| CFrag_Send
-    H5 --> |管理| Status_Report
+
+    H1 --> |from owner process| KFrag_Store
+    H2 --> |msg: holder/get-cfrag| Reencryption
+    H3 --> |to requester| CFrag_Send
+
+    note2["Owner-Processからのメッセージ:
+    {role: 'holder', action: 'store-kfrag'}
+
+    Requester-Processからのメッセージ:
+    {role: 'holder', action: 'get-cfrag'}"]
 ```
 
-### 4.3 Requester Role
+### 4.3 Requester Role (メッセージベース)
 
 ```mermaid
 graph LR
-    subgraph "Requester Responsibilities"
-        R1[プロセス初期化]
-        R2[アクセス要求]
-        R3[EVM証明提出]
-        R4[cFrag収集]
-        R5[秘密復元]
+    subgraph "Requester Message Handlers"
+        R1[アクセス要求]
+        R2[cFrag収集]
+        R3[R-Browserへ送信]
     end
-    
-    R1 --> |Phase 0| Process_Init
-    R2 --> |Phase 2| Access_Request
-    R3 --> |Phase 2| Proof_Submit
-    R4 --> |Phase 4| CFrag_Collect
-    R5 --> |Phase 5| Secret_Recover
+
+    R1 --> |external verification assumed| Access_Request
+    R2 --> |msg: requester/collect-cfrags| CFrag_Collect
+    R3 --> |batch delivery| Secret_Recover
+
+    note3["R-Browserからのメッセージ:
+    {role: 'requester', action: 'collect-cfrags'}
+
+    外部アクセス制御でpk_A検証済みが前提"]
 ```
 
 ## 5. 状態遷移の制御
 
-### 5.1 遷移条件の検証
+### 5.1 メッセージベースの状態管理
 
 ```rust
-/// 状態遷移の妥当性検証
-pub trait StateTransition {
-    type State;
-    type Event;
-    
-    /// 現在の状態から指定されたイベントによる遷移が可能か
-    fn can_transition(&self, from: Self::State, event: Self::Event) -> bool;
-    
-    /// 遷移を実行し、新しい状態を返す
-    fn transition(&self, from: Self::State, event: Self::Event) -> Result<Self::State, TransitionError>;
-    
-    /// 遷移の前提条件をチェック
-    fn check_preconditions(&self, state: &Self::State, event: &Self::Event) -> Result<(), PreconditionError>;
+/// メッセージハンドラーベースのシンプルな状態管理
+pub trait MessageHandler {
+    type Message;
+    type Response;
+
+    /// メッセージが現在の状態で処理可能か
+    fn can_handle(&self, state: &ProcessState, msg: &Self::Message) -> bool;
+
+    /// メッセージを処理し、状態を更新
+    fn handle(&self, state: &mut ProcessState, msg: Self::Message) -> Result<Self::Response, HandlerError>;
+}
+
+/// 簡素化されたプロセス状態
+#[derive(Debug, Clone)]
+pub enum ProcessState {
+    Spawned,
+    Active { current_role: Option<ProcessRole> },
+    Terminated,
 }
 ```
 
-### 5.2 トランザクション管理
+### 5.2 AOステートレス実行での状態管理
 
-各状態遷移は原子性を保証する必要があります：
+AOネットワークのステートレス実行環境での状態管理パターン：
 
-1. **開始前チェック**: 前提条件の検証
-2. **遷移実行**: 状態の更新
-3. **永続化**: Arweaveへの保存
-4. **通知**: 関連プロセスへの通知
-5. **ロールバック**: エラー時の状態復元
+1. **状態ロード**: メッセージ処理開始時にArweaveから状態を読み込み
+2. **メッセージ処理**: ハンドラーで状態を更新
+3. **状態保存**: 更新された状態をArweaveに永続化
+4. **メッセージ送信**: 必要に応じて他プロセスにメッセージ送信
+
+メモリはメッセージ間で持続しないため、全ての状態はArweaveに保存される必要があります。
 
 ## 6. エラー処理とリカバリー
 
@@ -215,36 +226,43 @@ pub trait CompensatableOperation {
 
 ## 7. 監査とコンプライアンス
 
-### 7.1 監査ポイント
+### 7.1 D-TPRES内部監査ポイント
 
-各ライフサイクルの重要な遷移ポイントで監査ログを記録：
+D-TPRESライブラリ内で記録すべき監査ポイント：
 
-1. **状態遷移**: すべての状態変更を記録
-2. **権限確認**: ロールベースのアクセス制御
-3. **エラー発生**: エラーと対処の記録
-4. **パフォーマンス**: 処理時間とリソース使用
+1. **メッセージ処理**: 各メッセージハンドラーの実行記録
+2. **暗号化操作**: 秘密分割、再暗号化、復元の記録
+3. **エラー発生**: ライブラリ内エラーと対処の記録
+4. **パフォーマンス**: 暗号化処理時間とメモリ使用
 
-### 7.2 監査ログ構造
+外部アクセス制御や権限管理の監査は外部システムの責任です。
+
+### 7.2 D-TPRES監査ログ構造
 
 ```rust
 #[derive(Debug, Serialize)]
-pub struct AuditLog {
+pub struct DtpresAuditLog {
     pub timestamp: SystemTime,
-    pub lifecycle: LifecycleType,
-    pub entity_id: String,
-    pub from_state: String,
-    pub to_state: String,
-    pub event: String,
-    pub actor: ProcessId,
-    pub metadata: HashMap<String, String>,
-    pub result: TransitionResult,
+    pub process_id: ProcessId,
+    pub message_type: MessageType,
+    pub role: ProcessRole,
+    pub operation: CryptoOperation,
+    pub result: OperationResult,
+    pub performance_metrics: Option<PerformanceMetrics>,
 }
 
 #[derive(Debug, Serialize)]
-pub enum TransitionResult {
+pub enum CryptoOperation {
+    SecretSplit { threshold: u32, shares: u32 },
+    KFragGeneration { count: u32 },
+    ReEncryption { kfrag_id: String },
+    SecretRecovery { shares_used: u32 },
+}
+
+#[derive(Debug, Serialize)]
+pub enum OperationResult {
     Success,
-    Failed { reason: String },
-    Compensated { original_error: String },
+    Failed { error_code: String, message: String },
 }
 ```
 
@@ -275,23 +293,24 @@ pub struct ScalableStateManager {
 
 ## 9. セキュリティ設計
 
-### 9.1 アクセス制御
+### 9.1 D-TPRES内部アクセス制御
 
-各ライフサイクルフェーズで適切なアクセス制御を実施：
+D-TPRESライブラリ内でのアクセス制御要素：
 
-1. **ロールベース**: 各操作は特定のロールのみ実行可能
-2. **状態ベース**: 現在の状態に応じて許可される操作を制限
-3. **時間ベース**: タイムアウトと有効期限の管理
-4. **暗号学的検証**: 署名と証明による認証
+1. **メッセージベースロール**: メッセージで指定されたロールに応じたハンドラー実行
+2. **状態ベース**: プロセスの現在状態に応じた操作許可
+3. **暗号学的検証**: umbral-preでの署名検証、Shamirシェアの整合性確認
+4. **外部アクセス制御**: pk_Aの検証は外部システムが完了したという前提
 
-### 9.2 攻撃シナリオと対策
+### 9.2 D-TPRES特有の攻撃シナリオと対策
 
-| 攻撃シナリオ | 対策 |
-|-------------|------|
-| 不正な状態遷移 | 状態遷移マトリクスによる検証 |
-| リプレイ攻撃 | ナンスとタイムスタンプ検証 |
-| 並行性攻撃 | 楽観的ロックとCAS操作 |
-| DoS攻撃 | Rate Limitingとリソース制限 |
+| 攻撃シナリオ | D-TPRES内対策 | 外部システム責任 |
+|-------------|---------------|------------------|
+| 不正なメッセージハンドリング | メッセージ形式検証、ロール権限チェック | - |
+| 暗号学的攻撃 | umbral-preの安全性、定数時間実装 | - |
+| メモリ露出 | zeroize実装、秘密鍵の即座クリア | - |
+| 不正アクセス要求 | - | 外部アクセス制御システムでpk_A検証 |
+| Sybil攻撃 | - | RandAO選択、将来的にStaking要件 |
 
 ## 10. 実装ガイドライン
 
@@ -302,32 +321,36 @@ pub struct ScalableStateManager {
 3. **イベントソーシング**: 状態変更をイベントとして記録
 4. **テスタビリティ**: 各遷移を単体テスト可能に
 
-### 10.2 コード例
+### 10.2 簡素化されたコード例
 
 ```rust
-/// プロセスライフサイクルの実装例
+/// 簡素化されたD-TPRESプロセス状態
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProcessState {
-    Uninitialized,
-    Initialized { role: Option<ProcessRole> },
-    Active { role: ProcessRole, since: SystemTime },
-    Suspended { reason: String, since: SystemTime },
-    Terminated { reason: String, at: SystemTime },
+    Spawned,
+    Active { process_id: ProcessId },
+    Terminated,
 }
 
-impl StateTransition for ProcessLifecycle {
-    type State = ProcessState;
-    type Event = ProcessEvent;
-    
-    fn can_transition(&self, from: Self::State, event: Self::Event) -> bool {
-        match (from, event) {
-            (ProcessState::Uninitialized, ProcessEvent::Initialize) => true,
-            (ProcessState::Initialized { .. }, ProcessEvent::SetRole(_)) => true,
-            (ProcessState::Active { .. }, ProcessEvent::Suspend(_)) => true,
-            (ProcessState::Active { .. }, ProcessEvent::Terminate(_)) => true,
-            (ProcessState::Suspended { .. }, ProcessEvent::Resume) => true,
-            (ProcessState::Suspended { .. }, ProcessEvent::Terminate(_)) => true,
-            _ => false,
+/// メッセージハンドラーの実装例
+impl MessageHandler for DtpresProcess {
+    type Message = AOMessage;
+    type Response = AOResponse;
+
+    fn can_handle(&self, state: &ProcessState, msg: &Self::Message) -> bool {
+        match state {
+            ProcessState::Active { .. } => true,
+            ProcessState::Spawned => matches!(msg.action.as_str(), "initialize"),
+            ProcessState::Terminated => false,
+        }
+    }
+
+    fn handle(&self, state: &mut ProcessState, msg: Self::Message) -> Result<Self::Response, HandlerError> {
+        match (state, msg.role.as_str(), msg.action.as_str()) {
+            (ProcessState::Active { .. }, "owner", "store-kfrags") => self.handle_owner_store_kfrags(msg),
+            (ProcessState::Active { .. }, "holder", "get-cfrag") => self.handle_holder_get_cfrag(msg),
+            (ProcessState::Active { .. }, "requester", "collect-cfrags") => self.handle_requester_collect_cfrags(msg),
+            _ => Err(HandlerError::UnsupportedOperation),
         }
     }
 }
@@ -335,7 +358,13 @@ impl StateTransition for ProcessLifecycle {
 
 ## まとめ
 
-D-TPRESのライフサイクル管理は、システムの信頼性とセキュリティを確保する上で重要な役割を果たします。明確に定義されたフェーズと遷移条件により、分散環境でも一貫性のある動作を保証し、監査可能性を提供します。
+D-TPRESのライフサイクル管理は、PRD.mdの更新に合わせて簡素化され、純粋な暗号学的秘密管理ライブラリとしての位置づけが明確になりました。メッセージベースの動的ロール切り替え、AOステートレス実行環境への対応、および外部アクセス制御との明確な責任分界により、実装とメンテナンスが容易なシステムとなっています。
+
+主な変更点：
+- **ブラウザコンポーネントの明確化**: O-BrowserとR-Browserの役割分担
+- **プロセス状態の簡素化**: Spawned → Active → Terminatedのシンプルなフロー
+- **動的ロール切り替え**: メッセージごとにロールを指定
+- **外部アクセス制御の前提化**: EVM検証を外部システムの責任に
 
 ### 関連ドキュメント
 
