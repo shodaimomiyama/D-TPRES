@@ -1,3 +1,3 @@
 //! Core service module for WASM
 
-pub mod crypto;
+// Crypto module moved to crypto_core

@@ -1,0 +1,12 @@
+{
+  "network": "mainnet",
+  "protocol": "ao",
+  "variant": "ao_0_1",
+  "urls": {
+    "arweave": "https://arweave.net",
+    "graphql": "https://arweave.net/graphql",
+    "mu": "https://mu.ao.arweave.dev",
+    "su": "https://su.ao.arweave.dev",
+    "cu": "https://cu.ao.arweave.dev"
+  }
+}

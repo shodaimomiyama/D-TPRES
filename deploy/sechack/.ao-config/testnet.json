@@ -1,0 +1,12 @@
+{
+  "network": "testnet",
+  "protocol": "ao",
+  "variant": "ao_0_1",
+  "urls": {
+    "arweave": "https://arweave.net",
+    "graphql": "https://arweave.net/graphql",
+    "mu": "https://mu.ao-testnet.xyz",
+    "su": "https://su.ao-testnet.xyz",
+    "cu": "https://cu.ao-testnet.xyz"
+  }
+}

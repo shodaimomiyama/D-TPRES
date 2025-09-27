@@ -11,7 +11,7 @@ use crate::crypto_core::{
 use serde::{Deserialize, Serialize};
 
 /// Structure to hold the encryption setup results
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct EncryptionSetupResult {
     pub kfrags: Vec<KeyFragment>,
     pub shares_count: usize,

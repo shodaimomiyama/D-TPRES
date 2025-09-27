@@ -1,0 +1,18 @@
+{
+  "network": "local",
+  "protocol": "ao",
+  "variant": "ao_0_1",
+  "urls": {
+    "arweave": "http://localhost:1984",
+    "graphql": "http://localhost:1984/graphql",
+    "mu": "http://localhost:1985",
+    "su": "http://localhost:1986",
+    "cu": "http://localhost:1987"
+  },
+  "ports": {
+    "arweave": 1984,
+    "mu": 1985,
+    "su": 1986,
+    "cu": 1987
+  }
+}

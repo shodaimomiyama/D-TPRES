@@ -5,16 +5,26 @@
   "type": "module",
   "scripts": {
     "build": "node build.js",
+    "build-wasm": "./build-wasm.sh",
+    "build-wasm-pack": "./build-wasm-pack.sh",
     "deploy": "node deploy.js",
+    "wallet:generate": "node generate-wallet.js",
+    "setup:local": "node setup-local-ao.js",
     "test": "node test.js",
-    "build-wasm": "../sechack/build-wasm.sh",
+    "test-cwao": "node test-cwao-basic.js",
+    "test-crypto-flow": "node test-dtpres-crypto-flow.js",
+    "test-e2e": "node test-e2e-cwao.js",
+    "test-wasm-pack": "node test-wasm-pack.js",
     "verify": "node verify.js"
   },
   "dependencies": {
     "@permaweb/aoconnect": "^0.0.55",
+    "arlocal": "^1.1.66",
     "arweave": "^1.14.4",
     "chalk": "^5.3.0",
     "cwao": "^0.5.5",
+    "cwao-units": "^0.8.2",
+    "dotenv": "^16.0.3",
     "fs-extra": "^11.2.0"
   },
   "devDependencies": {

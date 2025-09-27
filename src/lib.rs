@@ -17,6 +17,9 @@ pub mod crypto_core;
 #[cfg(feature = "local")]
 pub mod local;
 
+#[cfg(feature = "browser")]
+pub mod wasm_bindings;
+
 // Conditional compilation for service module
 #[cfg(not(target_arch = "wasm32"))]
 pub mod service;
