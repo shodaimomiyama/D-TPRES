@@ -60,28 +60,19 @@ impl MessageRouter {
         match owner_handlers::handle_setup_encryption(&params.secret, params.threshold, params.total_shares) {
             Ok(result) => {
                 // Convert and store kfrags
-                let serialized_kfrags = result.kfrags.iter()
+                let serialized_kfrags = result.kfrags.clone().into_iter()
                     .map(|kf| super::SerializedKeyFragment {
                         id: kf.id,
-                        key_data: kf.key_data.clone(),
-                        verification_data: kf.verification_data.clone(),
-                        precursor: kf.precursor.clone(),
+                        key_data: kf.key_data,
+                        verification_data: kf.verification_data,
+                        precursor: kf.precursor,
                     })
                     .collect();
-
+                
                 self.state.update_kfrags(serialized_kfrags);
-
-                // Create response without KeyFragment (which doesn't serialize)
-                let response_data = serde_json::json!({
-                    "status": "success",
-                    "message": "Encryption setup completed",
-                    "kfrag_count": result.kfrags.len(),
-                    "shares_count": result.shares_count,
-                    "threshold": result.threshold,
-                    "capsule_id": result.capsule_id
-                });
-                let response_bytes = serde_json::to_vec(&response_data).ok();
-                AOResponse::success("Encryption setup completed".to_string(), response_bytes)
+                
+                let response_data = serde_json::to_vec(&result).ok();
+                AOResponse::success("Encryption setup completed".to_string(), response_data)
             }
             Err(e) => AOResponse::error(format!("Setup failed: {:?}", e)),
         }
