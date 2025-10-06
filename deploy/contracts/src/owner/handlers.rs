@@ -427,12 +427,14 @@ mod tests {
                 id: "kfrag_1".to_string(),
                 encrypted_data: vec![1, 2, 3, 4],
                 holder_id: "holder_1".to_string(),
+                holder_process_id: "holder_process_1".to_string(),
                 signature: vec![5, 6, 7, 8],
             },
             KFragDistribution {
                 id: "kfrag_2".to_string(),
                 encrypted_data: vec![9, 10, 11, 12],
                 holder_id: "holder_2".to_string(),
+                holder_process_id: "holder_process_2".to_string(),
                 signature: vec![13, 14, 15, 16],
             },
         ];
