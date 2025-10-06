@@ -12,18 +12,96 @@ D-TPRESシステムは3つの独立したAO Networkプロセスで構成され�
 
 各プロセスは役割分離により独立したストレージ空間を持ち、AO Network層を通じて安全に通信します。
 
-## AO Network特有のアーキテクチャ
+## AO Computer特有のアーキテクチャ
 
 ### イベントソーシング状態管理
 
-D-TPRESシステムは**AO Network**上で動作するため、従来のデータベースとは根本的に異なる状態管理を採用しています：
+D-TPRESシステムは**AO Computer**上で動作するため、従来のデータベースとは根本的に異なる状態管理を採用しています：
 
-**🔄 イベントソーシング方式：CUメモリでの動的状態再現**
+**🔄 Holographic State：メッセージログからの状態暗示**
 
-重要な理解：**KVストレージはディスクに保存されません**。代わりに：
+重要な理解：**状態は明示的に保存されません**。代わりに：
 1. **メッセージ履歴**のみがArweaveに永続化される
-2. **CUメモリ上で動的に状態を再現**する
-3. プロセスが必要な値は、再現されたCUメモリから取得する
+2. **状態はメッセージログから暗黙的に導出される**（Holographic State）
+3. CUが必要時に競争的に状態を解決・計算する
+
+### D-TPRES実装 vs AO Computer一般概念の区別
+
+**📋 AO Computer一般アーキテクチャ（プラットフォーム基盤）**
+- **Holographic State**: すべてのAO Computerプロセスに共通の状態管理概念
+- **Actor Model**: メッセージベースの並行コンピューティングモデル
+- **MU/SU/CU**: AO Computerインフラストラクチャの共通コンポーネント
+- **Deterministic Execution**: WebAssemblyによる再現可能な実行環境
+
+**🎯 D-TPRES固有実装（アプリケーション層）**
+- **CosmWasm Framework**: D-TPRESが使用する具体的なスマートコントラクトフレームワーク
+- **Threshold Cryptography**: umbral-preライブラリによる閾値暗号実装
+- **kFrag/cFrag**: D-TPRES固有の暗号学的データ構造
+- **Owner/Holder/Requester**: D-TPRES固有のプロセス役割分担
+
+```mermaid
+graph TB
+    subgraph "AO Computer Platform（汎用基盤）"
+        HS[Holographic State]
+        AM[Actor Model]
+        DX[Deterministic Execution]
+        IN[Infrastructure: MU/SU/CU]
+    end
+
+    subgraph "D-TPRES Application（固有実装）"
+        CW[CosmWasm Framework]
+        TC[Threshold Cryptography]
+        PR[Process Roles: O/H/R]
+        CF[Crypto Fragments: kFrag/cFrag]
+    end
+
+    HS -.->|実装| CW
+    AM -.->|実現| PR
+    DX -.->|保証| TC
+    IN -.->|基盤| CF
+
+    CW -->|利用| HS
+    PR -->|従う| AM
+    TC -->|依存| DX
+    CF -->|動作| IN
+```
+
+**💡 重要な理解ポイント**：
+- **AO Computer = プラットフォーム**: Holographic Stateなどの汎用概念を提供
+- **D-TPRES = アプリケーション**: AO Computer上で動作する特定の暗号学的システム
+- **CosmWasm = 実装ツール**: D-TPRESがAO Computerの概念を具体化する手段
+- **deps.storage = 抽象インターフェース**: Holographic Stateへのアクセスを簡素化
+
+**📋 AO Computerのアーキテクチャ要素**
+
+```mermaid
+graph TB
+    subgraph "AO Computer Network"
+        MU[MU: Messenger Unit<br/>メッセージリレー・エントリポイント]
+        SU[SU: Scheduler Unit<br/>決定論的メッセージ順序付け]
+        CU1[CU1: Compute Unit<br/>競争的状態解決]
+        CU2[CU2: Compute Unit<br/>競争的状態解決]
+        CUN[CU...: Compute Unit<br/>競争的状態解決]
+    end
+
+    subgraph "Arweave永続化"
+        ML[Message Log<br/>メッセージ履歴]
+    end
+
+    MU -->|メッセージ受信| SU
+    SU -->|順序付きメッセージ| CU1
+    SU -->|順序付きメッセージ| CU2
+    SU -->|順序付きメッセージ| CUN
+
+    CU1 -.->|競争的解決| STATE[プロセス状態]
+    CU2 -.->|競争的解決| STATE
+    CUN -.->|競争的解決| STATE
+
+    SU -->|永続化| ML
+    CU1 -->|メッセージログ参照| ML
+    CU2 -->|メッセージログ参照| ML
+    CUN -->|メッセージログ参照| ML
+```
 
 ```mermaid
 graph TB
@@ -34,12 +112,12 @@ graph TB
         MSG4["Message4: SetKV{key:'c', value:'20'}"]
     end
 
-    subgraph "CU Runtime Memory（動的再現）"
-        EMPTY["空のメモリ状態<br/>{}"]
-        STATE1["実行後状態<br/>{a: '1'}"]
-        STATE2["実行後状態<br/>{a: '1', b: '2'}"]
-        STATE3["実行後状態<br/>{a: '10', b: '2'}"]
-        FINAL["最終状態<br/>{a: '10', b: '2', c: '20'}"]
+    subgraph "Holographic State（暗黙的導出）"
+        EMPTY["メッセージ0個時<br/>{}"]
+        STATE1["メッセージ1個処理後<br/>{a: '1'}"]
+        STATE2["メッセージ2個処理後<br/>{a: '1', b: '2'}"]
+        STATE3["メッセージ3個処理後<br/>{a: '10', b: '2'}"]
+        FINAL["全メッセージ処理後<br/>{a: '10', b: '2', c: '20'}"]
     end
 
     MSG1 --> EMPTY
@@ -51,12 +129,13 @@ graph TB
     MSG4 --> STATE3
     STATE3 --> FINAL
 
-    FINAL -.->|プロセスロジックで利用| LOGIC["get('a') → '10'<br/>get('b') → '2'"]
+    FINAL -.->|CUが計算・提供| LOGIC["get('a') → '10'<br/>get('b') → '2'"]
 ```
 
-**💡 なぜ「状態」ではなく「メッセージ」を保存するのか**
-- **完全な再現性**: どのCUでも同じメッセージ列 → 同じ状態
-- **並列実行**: 異なるプロセスを独立したCUで実行可能
+**💡 Holographic Stateの利点**
+- **完全な再現性**: どのCUでも同じメッセージ列から同じ状態を導出
+- **真の並列実行**: プロセスが独立してHolographic Stateを維持
+- **競争的解決**: 複数のCUが状態解決を競い合い、最適な結果を提供
 - **タイムトラベル**: 過去の任意時点の状態を再計算で復元
 
 ```mermaid
@@ -157,35 +236,44 @@ pub fn reconstruct_state_from_messages(messages: Vec<Message>) -> KVState {
 }
 ```
 
-### CU（Compute Unit）による自動状態復元
+### CU（Compute Unit）による競争的状態解決
 
-この再現プロセスは完全に自動化されており、新しいメッセージ処理時に透過的に実行されます：
+CUは状態を「保持」するのではなく、要求に応じて「競争的に解決」します：
 
 ```mermaid
 sequenceDiagram
-    participant CU as Compute Unit
+    participant Client as Client Request
+    participant CU1 as Compute Unit 1
+    participant CU2 as Compute Unit 2
     participant SU as Scheduler Unit
     participant AW as Arweave
-    participant VM as WASM VM
 
-    Note over CU: プロセス再起動が必要
-    CU->>SU: process(pid)でメッセージ履歴取得
-    SU->>CU: メッセージグラフ（edges）返却
-    CU->>AW: WASMモジュール取得
-    AW->>CU: バイナリデータ返却
-    CU->>VM: 新しいVMインスタンス作成
+    Client->>CU1: 状態取得要求
+    Client->>CU2: 状態取得要求（競争）
 
-    loop メッセージ履歴を順次実行
-        CU->>VM: execute(message)
-        VM->>VM: KVストレージ更新
+    par 競争的解決
+        CU1->>SU: メッセージ履歴取得
+        SU->>CU1: 順序付きメッセージ
+        CU1->>AW: WASM/データ参照
+        AW->>CU1: 必要データ
+        Note over CU1: メッセージログから状態計算
+    and
+        CU2->>SU: メッセージ履歴取得
+        SU->>CU2: 順序付きメッセージ
+        CU2->>AW: WASM/データ参照
+        AW->>CU2: 必要データ
+        Note over CU2: メッセージログから状態計算
     end
 
-    Note over VM: 最新状態が完全復元される
+    CU1->>Client: 計算結果（Holographic State）
+    CU2->>Client: 計算結果（同一の状態）
+
+    Note over CU1,CU2: CUは結果を「保存」せず、次回も再計算
 ```
 
-**🔧 開発者視点での透明性とプロセスロジックでのKV利用**
+**🔧 D-TPRES具体実装：CosmWasmによるHolographic State利用**
 
-CUが再現したKVストレージは、プロセスロジックから透過的にアクセス可能です：
+D-TPRESでは、AO ComputerのHolographic State概念をCosmWasmフレームワークで具体的に実装しています。CUが計算したプロセス状態は、CosmWasmの`deps.storage`抽象インターフェースを通じて透過的にアクセス可能です：
 
 ```rust
 // D-TPRES Owner-Processでの実際の利用例
@@ -195,17 +283,17 @@ pub fn execute_check_distribution_status(
     info: MessageInfo,
     kfrag_id: String,
 ) -> Result<Response, ContractError> {
-    // 1. CUが再現したKVメモリから値を取得
+    // 1. CUが計算したHolographic Stateから値を取得
     let kfrag_data = OWNER_KFRAGS.load(deps.storage, &kfrag_id)?;
-    //                ↑ CUメモリ上の{kf001: OwnerKFragData{distributed: true}} から取得
+    //                ↑ CUがメッセージログから計算した状態にアクセス
 
     // 2. ビジネスロジックで再現された状態を利用
     if kfrag_data.distributed {
         // 配布済みの場合の処理
         let holder_assignment = HOLDER_ASSIGNMENTS.load(deps.storage, &kfrag_data.target_holder)?;
-        //                      ↑ 同様にCUメモリから取得
+        //                      ↑ 同様にCUが計算した状態から取得
 
-        // 3. 計算結果を新しいKV状態として保存（次回の再現で利用される）
+        // 3. 計算結果を新しいメッセージとして記録（次回のHolographic State計算で利用）
         let stats = DistributionStats {
             total_distributed: get_distributed_count(&deps)?,
             last_check: env.block.time.seconds(),
@@ -234,15 +322,15 @@ fn get_distributed_count(deps: &DepsMut) -> StdResult<u32> {
 }
 ```
 
-**📊 重要なポイント**
-- `deps.storage.load()`: CUが再現したメモリから値を取得
-- `deps.storage.save()`: 次回再現で利用される新しい状態を設定
-- 状態は「保存」されるのではなく「次のメッセージ実行で再計算される」
-- プロセスロジックは普通のRustコードのように書ける（再現の複雑さは隠蔽）
+**📊 実装レイヤーでの重要なポイント**
+- `deps.storage.load()`: CUが計算したHolographic Stateから値を取得（CosmWasm抽象化）
+- `deps.storage.save()`: 次回のHolographic State計算で利用される新状態を記録（CosmWasm抽象化）
+- **AO層**: 状態は「保存」されるのではなく「メッセージログから再計算される」
+- **アプリ層**: D-TPRESロジックは普通のRustコードのように書ける（AO再現の複雑さはCosmWasmが隠蔽）
 
 ### ステートレス実行制約
 
-AO Networkでは**メッセージ間でメモリがリセット**される重要な制約があります：
+AO Computer（旧AO Network）では**メッセージ間でメモリがリセット**される重要な制約があります：
 
 **⚠️ 従来のプログラミングとの違い**
 
@@ -290,11 +378,11 @@ graph LR
     end
 ```
 
-**📝 実装での重要ポイント**
-- **CUメモリからの状態取得**: `deps.storage`は実際にはCUが再現したメモリ状態
-- **メモリ非永続化**: 静的変数やグローバル変数は使用不可（次のメッセージで消える）
-- **原子的処理**: 各メッセージ処理は完結した状態変更を含む
-- **状態は「保存」ではなく「記録」**: 次のメッセージ実行時に再計算される
+**📝 D-TPRES実装での重要ポイント**
+- **AO抽象化**: `deps.storage`はCUが計算したHolographic Stateへの透過的アクセス（CosmWasmによる抽象化）
+- **メモリ非永続化**: 静的変数やグローバル変数は使用不可（AO Computer制約）
+- **原子的処理**: 各メッセージ処理は完結した状態変更を含む（Actor Model準拠）
+- **状態の性質**: AO層では「メッセージログからの再計算」、アプリ層では「透過的なKVアクセス」
 
 ### Arweaveストレージ制約
 
