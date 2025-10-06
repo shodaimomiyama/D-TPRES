@@ -1,6 +1,6 @@
+use cw_storage_plus::{Item, Map};
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
-use cw_storage_plus::{Item, Map};
 
 // Owner-Process専用ストレージ
 pub const OWNER_KFRAGS: Map<String, OwnerKFragData> = Map::new("owner_kfrags");
@@ -37,7 +37,7 @@ pub enum ProcessRole {
 #[derive(Serialize, Deserialize, Clone, Debug, Zeroize, ZeroizeOnDrop)]
 pub struct OwnerKFragData {
     pub kfrag_id: String,
-    pub encrypted_kfrag: Vec<u8>,  // AES-GCM暗号化済み
+    pub encrypted_kfrag: Vec<u8>, // AES-GCM暗号化済み
     #[zeroize(skip)]
     pub target_holder: String,
     #[zeroize(skip)]
@@ -73,7 +73,7 @@ pub struct OwnerMetadata {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OwnerConfig {
     pub process_role: ProcessRole,
-    pub encryption_key: String,  // 暗号化キーへの参照（実際の鍵は別途管理）
+    pub encryption_key: String, // 暗号化キーへの参照（実際の鍵は別途管理）
     pub authorized_holders: Vec<String>,
 }
 
@@ -83,7 +83,7 @@ pub struct HolderKFragData {
     pub kfrag_id: String,
     #[zeroize(skip)]
     pub source_owner: String,
-    pub encrypted_kfrag: Vec<u8>,  // 暗号化されたkFragment
+    pub encrypted_kfrag: Vec<u8>, // 暗号化されたkFragment
     pub signature: Vec<u8>,
     #[zeroize(skip)]
     pub received_at: u64,
@@ -223,9 +223,9 @@ impl OwnerKFragData {
 
 impl HolderKFragData {
     pub fn is_valid(&self) -> bool {
-        !self.encrypted_kfrag.is_empty() &&
-        !self.signature.is_empty() &&
-        !self.source_owner.is_empty()
+        !self.encrypted_kfrag.is_empty()
+            && !self.signature.is_empty()
+            && !self.source_owner.is_empty()
     }
 }
 
@@ -235,7 +235,8 @@ impl CFragCollection {
     }
 
     pub fn verified_cfrags_count(&self) -> usize {
-        self.collected_cfrags.iter()
+        self.collected_cfrags
+            .iter()
             .filter(|cfrag| cfrag.verified)
             .count()
     }
@@ -245,7 +246,7 @@ impl CFragCollection {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AOProcessInfo {
     pub process_id: String,
-    pub wasm_tx_id: String,  // ArweaveのWASMモジュールTXID
+    pub wasm_tx_id: String, // ArweaveのWASMモジュールTXID
     pub process_role: ProcessRole,
     pub spawned_at: u64,
     pub status: AOProcessStatus,
@@ -266,9 +267,9 @@ pub struct ProcessRegistry {
     pub current_process_id: String,
     pub current_role: ProcessRole,
     pub initialization_time: u64,
-    pub holder_processes: Vec<String>,      // Owner-Processが管理するHolder-Processのリスト
-    pub requester_processes: Vec<String>,   // システム内のRequester-Processのリスト
-    pub owner_process: Option<String>,      // Holder/RequesterからみたOwner-Process
+    pub holder_processes: Vec<String>, // Owner-Processが管理するHolder-Processのリスト
+    pub requester_processes: Vec<String>, // システム内のRequester-Processのリスト
+    pub owner_process: Option<String>, // Holder/RequesterからみたOwner-Process
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -340,11 +341,7 @@ impl ProcessRegistry {
 }
 
 impl PendingMessage {
-    pub fn new(
-        target_process: String,
-        message_type: String,
-        message_data: Vec<u8>,
-    ) -> Self {
+    pub fn new(target_process: String, message_type: String, message_data: Vec<u8>) -> Self {
         Self {
             message_id: format!("msg_{}_{}", target_process, generate_message_id()),
             target_process,

@@ -296,6 +296,7 @@ mod tests {
         let cfrag_data = CFragSubmission {
             cfrag_id: "cfrag_1".to_string(),
             holder_id: "holder_1".to_string(),
+            holder_process_id: "holder_process_1".to_string(),
             cfrag_data: vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
             signature: vec![1; 64], // 64バイトの署名
         };

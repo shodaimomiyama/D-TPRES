@@ -233,6 +233,7 @@ mod tests {
                 id: "kfrag_1".to_string(),
                 encrypted_data: vec![1, 2, 3, 4],
                 holder_id: "holder_1".to_string(),
+                holder_process_id: "holder_process_1".to_string(),
                 signature: vec![5, 6, 7, 8],
             },
         ];

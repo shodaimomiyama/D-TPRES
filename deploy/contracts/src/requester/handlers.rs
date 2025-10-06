@@ -489,6 +489,7 @@ mod tests {
         let cfrag_data = CFragSubmission {
             cfrag_id: "cfrag_1".to_string(),
             holder_id: "holder_1".to_string(),
+            holder_process_id: "holder_process_1".to_string(),
             cfrag_data: vec![1, 2, 3, 4, 5, 6, 7, 8],
             signature: vec![1; 64],
         };
@@ -521,6 +522,7 @@ mod tests {
         let cfrag_data = CFragSubmission {
             cfrag_id: "cfrag_1".to_string(),
             holder_id: "holder_1".to_string(),
+            holder_process_id: "holder_process_1".to_string(),
             cfrag_data: vec![1, 2, 3, 4],
             signature: vec![1; 64],
         };
@@ -671,6 +673,7 @@ mod tests {
         let cfrag1 = CFragSubmission {
             cfrag_id: "cfrag_1".to_string(),
             holder_id: "holder_1".to_string(),
+            holder_process_id: "holder_process_1".to_string(),
             cfrag_data: vec![1, 2, 3, 4],
             signature: vec![1; 64],
         };
@@ -688,6 +691,7 @@ mod tests {
         let cfrag2 = CFragSubmission {
             cfrag_id: "cfrag_2".to_string(),
             holder_id: "holder_2".to_string(),
+            holder_process_id: "holder_process_2".to_string(),
             cfrag_data: vec![5, 6, 7, 8],
             signature: vec![2; 64],
         };
