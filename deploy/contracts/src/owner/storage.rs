@@ -283,27 +283,16 @@ pub fn get_holder_assignment_stats(deps: Deps) -> StdResult<HolderAssignmentStat
     })
 }
 
-/// Owner設定の更新
+/// Owner設定の更新（簡略化 - プロセスロールのみ管理）
 pub fn update_owner_config(
     deps: DepsMut,
-    authorized_holders: Option<Vec<String>>,
-    encryption_key: Option<String>,
 ) -> StdResult<OwnerStorageResult<OwnerConfig>> {
-    let mut config = OWNER_CONFIG.load(deps.storage)?;
+    let config = OWNER_CONFIG.load(deps.storage)?;
 
-    if let Some(holders) = authorized_holders {
-        config.authorized_holders = holders;
-    }
-
-    if let Some(key) = encryption_key {
-        config.encryption_key = key;
-    }
-
-    OWNER_CONFIG.save(deps.storage, &config)?;
-
+    // OwnerConfigはprocess_roleのみなので更新不要
     Ok(OwnerStorageResult {
         data: config,
-        affected_records: 1,
+        affected_records: 0,  // 実際には何も変更しない
     })
 }
 

@@ -65,8 +65,7 @@ pub use storage::{
 pub use handlers::{
     RandAOSelection,
     KFragDistributionResult,
-    handle_distribute_kfrags,
-    handle_update_holder_assignment,
+    handle_receive_kfrags,
     handle_distribution_confirmation,
     query_owner_metadata,
     query_kfrags,
@@ -98,13 +97,13 @@ impl OwnerProcessFacade {
     /// # 戻り値
     ///
     /// 配布結果を含む Response または ContractError
-    pub fn distribute_kfrags(
+    pub fn receive_kfrags(
         deps: cosmwasm_std::DepsMut,
         env: cosmwasm_std::Env,
         info: cosmwasm_std::MessageInfo,
-        kfrags: Vec<crate::msg::KFragDistribution>,
+        kfrags: Vec<crate::msg::KFragWithSignature>,
     ) -> Result<cosmwasm_std::Response, crate::contract::ContractError> {
-        handlers::handle_distribute_kfrags(deps, env, info, kfrags)
+        handlers::handle_receive_kfrags(deps, env, info, kfrags)
     }
 
     /// Holder 割り当ての更新
@@ -203,17 +202,14 @@ mod tests {
 
     fn setup_test_owner_process(deps: cosmwasm_std::DepsMut) {
         let metadata = OwnerMetadata {
-            threshold_k: 3,
+            owner_id: "test_owner".to_string(),
             total_holders_n: 5,
-            capsule_txid: "test_capsule".to_string(),
-            requester_pubkey: "test_pubkey".to_string(),
             creation_time: 1000,
+            signer_pubkey: "test_signer_pubkey".to_string(),
         };
 
         let config = OwnerConfig {
             process_role: ProcessRole::Owner,
-            encryption_key: "test_key".to_string(),
-            authorized_holders: vec![],
         };
 
         OWNER_METADATA.save(deps.storage, &metadata).unwrap();
@@ -221,7 +217,7 @@ mod tests {
     }
 
     #[test]
-    fn test_facade_distribute_kfrags() {
+    fn test_facade_receive_kfrags() {
         let mut deps = mock_dependencies();
         let env = mock_env();
         let info = mock_info("owner", &[]);
@@ -229,16 +225,14 @@ mod tests {
         setup_test_owner_process(deps.as_mut());
 
         let kfrags = vec![
-            KFragDistribution {
-                id: "kfrag_1".to_string(),
-                encrypted_data: vec![1, 2, 3, 4],
-                holder_id: "holder_1".to_string(),
-                holder_process_id: "holder_process_1".to_string(),
+            crate::msg::KFragWithSignature {
+                kfrag_id: "kfrag_1".to_string(),
+                kfrag_data: vec![1, 2, 3, 4],
                 signature: vec![5, 6, 7, 8],
             },
         ];
 
-        let result = OwnerProcessFacade::distribute_kfrags(
+        let result = OwnerProcessFacade::receive_kfrags(
             deps.as_mut(),
             env,
             info,

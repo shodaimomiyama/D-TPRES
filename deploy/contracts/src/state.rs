@@ -63,18 +63,15 @@ pub enum AssignmentStatus {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OwnerMetadata {
-    pub threshold_k: u32,
-    pub total_holders_n: u32,
-    pub capsule_txid: String,
-    pub requester_pubkey: String,
+    pub owner_id: String,
+    pub total_holders_n: u32,        // RandAOでHolder選出に必要
     pub creation_time: u64,
+    pub signer_pubkey: String,       // O-Browserの署名検証用公開鍵
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OwnerConfig {
-    pub process_role: ProcessRole,
-    pub encryption_key: String, // 暗号化キーへの参照（実際の鍵は別途管理）
-    pub authorized_holders: Vec<String>,
+    pub process_role: ProcessRole,  // プロセスロール識別のみ
 }
 
 // Holder-Process データ構造

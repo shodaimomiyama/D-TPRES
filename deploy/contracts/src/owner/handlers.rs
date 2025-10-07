@@ -6,7 +6,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::contract::ContractError;
 use crate::msg::{
-    KFragDistribution, ValidateMessage,
+    KFragWithSignature, KFragDistribution, ValidateMessage,
     OwnerMetadataResponse, KFragsResponse, KFragInfo,
     HolderAssignmentsResponse, HolderAssignmentInfo
 };
@@ -46,17 +46,17 @@ pub struct KFragDistributionResult {
     pub selected_holders: Vec<String>,
 }
 
-/// Owner-Process: kFrags配布ハンドラ（PHASE 2-1, 2-2）
+/// Owner-Process: kFrags受信ハンドラ（PRD PHASE 2-1, 2-2）
 ///
 /// PRD仕様:
-/// - O-BrowserからkFragsを受信
+/// - O-BrowserからkFragsとsignatureを受信
 /// - RandAOを利用してn個のHolder-Processを選出
 /// - 各Holder-Processに kFragⱼ と署名を送信
-pub fn handle_distribute_kfrags(
+pub fn handle_receive_kfrags(
     mut deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    kfrags: Vec<KFragDistribution>,
+    kfrags: Vec<KFragWithSignature>,
 ) -> Result<Response, ContractError> {
     // 1. プロセス役割検証
     verify_owner_role(deps.as_ref())
@@ -69,14 +69,36 @@ pub fn handle_distribute_kfrags(
     let _current_state = load_owner_state(deps.as_ref(), env.block.time)
         .map_err(|e| ContractError::StorageError { msg: e.to_string() })?;
 
-    // 3. kFragsのバリデーション
+    // 3. metadataロード
+    let metadata = OWNER_METADATA.load(deps.storage)?;
+
+    // 4. kFragsと署名のバリデーション
     for kfrag in &kfrags {
-        kfrag.validate()
-            .map_err(|e| ContractError::ValidationError { msg: e })?;
+        if kfrag.kfrag_id.is_empty() {
+            return Err(ContractError::ValidationError {
+                msg: "kFrag ID cannot be empty".to_string()
+            });
+        }
+        if kfrag.kfrag_data.is_empty() {
+            return Err(ContractError::ValidationError {
+                msg: "kFrag data cannot be empty".to_string()
+            });
+        }
+        if kfrag.signature.is_empty() {
+            return Err(ContractError::ValidationError {
+                msg: "Signature cannot be empty".to_string()
+            });
+        }
+        // 署名検証の実装
+        let is_valid = verify_kfrag_signature(&kfrag, &metadata.signer_pubkey)?;
+        if !is_valid {
+            return Err(ContractError::ValidationError {
+                msg: format!("Invalid signature for kFrag: {}", kfrag.kfrag_id)
+            });
+        }
     }
 
-    // 4. RandAO選出（モック実装）
-    let metadata = OWNER_METADATA.load(deps.storage)?;
+    // 5. RandAO選出（モック実装）
     let selection_result = perform_randao_selection(
         metadata.total_holders_n,
         env.block.height,
@@ -97,14 +119,14 @@ pub fn handle_distribute_kfrags(
         let target_holder = if index < selection_result.selected_holders.len() {
             selection_result.selected_holders[index].clone()
         } else {
-            // フォールバック: 既存のtarget_holderを使用
-            kfrag.holder_id.clone()
+            // フォールバック: ランダム選出が足りない場合
+            format!("holder_process_{}", index)
         };
 
         match store_kfrag(
             deps.branch(),
-            kfrag.id.clone(),
-            kfrag.encrypted_data.clone(),
+            kfrag.kfrag_id.clone(),
+            kfrag.kfrag_data.clone(),
             target_holder.clone(),
             env.block.time,
         ) {
@@ -113,7 +135,7 @@ pub fn handle_distribute_kfrags(
                 if let Err(e) = assign_holder(
                     deps.branch(),
                     target_holder.clone(),
-                    vec![kfrag.id.clone()],
+                    vec![kfrag.kfrag_id.clone()],
                     env.block.time,
                 ) {
                     distribution_result.failed_distributions.push(
@@ -122,14 +144,14 @@ pub fn handle_distribute_kfrags(
                 } else {
                     distribution_result.distributed_count += 1;
                     response_attributes.push((
-                        format!("kfrag_{}_assigned_to", kfrag.id),
+                        format!("kfrag_{}_assigned_to", kfrag.kfrag_id),
                         target_holder,
                     ));
                 }
             }
             Err(e) => {
                 distribution_result.failed_distributions.push(
-                    format!("Failed to store kFrag {}: {}", kfrag.id, e)
+                    format!("Failed to store kFrag {}: {}", kfrag.kfrag_id, e)
                 );
             }
         }
@@ -142,34 +164,51 @@ pub fn handle_distribute_kfrags(
         let target_holder = if index < selection_result.selected_holders.len() {
             selection_result.selected_holders[index].clone()
         } else {
-            kfrag.holder_id.clone()
+            format!("holder_process_{}", index)
         };
 
         // Holder-ProcessのProcess IDを取得（実際の実装では適切なマッピング）
         let holder_process_id = format!("holder_process_{}", target_holder);
 
+        // kFragをKFragDistribution形式に変換してHolder-Processに送信
+        let kfrag_distribution = KFragDistribution {
+            id: kfrag.kfrag_id.clone(),
+            encrypted_data: kfrag.kfrag_data.clone(),
+            holder_id: target_holder.clone(),
+            holder_process_id: holder_process_id.clone(),
+            signature: kfrag.signature.clone(),
+        };
+
         // AO Networkメッセージとして送信
         match OwnerAOIntegration::send_kfrag_to_holder(
             holder_process_id.clone(),
-            kfrag.clone(),
+            kfrag_distribution,
             env.contract.address.to_string(),
         ) {
             Ok(cosmos_msg) => {
                 cosmos_messages.push(cosmos_msg);
                 response_attributes.push((
-                    format!("kfrag_{}_sent_to_process", kfrag.id),
+                    format!("kfrag_{}_sent_to_process", kfrag.kfrag_id),
                     holder_process_id,
                 ));
             }
             Err(e) => {
                 distribution_result.failed_distributions.push(
-                    format!("Failed to create message for kFrag {}: {}", kfrag.id, e)
+                    format!("Failed to create message for kFrag {}: {}", kfrag.kfrag_id, e)
                 );
             }
         }
     }
 
     // 7. 配布統計をレスポンスに追加
+    response_attributes.push((
+        "action".to_string(),
+        "receive_kfrags".to_string()
+    ));
+    response_attributes.push((
+        "received_kfrags_count".to_string(),
+        kfrags.len().to_string()
+    ));
     response_attributes.push((
         "distributed_count".to_string(),
         distribution_result.distributed_count.to_string()
@@ -325,6 +364,44 @@ fn perform_randao_selection(
     })
 }
 
+/// kFragの署名検証
+///
+/// O-Browserから送信されたkFragの署名を検証します
+/// 実際の実装では、適切な暗号化ライブラリを使用します
+fn verify_kfrag_signature(
+    kfrag: &KFragWithSignature,
+    signer_pubkey: &str,
+) -> Result<bool, ContractError> {
+    // モック実装: 署名の基本的な検証
+    // 実際の実装では、ed25519、secp256k1、または適切な署名アルゴリズムを使用
+
+    // 1. 公開鍵の妥当性チェック
+    if signer_pubkey.is_empty() {
+        return Err(ContractError::ValidationError {
+            msg: "Signer public key is empty".to_string()
+        });
+    }
+
+    // 2. 署名データの妥当性チェック
+    if kfrag.signature.len() < 32 {
+        return Ok(false); // 署名が短すぎる
+    }
+
+    // 3. kFragデータの妥当性チェック
+    if kfrag.kfrag_data.is_empty() {
+        return Ok(false); // データが空
+    }
+
+    // モック検証ロジック: 実際の実装では暗号学的検証を行う
+    // ここでは基本的な整合性チェックのみ
+    let expected_signature_prefix = format!("sig_{}", kfrag.kfrag_id);
+    let signature_str = String::from_utf8_lossy(&kfrag.signature);
+
+    // 簡単な検証（実装時は削除し、適切な暗号学的検証に置き換える）
+    Ok(signature_str.starts_with(&expected_signature_prefix) ||
+       kfrag.signature.len() >= 64) // 最低限の署名サイズ要件
+}
+
 /// Owner-Process: メタデータクエリハンドラ
 pub fn query_owner_metadata(deps: Deps) -> StdResult<Binary> {
     let metadata = OWNER_METADATA.load(deps.storage)?;
@@ -398,16 +475,13 @@ mod tests {
 
     fn setup_owner_process(deps: DepsMut) {
         let metadata = OwnerMetadata {
-            threshold_k: 3,
+            owner_id: "test_owner".to_string(),
             total_holders_n: 5,
-            capsule_txid: "test_capsule".to_string(),
-            requester_pubkey: "test_pubkey".to_string(),
             creation_time: 1000,
+            signer_pubkey: "test_signer_pubkey".to_string(),
         };
         let config = OwnerConfig {
             process_role: ProcessRole::Owner,
-            encryption_key: "test_key".to_string(),
-            authorized_holders: vec![],
         };
 
         OWNER_METADATA.save(deps.storage, &metadata).unwrap();

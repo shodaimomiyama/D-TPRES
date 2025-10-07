@@ -15,10 +15,9 @@ pub struct InstantiateMsg {
 #[serde(rename_all = "snake_case")]
 pub enum ProcessMetadata {
     Owner {
-        threshold_k: u32,
-        total_holders_n: u32,
-        capsule_txid: String,
-        requester_pubkey: String,
+        owner_id: String,
+        total_holders_n: u32,  // RandAOでHolder選出に必要
+        signer_pubkey: String,  // O-Browserの署名検証用公開鍵
     },
     Holder {
         holder_id: String,
@@ -32,13 +31,9 @@ pub enum ProcessMetadata {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    // Owner-Process メッセージ
-    DistributeKFrags {
-        kfrags: Vec<KFragDistribution>,
-    },
-    UpdateHolderAssignment {
-        holder_id: String,
-        kfrag_ids: Vec<String>,
+    // Owner-Process メッセージ (PHASE 2のみ)
+    ReceiveKFrags {
+        kfrags: Vec<KFragWithSignature>,
     },
 
     // Holder-Process メッセージ
@@ -132,6 +127,15 @@ pub enum QueryMsg {
 }
 
 // データ転送オブジェクト
+
+// Owner-Process向け: O-BrowserからのkFrag+signature（PRD PHASE 2）
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct KFragWithSignature {
+    pub kfrag_id: String,
+    pub kfrag_data: Vec<u8>,      // kFragのバイナリデータ
+    pub signature: Vec<u8>,       // O-Browserによる署名
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct KFragDistribution {
     pub id: String,
@@ -309,15 +313,15 @@ pub trait ValidateMessage {
 impl ValidateMessage for InstantiateMsg {
     fn validate(&self) -> Result<(), String> {
         match &self.metadata {
-            ProcessMetadata::Owner { threshold_k, total_holders_n, .. } => {
-                if *threshold_k == 0 {
-                    return Err("Threshold k must be greater than 0".to_string());
+            ProcessMetadata::Owner { owner_id, total_holders_n, signer_pubkey } => {
+                if owner_id.is_empty() {
+                    return Err("Owner ID cannot be empty".to_string());
                 }
                 if *total_holders_n == 0 {
                     return Err("Total holders n must be greater than 0".to_string());
                 }
-                if threshold_k > total_holders_n {
-                    return Err("Threshold k cannot exceed total holders n".to_string());
+                if signer_pubkey.is_empty() {
+                    return Err("Signer public key cannot be empty".to_string());
                 }
             },
             ProcessMetadata::Holder { holder_id } => {
