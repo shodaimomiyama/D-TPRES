@@ -69,6 +69,17 @@ pub struct OwnerMetadata {
     pub signer_pubkey: String,       // O-Browserの署名検証用公開鍵
 }
 
+impl Default for OwnerMetadata {
+    fn default() -> Self {
+        Self {
+            owner_id: String::new(),
+            total_holders_n: 0,
+            creation_time: 0,
+            signer_pubkey: String::new(),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OwnerConfig {
     pub process_role: ProcessRole,  // プロセスロール識別のみ
@@ -111,6 +122,17 @@ pub struct HolderMetadata {
     pub process_role: ProcessRole,
     pub assigned_owners: Vec<String>,
     pub initialization_time: u64,
+}
+
+impl Default for HolderMetadata {
+    fn default() -> Self {
+        Self {
+            holder_id: String::new(),
+            process_role: ProcessRole::Holder,
+            assigned_owners: Vec::new(),
+            initialization_time: 0,
+        }
+    }
 }
 
 // Requester-Process データ構造
@@ -162,6 +184,17 @@ pub struct RequesterMetadata {
     pub process_role: ProcessRole,
     pub active_sessions: Vec<String>,
     pub initialization_time: u64,
+}
+
+impl Default for RequesterMetadata {
+    fn default() -> Self {
+        Self {
+            requester_id: String::new(),
+            process_role: ProcessRole::Requester,
+            active_sessions: Vec::new(),
+            initialization_time: 0,
+        }
+    }
 }
 
 // 共通エラー型

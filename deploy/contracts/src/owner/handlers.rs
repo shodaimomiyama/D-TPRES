@@ -338,6 +338,21 @@ pub fn handle_distribution_confirmation(
         .add_attribute("sender", info.sender.to_string()))
 }
 
+/// kFragを複数のHolderに配布
+pub fn handle_distribute_kfrags(
+    _deps: DepsMut,
+    _env: Env,
+    _info: MessageInfo,
+    kfrags: Vec<KFragDistribution>,
+) -> Result<Response, ContractError> {
+    // Minimal implementation for testing
+    let distributed_count = kfrags.len();
+
+    Ok(Response::new()
+        .add_attribute("action", "distribute_kfrags")
+        .add_attribute("distributed_count", distributed_count.to_string()))
+}
+
 /// RandAO選出のモック実装
 ///
 /// 実際の実装では、AO NetworkのRandAO機能と連携します

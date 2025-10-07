@@ -99,7 +99,7 @@ pub enum ContractError {
 
 type ContractResult<T = Response> = Result<T, ContractError>;
 
-// インスタンス化関数
+// インスタンス化関数（ユニバーサル初期化）
 pub fn instantiate(
     deps: DepsMut,
     env: Env,
@@ -110,87 +110,90 @@ pub fn instantiate(
     msg.validate()
         .map_err(|e| ContractError::ValidationError { msg: e })?;
 
+    // 全てのロールのメタデータをデフォルト値で初期化
+    let mut owner_metadata = OwnerMetadata::default();
+    let mut holder_metadata = HolderMetadata::default();
+    let mut requester_metadata = RequesterMetadata::default();
+
+    // 指定されたロールのメタデータを実際の値で設定
+    let mut response = Response::new();
     match msg.process_role {
-        ProcessRole::Owner => instantiate_owner(deps, env, msg.metadata),
-        ProcessRole::Holder => instantiate_holder(deps, env, msg.metadata),
-        ProcessRole::Requester => instantiate_requester(deps, env, msg.metadata),
+        ProcessRole::Owner => {
+            if let ProcessMetadata::Owner {
+                owner_id,
+                total_holders_n,
+                signer_pubkey,
+            } = msg.metadata
+            {
+                owner_metadata = OwnerMetadata {
+                    owner_id: owner_id.clone(),
+                    total_holders_n,
+                    creation_time: env.block.time.seconds(),
+                    signer_pubkey: signer_pubkey.clone(),
+                };
+
+                let owner_config = OwnerConfig {
+                    process_role: ProcessRole::Owner,
+                };
+                OWNER_CONFIG.save(deps.storage, &owner_config)?;
+
+                response = response
+                    .add_attribute("action", "instantiate_owner")
+                    .add_attribute("owner_id", owner_id)
+                    .add_attribute("total_holders_n", total_holders_n.to_string())
+                    .add_attribute("signer_pubkey", signer_pubkey);
+            } else {
+                return Err(ContractError::ValidationError {
+                    msg: "Invalid metadata for Owner process".to_string(),
+                });
+            }
+        }
+        ProcessRole::Holder => {
+            if let ProcessMetadata::Holder { holder_id } = msg.metadata {
+                holder_metadata = HolderMetadata {
+                    holder_id: holder_id.clone(),
+                    process_role: ProcessRole::Holder,
+                    assigned_owners: Vec::new(),
+                    initialization_time: env.block.time.seconds(),
+                };
+
+                response = response
+                    .add_attribute("action", "instantiate_holder")
+                    .add_attribute("holder_id", holder_id);
+            } else {
+                return Err(ContractError::ValidationError {
+                    msg: "Invalid metadata for Holder process".to_string(),
+                });
+            }
+        }
+        ProcessRole::Requester => {
+            if let ProcessMetadata::Requester { requester_id } = msg.metadata {
+                requester_metadata = RequesterMetadata {
+                    requester_id: requester_id.clone(),
+                    process_role: ProcessRole::Requester,
+                    active_sessions: Vec::new(),
+                    initialization_time: env.block.time.seconds(),
+                };
+
+                response = response
+                    .add_attribute("action", "instantiate_requester")
+                    .add_attribute("requester_id", requester_id);
+            } else {
+                return Err(ContractError::ValidationError {
+                    msg: "Invalid metadata for Requester process".to_string(),
+                });
+            }
+        }
     }
+
+    // 全てのメタデータを保存
+    OWNER_METADATA.save(deps.storage, &owner_metadata)?;
+    HOLDER_METADATA.save(deps.storage, &holder_metadata)?;
+    REQUESTER_METADATA.save(deps.storage, &requester_metadata)?;
+
+    Ok(response.add_attribute("universal_init", "true"))
 }
 
-fn instantiate_owner(deps: DepsMut, env: Env, metadata: ProcessMetadata) -> ContractResult {
-    if let ProcessMetadata::Owner {
-        owner_id,
-        total_holders_n,
-        signer_pubkey,
-    } = metadata
-    {
-        let owner_metadata = OwnerMetadata {
-            owner_id: owner_id.clone(),
-            total_holders_n,
-            creation_time: env.block.time.seconds(),
-            signer_pubkey: signer_pubkey.clone(),
-        };
-
-        let owner_config = OwnerConfig {
-            process_role: ProcessRole::Owner,
-        };
-
-        OWNER_METADATA.save(deps.storage, &owner_metadata)?;
-        OWNER_CONFIG.save(deps.storage, &owner_config)?;
-
-        Ok(Response::new()
-            .add_attribute("action", "instantiate_owner")
-            .add_attribute("owner_id", owner_id)
-            .add_attribute("total_holders_n", total_holders_n.to_string())
-            .add_attribute("signer_pubkey", signer_pubkey))
-    } else {
-        Err(ContractError::ValidationError {
-            msg: "Invalid metadata for Owner process".to_string(),
-        })
-    }
-}
-
-fn instantiate_holder(deps: DepsMut, env: Env, metadata: ProcessMetadata) -> ContractResult {
-    if let ProcessMetadata::Holder { holder_id } = metadata {
-        let holder_metadata = HolderMetadata {
-            holder_id,
-            process_role: ProcessRole::Holder,
-            assigned_owners: Vec::new(),
-            initialization_time: env.block.time.seconds(),
-        };
-
-        HOLDER_METADATA.save(deps.storage, &holder_metadata)?;
-
-        Ok(Response::new()
-            .add_attribute("action", "instantiate_holder")
-            .add_attribute("holder_id", holder_metadata.holder_id))
-    } else {
-        Err(ContractError::ValidationError {
-            msg: "Invalid metadata for Holder process".to_string(),
-        })
-    }
-}
-
-fn instantiate_requester(deps: DepsMut, env: Env, metadata: ProcessMetadata) -> ContractResult {
-    if let ProcessMetadata::Requester { requester_id } = metadata {
-        let requester_metadata = RequesterMetadata {
-            requester_id,
-            process_role: ProcessRole::Requester,
-            active_sessions: Vec::new(),
-            initialization_time: env.block.time.seconds(),
-        };
-
-        REQUESTER_METADATA.save(deps.storage, &requester_metadata)?;
-
-        Ok(Response::new()
-            .add_attribute("action", "instantiate_requester")
-            .add_attribute("requester_id", requester_metadata.requester_id))
-    } else {
-        Err(ContractError::ValidationError {
-            msg: "Invalid metadata for Requester process".to_string(),
-        })
-    }
-}
 
 // 実行関数
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> ContractResult {
