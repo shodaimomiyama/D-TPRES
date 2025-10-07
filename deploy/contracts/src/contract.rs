@@ -10,7 +10,7 @@ use crate::msg::{
     RecoverySessionResponse, RequesterMetadataResponse, ThresholdInfoResponse, ValidateMessage,
 };
 use crate::owner::handlers::{
-    handle_distribute_kfrags, handle_update_holder_assignment, query_holder_assignments,
+    handle_receive_kfrags, query_holder_assignments,
     query_kfrags, query_owner_metadata,
 };
 use crate::requester::handlers::{
@@ -119,24 +119,20 @@ pub fn instantiate(
 
 fn instantiate_owner(deps: DepsMut, env: Env, metadata: ProcessMetadata) -> ContractResult {
     if let ProcessMetadata::Owner {
-        threshold_k,
+        owner_id,
         total_holders_n,
-        capsule_txid,
-        requester_pubkey,
+        signer_pubkey,
     } = metadata
     {
         let owner_metadata = OwnerMetadata {
-            threshold_k,
+            owner_id: owner_id.clone(),
             total_holders_n,
-            capsule_txid,
-            requester_pubkey,
             creation_time: env.block.time.seconds(),
+            signer_pubkey: signer_pubkey.clone(),
         };
 
         let owner_config = OwnerConfig {
             process_role: ProcessRole::Owner,
-            encryption_key: "encryption_key_ref".to_string(), // 実際の実装では適切なキー管理
-            authorized_holders: Vec::new(),
         };
 
         OWNER_METADATA.save(deps.storage, &owner_metadata)?;
@@ -144,8 +140,9 @@ fn instantiate_owner(deps: DepsMut, env: Env, metadata: ProcessMetadata) -> Cont
 
         Ok(Response::new()
             .add_attribute("action", "instantiate_owner")
-            .add_attribute("threshold_k", threshold_k.to_string())
-            .add_attribute("total_holders_n", total_holders_n.to_string()))
+            .add_attribute("owner_id", owner_id)
+            .add_attribute("total_holders_n", total_holders_n.to_string())
+            .add_attribute("signer_pubkey", signer_pubkey))
     } else {
         Err(ContractError::ValidationError {
             msg: "Invalid metadata for Owner process".to_string(),
@@ -198,14 +195,10 @@ fn instantiate_requester(deps: DepsMut, env: Env, metadata: ProcessMetadata) -> 
 // 実行関数
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> ContractResult {
     match msg {
-        // Owner-Process メッセージ
-        ExecuteMsg::DistributeKFrags { kfrags } => {
-            handle_distribute_kfrags(deps, env, info, kfrags)
+        // Owner-Process メッセージ (PHASE 2のみ)
+        ExecuteMsg::ReceiveKFrags { kfrags } => {
+            handle_receive_kfrags(deps, env, info, kfrags)
         }
-        ExecuteMsg::UpdateHolderAssignment {
-            holder_id,
-            kfrag_ids,
-        } => handle_update_holder_assignment(deps, env, info, holder_id, kfrag_ids),
 
         // Holder-Process メッセージ
         ExecuteMsg::ReceiveKFrag { kfrag_data } => {

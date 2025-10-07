@@ -13,20 +13,48 @@ describe("D-TPRES Contract", function () {
         process_role: "Owner",
         metadata: {
           owner: {
-            threshold_k: 3,
+            owner_id: "owner_001",
             total_holders_n: 5,
-            capsule_txid: "test_capsule_txid_123",
-            requester_pubkey: "test_requester_pubkey_456"
+            signer_pubkey: "owner_001_pubkey"
           }
         }
       })
 
       const response = await cw.q("get_owner_metadata", {})
       expect(response).to.have.property("metadata")
-      expect(response.metadata).to.have.property("threshold_k", 3)
+      expect(response.metadata).to.have.property("owner_id", "owner_001")
       expect(response.metadata).to.have.property("total_holders_n", 5)
-      expect(response.metadata).to.have.property("capsule_txid", "test_capsule_txid_123")
-      expect(response.metadata).to.have.property("requester_pubkey", "test_requester_pubkey_456")
+      expect(response.metadata).to.have.property("creation_time")
+    })
+
+    it("should receive kFrags and distribute to holders", async () => {
+      await cw.i({
+        process_role: "Owner",
+        metadata: {
+          owner: {
+            owner_id: "owner_002",
+            total_holders_n: 3
+          }
+        }
+      })
+
+      // kFragsとsignatureをOwner-Processに送信（PRD PHASE 2）
+      const result = await cw.e("receive_k_frags", {
+        kfrags: [
+          {
+            kfrag_id: "kfrag_001",
+            kfrag_data: new Array(32).fill(1), // 32-byte kFrag data
+            signature: Buffer.from("sig_kfrag_001" + "0".repeat(51), 'utf8')   // Valid signature format
+          },
+          {
+            kfrag_id: "kfrag_002",
+            kfrag_data: new Array(32).fill(3),
+            signature: Buffer.from("sig_kfrag_002" + "0".repeat(51), 'utf8')   // Valid signature format
+          }
+        ]
+      })
+
+      expect(result).to.be.ok
     })
   })
 
@@ -72,10 +100,9 @@ describe("D-TPRES Contract", function () {
         process_role: "Owner",
         metadata: {
           owner: {
-            threshold_k: 2,
+            owner_id: "test_owner",
             total_holders_n: 3,
-            capsule_txid: "test_capsule",
-            requester_pubkey: "test_pubkey"
+            signer_pubkey: "test_signer_pubkey"
           }
         }
       })
