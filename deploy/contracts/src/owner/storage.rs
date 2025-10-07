@@ -348,16 +348,13 @@ mod tests {
 
         // 初期設定
         let metadata = OwnerMetadata {
-            threshold_k: 3,
+            owner_id: "test_owner".to_string(),
             total_holders_n: 5,
-            capsule_txid: "test_capsule".to_string(),
-            requester_pubkey: "test_pubkey".to_string(),
+            signer_pubkey: "test_pubkey".to_string(),
             creation_time: env.block.time.seconds(),
         };
         let config = OwnerConfig {
             process_role: ProcessRole::Owner,
-            encryption_key: "test_key".to_string(),
-            authorized_holders: vec![],
         };
 
         OWNER_METADATA.save(deps.as_mut().storage, &metadata).unwrap();
