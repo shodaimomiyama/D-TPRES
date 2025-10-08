@@ -261,7 +261,7 @@ fn execute_send_kfrag_to_holder(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    target_process: String,
+    _target_process: String,
     kfrag: crate::msg::KFragDistribution,
     owner_process: String,
 ) -> ContractResult {
@@ -291,7 +291,7 @@ fn execute_send_cfrag_to_requester(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    target_process: String,
+    _target_process: String,
     cfrag: crate::msg::CFragSubmission,
     holder_process: String,
 ) -> ContractResult {
@@ -317,7 +317,7 @@ fn execute_request_cfrag_from_holder(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    target_process: String,
+    _target_process: String,
     session_id: String,
     requester_process: String,
 ) -> ContractResult {
@@ -432,19 +432,25 @@ fn verify_process_role(deps: Deps, expected_role: ProcessRole) -> Result<(), Con
 }
 
 fn get_process_role(deps: Deps) -> Result<ProcessRole, ContractError> {
-    // Owner役割の確認
-    if let Ok(_) = OWNER_METADATA.load(deps.storage) {
-        return Ok(ProcessRole::Owner);
+    // Owner役割の確認（空でない値がある場合）
+    if let Ok(owner_metadata) = OWNER_METADATA.load(deps.storage) {
+        if !owner_metadata.owner_id.is_empty() {
+            return Ok(ProcessRole::Owner);
+        }
     }
 
-    // Holder役割の確認
-    if let Ok(_) = HOLDER_METADATA.load(deps.storage) {
-        return Ok(ProcessRole::Holder);
+    // Holder役割の確認（空でない値がある場合）
+    if let Ok(holder_metadata) = HOLDER_METADATA.load(deps.storage) {
+        if !holder_metadata.holder_id.is_empty() {
+            return Ok(ProcessRole::Holder);
+        }
     }
 
-    // Requester役割の確認
-    if let Ok(_) = REQUESTER_METADATA.load(deps.storage) {
-        return Ok(ProcessRole::Requester);
+    // Requester役割の確認（空でない値がある場合）
+    if let Ok(requester_metadata) = REQUESTER_METADATA.load(deps.storage) {
+        if !requester_metadata.requester_id.is_empty() {
+            return Ok(ProcessRole::Requester);
+        }
     }
 
     Err(ContractError::ProcessNotInitialized)
@@ -472,7 +478,7 @@ fn query_connected_processes(_deps: Deps) -> StdResult<Binary> {
     to_json_binary(&response)
 }
 
-fn query_process_info(deps: Deps, process_id: String) -> StdResult<Binary> {
+fn query_process_info(_deps: Deps, process_id: String) -> StdResult<Binary> {
     // プレースホルダー実装 - クエリはDepsを使用し、変更を行わない
     let mock_process_info = crate::msg::ProcessInfo {
         process_id: process_id.clone(),

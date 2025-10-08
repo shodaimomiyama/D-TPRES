@@ -505,6 +505,7 @@ mod tests {
             total_holders_n: 5,
             creation_time: 1000,
             signer_pubkey: "test_signer_pubkey".to_string(),
+            holder_process_ids: None,
         };
         let config = OwnerConfig {
             process_role: ProcessRole::Owner,
@@ -583,7 +584,7 @@ mod tests {
 
     #[test]
     fn test_randao_selection() {
-        let result = perform_randao_selection(5, 12345);
+        let result = perform_randao_selection(5, 12345, None);
         assert!(result.is_ok());
 
         let selection = result.unwrap();

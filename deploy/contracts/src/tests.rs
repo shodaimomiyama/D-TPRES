@@ -80,6 +80,7 @@ mod tests {
                 owner_id: "".to_string(),
                 total_holders_n: 5,
                 signer_pubkey: "test_pubkey".to_string(),
+                holder_process_ids: None,
             },
         };
 

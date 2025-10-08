@@ -352,6 +352,7 @@ mod tests {
             total_holders_n: 5,
             signer_pubkey: "test_pubkey".to_string(),
             creation_time: env.block.time.seconds(),
+            holder_process_ids: None,
         };
         let config = OwnerConfig {
             process_role: ProcessRole::Owner,
