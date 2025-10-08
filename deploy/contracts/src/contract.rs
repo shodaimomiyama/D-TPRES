@@ -123,6 +123,7 @@ pub fn instantiate(
                 owner_id,
                 total_holders_n,
                 signer_pubkey,
+                holder_process_ids,
             } = msg.metadata
             {
                 owner_metadata = OwnerMetadata {
@@ -130,6 +131,7 @@ pub fn instantiate(
                     total_holders_n,
                     creation_time: env.block.time.seconds(),
                     signer_pubkey: signer_pubkey.clone(),
+                    holder_process_ids: holder_process_ids.clone(),
                 };
 
                 let owner_config = OwnerConfig {

@@ -98,10 +98,11 @@ pub fn handle_receive_kfrags(
         }
     }
 
-    // 5. RandAO選出（モック実装）
+    // 5. RandAO選出（プレースホルダー実装対応）
     let selection_result = perform_randao_selection(
         metadata.total_holders_n,
         env.block.height,
+        metadata.holder_process_ids.clone(), // プレースホルダー実装: 事前定義されたHolder ProcessのIDを使用
     )?;
 
     // 5. kFrags保存と配布準備
@@ -359,8 +360,18 @@ pub fn handle_distribute_kfrags(
 fn perform_randao_selection(
     total_holders_n: u32,
     block_height: u64,
+    predefined_holders: Option<Vec<String>>, // プレースホルダー実装: 事前定義されたHolder ProcessのIDリスト
 ) -> Result<RandAOSelection, ContractError> {
-    // モック実装: ブロック高度を使用した疑似ランダム選出
+    // プレースホルダー実装: 事前定義されたHolderがある場合はそれを使用
+    if let Some(holders) = predefined_holders {
+        return Ok(RandAOSelection {
+            selected_holders: holders,
+            selection_seed: "placeholder_seed".to_string(),
+            block_height,
+        });
+    }
+
+    // 従来のRandAO実装: ブロック高度を使用した疑似ランダム選出
     let seed = format!("randao_seed_{}", block_height);
 
     // 簡単な疑似ランダム選出（実装時はより堅牢なアルゴリズムを使用）

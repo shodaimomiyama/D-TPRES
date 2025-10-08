@@ -67,6 +67,7 @@ pub struct OwnerMetadata {
     pub total_holders_n: u32,        // RandAOでHolder選出に必要
     pub creation_time: u64,
     pub signer_pubkey: String,       // O-Browserの署名検証用公開鍵
+    pub holder_process_ids: Option<Vec<String>>, // プレースホルダー実装: 事前作成されたHolder ProcessのIDリスト
 }
 
 impl Default for OwnerMetadata {
@@ -76,6 +77,7 @@ impl Default for OwnerMetadata {
             total_holders_n: 0,
             creation_time: 0,
             signer_pubkey: String::new(),
+            holder_process_ids: None,
         }
     }
 }

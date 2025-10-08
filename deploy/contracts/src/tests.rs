@@ -19,6 +19,7 @@ mod tests {
                 owner_id: "test_owner".to_string(),
                 total_holders_n: 5,
                 signer_pubkey: "test_pubkey".to_string(),
+                holder_process_ids: None, // RandAO使用
             },
         };
 
@@ -99,6 +100,7 @@ mod tests {
                 owner_id: "test_owner".to_string(),
                 total_holders_n: 5,
                 signer_pubkey: "test_pubkey".to_string(),
+                holder_process_ids: None, // RandAO使用
             },
         };
 
@@ -126,6 +128,7 @@ mod tests {
                 owner_id: "test_owner".to_string(),
                 total_holders_n: 5,
                 signer_pubkey: "test_pubkey".to_string(),
+                holder_process_ids: None, // RandAO使用
             },
         };
 
@@ -168,5 +171,41 @@ mod tests {
 
         let role_response: crate::msg::ProcessRoleResponse = from_json(&res).unwrap();
         assert_eq!(role_response.role, ProcessRole::Holder);
+    }
+
+    #[test]
+    fn test_owner_instantiate_with_predefined_holders() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+        let info = mock_info("creator", &coins(1000, "earth"));
+
+        // プレースホルダー実装：事前定義されたHolder ProcessのIDを使用
+        let predefined_holders = vec![
+            "holder_process_001".to_string(),
+            "holder_process_002".to_string(),
+            "holder_process_003".to_string(),
+        ];
+
+        let msg = InstantiateMsg {
+            process_role: ProcessRole::Owner,
+            metadata: ProcessMetadata::Owner {
+                owner_id: "test_owner_with_predefined".to_string(),
+                total_holders_n: 3,
+                signer_pubkey: "test_pubkey".to_string(),
+                holder_process_ids: Some(predefined_holders.clone()),
+            },
+        };
+
+        let res = instantiate(deps.as_mut(), env, info, msg).unwrap();
+
+        // レスポンス属性を確認
+        assert!(res.attributes.iter().any(|attr| attr.key == "action" && attr.value == "instantiate_owner"));
+        assert!(res.attributes.iter().any(|attr| attr.key == "universal_init" && attr.value == "true"));
+
+        // メタデータが正しく保存されていることを確認
+        let owner_meta = OWNER_METADATA.load(deps.as_ref().storage).unwrap();
+        assert_eq!(owner_meta.owner_id, "test_owner_with_predefined");
+        assert_eq!(owner_meta.total_holders_n, 3);
+        assert_eq!(owner_meta.holder_process_ids, Some(predefined_holders));
     }
 }
