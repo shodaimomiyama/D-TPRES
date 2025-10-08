@@ -206,6 +206,7 @@ mod tests {
             total_holders_n: 5,
             creation_time: 1000,
             signer_pubkey: "test_signer_pubkey".to_string(),
+            holder_process_ids: None,
         };
 
         let config = OwnerConfig {

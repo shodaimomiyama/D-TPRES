@@ -314,7 +314,7 @@ pub trait ValidateMessage {
 impl ValidateMessage for InstantiateMsg {
     fn validate(&self) -> Result<(), String> {
         match &self.metadata {
-            ProcessMetadata::Owner { owner_id, total_holders_n, signer_pubkey } => {
+            ProcessMetadata::Owner { owner_id, total_holders_n, signer_pubkey, .. } => {
                 if owner_id.is_empty() {
                     return Err("Owner ID cannot be empty".to_string());
                 }

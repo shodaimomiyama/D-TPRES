@@ -219,7 +219,7 @@ impl AOIntegration {
 
     /// AO Networkでのプロセス生成をシミュレート（実際のAO SDKでは置き換える）
     pub fn spawn_process_mock(
-        wasm_tx_id: String,
+        _wasm_tx_id: String,
         role: ProcessRole,
         init_data: Vec<u8>,
     ) -> StdResult<String> {
