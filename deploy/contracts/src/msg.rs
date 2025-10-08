@@ -18,6 +18,7 @@ pub enum ProcessMetadata {
         owner_id: String,
         total_holders_n: u32,  // RandAOでHolder選出に必要
         signer_pubkey: String,  // O-Browserの署名検証用公開鍵
+        holder_process_ids: Option<Vec<String>>, // プレースホルダー実装: 事前作成されたHolder ProcessのIDリスト
     },
     Holder {
         holder_id: String,
