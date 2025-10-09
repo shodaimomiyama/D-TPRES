@@ -279,7 +279,6 @@ pub struct ProcessInfo {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "snake_case")]
 pub enum ProcessStatus {
     Active,
     Inactive,
