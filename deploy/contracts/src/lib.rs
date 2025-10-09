@@ -7,6 +7,7 @@ mod owner;
 mod holder;
 mod requester;
 mod ao_integration;
+mod ao_handler;
 
 #[cfg(test)]
 mod tests;
@@ -39,6 +40,7 @@ pub fn execute(
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     contract::query(deps, env, msg)
 }
+
 
 // 公開API（テスト用）
 pub use msg::*;
