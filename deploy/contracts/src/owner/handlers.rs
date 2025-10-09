@@ -58,22 +58,29 @@ pub fn handle_receive_kfrags(
     info: MessageInfo,
     kfrags: Vec<KFragWithSignature>,
 ) -> Result<Response, ContractError> {
+    // DEBUG: 関数開始ログ
+    deps.api.debug(&format!("DEBUG: handle_receive_kfrags called with {} kfrags", kfrags.len()));
+
     // 1. プロセス役割検証
     verify_owner_role(deps.as_ref())
         .map_err(|_| ContractError::UnauthorizedRole {
             expected: "Owner".to_string(),
             actual: "Unknown".to_string(),
         })?;
+    deps.api.debug("DEBUG: Role verification passed");
 
     // 2. 現在の状態をロード
     let _current_state = load_owner_state(deps.as_ref(), env.block.time)
         .map_err(|e| ContractError::StorageError { msg: e.to_string() })?;
+    deps.api.debug("DEBUG: State loaded successfully");
 
     // 3. metadataロード
     let metadata = OWNER_METADATA.load(deps.storage)?;
 
     // 4. kFragsと署名のバリデーション
     for kfrag in &kfrags {
+        deps.api.debug(&format!("DEBUG: Processing kfrag_id: {}", kfrag.kfrag_id));
+
         if kfrag.kfrag_id.is_empty() {
             return Err(ContractError::ValidationError {
                 msg: "kFrag ID cannot be empty".to_string()
@@ -96,6 +103,8 @@ pub fn handle_receive_kfrags(
                 msg: format!("Invalid signature for kFrag: {}", kfrag.kfrag_id)
             });
         }
+
+        deps.api.debug(&format!("DEBUG: kfrag {} passed validation", kfrag.kfrag_id));
     }
 
     // 5. RandAO選出（プレースホルダー実装対応）
@@ -132,6 +141,8 @@ pub fn handle_receive_kfrags(
             env.block.time,
         ) {
             Ok(_) => {
+                deps.api.debug(&format!("DEBUG: Successfully stored kfrag {}", kfrag.kfrag_id));
+
                 // Holder割り当て記録
                 if let Err(e) = assign_holder(
                     deps.branch(),
@@ -139,10 +150,12 @@ pub fn handle_receive_kfrags(
                     vec![kfrag.kfrag_id.clone()],
                     env.block.time,
                 ) {
+                    deps.api.debug(&format!("DEBUG: Failed to assign holder {}: {}", target_holder, e));
                     distribution_result.failed_distributions.push(
                         format!("Failed to assign holder {}: {}", target_holder, e)
                     );
                 } else {
+                    deps.api.debug(&format!("DEBUG: Successfully assigned kfrag {} to holder {}", kfrag.kfrag_id, target_holder));
                     distribution_result.distributed_count += 1;
                     response_attributes.push((
                         format!("kfrag_{}_assigned_to", kfrag.kfrag_id),
@@ -151,6 +164,7 @@ pub fn handle_receive_kfrags(
                 }
             }
             Err(e) => {
+                deps.api.debug(&format!("DEBUG: Failed to store kfrag {}: {}", kfrag.kfrag_id, e));
                 distribution_result.failed_distributions.push(
                     format!("Failed to store kFrag {}: {}", kfrag.kfrag_id, e)
                 );
