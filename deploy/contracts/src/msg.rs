@@ -1,394 +1,297 @@
 use serde::{Deserialize, Serialize};
-use crate::state::{
-    ProcessRole, OwnerMetadata, HolderMetadata, RequesterMetadata,
-    CFragCollection, RecoverySession, ThresholdInfo
-};
+use cosmwasm_std::Binary;
+use crate::state::{BlobMeta, CapsuleStatus};
 
-// インスタンス化メッセージ
+// --------------------- インスタンス化メッセージ ---------------------
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct InstantiateMsg {
-    pub process_role: ProcessRole,
-    pub metadata: ProcessMetadata,
+    pub process_id: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum ProcessMetadata {
-    Owner {
-        owner_id: String,
-        total_holders_n: u32,  // RandAOでHolder選出に必要
-        signer_pubkey: String,  // O-Browserの署名検証用公開鍵
-        holder_process_ids: Option<Vec<String>>, // プレースホルダー実装: 事前作成されたHolder ProcessのIDリスト
-    },
-    Holder {
-        holder_id: String,
-    },
-    Requester {
-        requester_id: String,
-    },
+impl InstantiateMsg {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.process_id.is_empty() {
+            return Err("process_id cannot be empty".to_string());
+        }
+        if self.process_id.len() > 128 {
+            return Err("process_id must be <= 128 characters".to_string());
+        }
+        Ok(())
+    }
 }
 
-// 実行メッセージ
+// --------------------- 実行メッセージ ---------------------
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
-    // Owner-Process メッセージ (PHASE 2のみ)
-    ReceiveKFrags {
-        kfrags: Vec<KFragWithSignature>,
-    },
-
-    // Holder-Process メッセージ
-    ReceiveKFrag {
-        kfrag_data: KFragReceiptData,
-    },
-    GenerateCFrag {
+    SubmitKFrag {
         kfrag_id: String,
+        kfrag: Binary,
     },
-    StoreCapsule {
-        capsule_data: CapsuleStorageData,
+    SubmitCapsule {
+        kfrag_id: String,
+        capsule_id: String,
+        capsule: Binary,
     },
-
-    // Requester-Process メッセージ
-    StartCFragCollection {
-        session_id: String,
-        threshold: u32,
-    },
-    CollectCFrag {
-        session_id: String,
-        cfrag_data: CFragSubmission,
-    },
-    InitiateRecovery {
-        session_id: String,
-        capsule_data: Vec<u8>,
-    },
-
-    // AO Network プロセス間メッセージ
-    SendKFragToHolder {
-        target_process: String,  // Holder ProcessのID
-        kfrag: KFragDistribution,
-        owner_process: String,   // 送信元Owner ProcessのID
-    },
-    SendCFragToRequester {
-        target_process: String,  // Requester ProcessのID
-        cfrag: CFragSubmission,
-        holder_process: String,  // 送信元Holder ProcessのID
-    },
-    RequestCFragFromHolder {
-        target_process: String,  // Holder ProcessのID
-        session_id: String,
-        requester_process: String, // 送信元Requester ProcessのID
-    },
-
-    // 共通メッセージ
-    UpdateProcessStatus {
-        status: String,
+    Reencrypt {
+        kfrag_id: String,
+        capsule_id: String,
     },
 }
 
-// クエリメッセージ
+// --------------------- クエリメッセージ ---------------------
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
-    // Owner-Process クエリ
-    GetOwnerMetadata {},
-    GetKFrags {
-        holder_id: Option<String>,
-    },
-    GetHolderAssignments {},
-
-    // Holder-Process クエリ
-    GetHolderMetadata {},
-    GetKFragById {
+    GetCFrag {
         kfrag_id: String,
+        capsule_id: String,
     },
-    GetCFrags {
-        processed_only: Option<bool>,
+    ListCapsulesByKFrag {
+        kfrag_id: String,
+        start_after: Option<String>,
+        limit: Option<u32>,
     },
-    GetCachedCapsules {},
-
-    // Requester-Process クエリ
-    GetRequesterMetadata {},
-    GetCFragCollection {
-        session_id: String,
-    },
-    GetRecoverySession {
-        session_id: String,
-    },
-    GetThresholdInfo {},
-
-    // AO Network プロセス管理クエリ
-    GetConnectedProcesses {},
-    GetProcessInfo {
-        process_id: String,
-    },
-
-    // 共通クエリ
-    GetProcessRole {},
-    GetProcessStatus {},
 }
 
-// データ転送オブジェクト
+// --------------------- レスポンス型 ---------------------
 
-// Owner-Process向け: O-BrowserからのkFrag+signature（PRD PHASE 2）
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct KFragWithSignature {
-    pub kfrag_id: String,
-    pub kfrag_data: Vec<u8>,      // kFragのバイナリデータ
-    pub signature: Vec<u8>,       // O-Browserによる署名
+pub struct GetCFragResponse {
+    pub cfrag: Binary,
+    pub meta: BlobMeta,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct KFragDistribution {
-    pub id: String,
-    pub encrypted_data: Vec<u8>,
-    pub holder_id: String,
-    pub holder_process_id: String,  // AO Network用: Holder ProcessのID
-    pub signature: Vec<u8>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct KFragReceiptData {
-    pub id: String,
-    pub encrypted_kfrag: Vec<u8>,
-    pub signature: Vec<u8>,
-    pub owner_id: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct CapsuleStorageData {
-    pub capsule_id: String,
-    pub capsule_bytes: Vec<u8>,
-    pub arweave_txid: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct CFragSubmission {
-    pub cfrag_id: String,
-    pub holder_id: String,
-    pub holder_process_id: String,  // AO Network用: Holder ProcessのID
-    pub cfrag_data: Vec<u8>,
-    pub signature: Vec<u8>,
-}
-
-// レスポンス型
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct OwnerMetadataResponse {
-    pub metadata: OwnerMetadata,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct HolderMetadataResponse {
-    pub metadata: HolderMetadata,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct RequesterMetadataResponse {
-    pub metadata: RequesterMetadata,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct KFragsResponse {
-    pub kfrags: Vec<KFragInfo>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct KFragInfo {
-    pub kfrag_id: String,
-    pub target_holder: String,
-    pub created_at: u64,
-    pub distributed: bool,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct CFragsResponse {
-    pub cfrags: Vec<CFragInfo>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct CFragInfo {
-    pub cfrag_id: String,
-    pub source_kfrag: String,
-    pub generated_at: u64,
-    pub arweave_txid: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct CFragCollectionResponse {
-    pub collection: CFragCollection,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct RecoverySessionResponse {
-    pub session: RecoverySession,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ThresholdInfoResponse {
-    pub threshold_info: ThresholdInfo,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ProcessRoleResponse {
-    pub role: ProcessRole,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ProcessStatusResponse {
-    pub status: String,
-    pub last_updated: u64,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct HolderAssignmentsResponse {
-    pub assignments: Vec<HolderAssignmentInfo>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct HolderAssignmentInfo {
-    pub holder_id: String,
-    pub assigned_kfrags: Vec<String>,
-    pub assignment_time: u64,
-    pub status: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct CachedCapsulesResponse {
-    pub capsules: Vec<CapsuleInfo>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct CapsuleInfo {
     pub capsule_id: String,
-    pub arweave_txid: String,
-    pub cached_at: u64,
-}
-
-// AO Network用レスポンス型
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ConnectedProcessesResponse {
-    pub processes: Vec<ProcessInfo>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ProcessInfo {
-    pub process_id: String,
-    pub wasm_tx_id: String,
-    pub process_role: ProcessRole,
-    pub spawned_at: u64,
-    pub status: ProcessStatus,
+    pub status: CapsuleStatus,
+    pub updated_ts: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub enum ProcessStatus {
-    Active,
-    Inactive,
-    Failed,
-    Initializing,
+pub struct ListCapsulesByKFragResponse {
+    pub capsules: Vec<CapsuleInfo>,
+    pub next_start_after: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ProcessInfoResponse {
-    pub info: ProcessInfo,
-}
-
-// エラーレスポンス
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ErrorResponse {
-    pub error: String,
-    pub code: u32,
-}
-
-// 成功レスポンス
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct SuccessResponse {
-    pub message: String,
-    pub data: Option<String>, // JSONを文字列として扱う
-}
-
-// バリデーション用のトレイト
+// --------------------- メッセージバリデーション ---------------------
 pub trait ValidateMessage {
     fn validate(&self) -> Result<(), String>;
 }
 
-impl ValidateMessage for InstantiateMsg {
+impl ValidateMessage for ExecuteMsg {
     fn validate(&self) -> Result<(), String> {
-        match &self.metadata {
-            ProcessMetadata::Owner { owner_id, total_holders_n, signer_pubkey, .. } => {
-                if owner_id.is_empty() {
-                    return Err("Owner ID cannot be empty".to_string());
-                }
-                if *total_holders_n == 0 {
-                    return Err("Total holders n must be greater than 0".to_string());
-                }
-                if signer_pubkey.is_empty() {
-                    return Err("Signer public key cannot be empty".to_string());
-                }
-            },
-            ProcessMetadata::Holder { holder_id } => {
-                if holder_id.is_empty() {
-                    return Err("Holder ID cannot be empty".to_string());
-                }
-            },
-            ProcessMetadata::Requester { requester_id } => {
-                if requester_id.is_empty() {
-                    return Err("Requester ID cannot be empty".to_string());
-                }
-            },
+        match self {
+            ExecuteMsg::SubmitKFrag { kfrag_id, kfrag } => {
+                validate_kfrag_id(kfrag_id)?;
+                validate_binary_data(kfrag, "kfrag")?;
+                Ok(())
+            }
+            ExecuteMsg::SubmitCapsule { kfrag_id, capsule_id, capsule } => {
+                validate_kfrag_id(kfrag_id)?;
+                validate_capsule_id(capsule_id)?;
+                validate_binary_data(capsule, "capsule")?;
+                Ok(())
+            }
+            ExecuteMsg::Reencrypt { kfrag_id, capsule_id } => {
+                validate_kfrag_id(kfrag_id)?;
+                validate_capsule_id(capsule_id)?;
+                Ok(())
+            }
         }
-        Ok(())
     }
 }
 
-impl ValidateMessage for KFragDistribution {
+impl ValidateMessage for QueryMsg {
     fn validate(&self) -> Result<(), String> {
-        if self.id.is_empty() {
-            return Err("KFrag ID cannot be empty".to_string());
+        match self {
+            QueryMsg::GetCFrag { kfrag_id, capsule_id } => {
+                validate_kfrag_id(kfrag_id)?;
+                validate_capsule_id(capsule_id)?;
+                Ok(())
+            }
+            QueryMsg::ListCapsulesByKFrag { kfrag_id, start_after, limit } => {
+                validate_kfrag_id(kfrag_id)?;
+                if let Some(start_after) = start_after {
+                    validate_capsule_id(start_after)?;
+                }
+                if let Some(limit) = limit {
+                    if *limit == 0 || *limit > 100 {
+                        return Err("limit must be between 1 and 100".to_string());
+                    }
+                }
+                Ok(())
+            }
         }
-        if self.encrypted_data.is_empty() {
-            return Err("Encrypted data cannot be empty".to_string());
-        }
-        if self.holder_id.is_empty() {
-            return Err("Holder ID cannot be empty".to_string());
-        }
-        if self.signature.is_empty() {
-            return Err("Signature cannot be empty".to_string());
-        }
-        Ok(())
     }
 }
 
-impl ValidateMessage for KFragReceiptData {
-    fn validate(&self) -> Result<(), String> {
-        if self.id.is_empty() {
-            return Err("KFrag ID cannot be empty".to_string());
+// --------------------- バリデーションヘルパー ---------------------
+fn validate_kfrag_id(id: &str) -> Result<(), String> {
+    validate_id(id, "kfrag_id")
+}
+
+fn validate_capsule_id(id: &str) -> Result<(), String> {
+    validate_id(id, "capsule_id")
+}
+
+fn validate_id(id: &str, field_name: &str) -> Result<(), String> {
+    if id.is_empty() {
+        return Err(format!("{} cannot be empty", field_name));
+    }
+    if id.len() > 128 {
+        return Err(format!("{} must be <= 128 characters", field_name));
+    }
+
+    // ASCII安全文字のみ許可
+    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        return Err(format!("{} must contain only ASCII alphanumeric, underscore, or hyphen", field_name));
+    }
+
+    Ok(())
+}
+
+fn validate_binary_data(data: &Binary, field_name: &str) -> Result<(), String> {
+    if data.is_empty() {
+        return Err(format!("{} cannot be empty", field_name));
+    }
+
+    // 最大サイズチェック（128KB）
+    if data.len() > 128 * 1024 {
+        return Err(format!("{} exceeds maximum size of 128KB", field_name));
+    }
+
+    Ok(())
+}
+
+// --------------------- AOメッセージタグ ---------------------
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct AOMessageTags {
+    pub app_name: String,
+    pub action: String,
+    pub read_only: String,
+    pub input: String,
+    pub process_id: String,
+    pub actor: String,
+    pub ts: String,
+}
+
+impl AOMessageTags {
+    pub fn new_execute(action: &str, input: &str, process_id: &str, actor: &str, ts: &str) -> Self {
+        Self {
+            app_name: "cwao".to_string(),
+            action: action.to_string(),
+            read_only: "False".to_string(),
+            input: input.to_string(),
+            process_id: process_id.to_string(),
+            actor: actor.to_string(),
+            ts: ts.to_string(),
         }
-        if self.encrypted_kfrag.is_empty() {
-            return Err("Encrypted KFrag cannot be empty".to_string());
+    }
+
+    pub fn new_query(action: &str, input: &str, process_id: &str, actor: &str, ts: &str) -> Self {
+        Self {
+            app_name: "cwao".to_string(),
+            action: action.to_string(),
+            read_only: "True".to_string(),
+            input: input.to_string(),
+            process_id: process_id.to_string(),
+            actor: actor.to_string(),
+            ts: ts.to_string(),
         }
-        if self.signature.is_empty() {
-            return Err("Signature cannot be empty".to_string());
-        }
-        if self.owner_id.is_empty() {
-            return Err("Owner ID cannot be empty".to_string());
-        }
-        Ok(())
     }
 }
 
-impl ValidateMessage for CFragSubmission {
-    fn validate(&self) -> Result<(), String> {
-        if self.cfrag_id.is_empty() {
-            return Err("CFrag ID cannot be empty".to_string());
-        }
-        if self.holder_id.is_empty() {
-            return Err("Holder ID cannot be empty".to_string());
-        }
-        if self.cfrag_data.is_empty() {
-            return Err("CFrag data cannot be empty".to_string());
-        }
-        if self.signature.is_empty() {
-            return Err("Signature cannot be empty".to_string());
-        }
-        Ok(())
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cosmwasm_std::Binary;
+
+    #[test]
+    fn test_instantiate_msg_validation() {
+        let valid_msg = InstantiateMsg {
+            process_id: "test_process_123".to_string(),
+        };
+        assert!(valid_msg.validate().is_ok());
+
+        let empty_msg = InstantiateMsg {
+            process_id: "".to_string(),
+        };
+        assert!(empty_msg.validate().is_err());
+
+        let long_msg = InstantiateMsg {
+            process_id: "a".repeat(129),
+        };
+        assert!(long_msg.validate().is_err());
+    }
+
+    #[test]
+    fn test_execute_msg_validation() {
+        let valid_msg = ExecuteMsg::SubmitKFrag {
+            kfrag_id: "test_kfrag_123".to_string(),
+            kfrag: Binary::from(b"test_kfrag_data"),
+        };
+        assert!(valid_msg.validate().is_ok());
+
+        let invalid_id_msg = ExecuteMsg::SubmitKFrag {
+            kfrag_id: "invalid@id".to_string(),
+            kfrag: Binary::from(b"test_kfrag_data"),
+        };
+        assert!(invalid_id_msg.validate().is_err());
+
+        let empty_data_msg = ExecuteMsg::SubmitKFrag {
+            kfrag_id: "test_kfrag_123".to_string(),
+            kfrag: Binary::from(b""),
+        };
+        assert!(empty_data_msg.validate().is_err());
+    }
+
+    #[test]
+    fn test_query_msg_validation() {
+        let valid_msg = QueryMsg::GetCFrag {
+            kfrag_id: "test_kfrag_123".to_string(),
+            capsule_id: "test_capsule_456".to_string(),
+        };
+        assert!(valid_msg.validate().is_ok());
+
+        let valid_list_msg = QueryMsg::ListCapsulesByKFrag {
+            kfrag_id: "test_kfrag_123".to_string(),
+            start_after: Some("test_capsule_456".to_string()),
+            limit: Some(50),
+        };
+        assert!(valid_list_msg.validate().is_ok());
+
+        let invalid_limit_msg = QueryMsg::ListCapsulesByKFrag {
+            kfrag_id: "test_kfrag_123".to_string(),
+            start_after: None,
+            limit: Some(0),
+        };
+        assert!(invalid_limit_msg.validate().is_err());
+    }
+
+    #[test]
+    fn test_ao_message_tags() {
+        let execute_tags = AOMessageTags::new_execute(
+            "SubmitKFrag",
+            r#"{"kfrag_id":"K","kfrag":"<base64>"}"#,
+            "process_123",
+            "wallet_addr",
+            "2025-10-17T12:00:00Z"
+        );
+
+        assert_eq!(execute_tags.app_name, "cwao");
+        assert_eq!(execute_tags.action, "SubmitKFrag");
+        assert_eq!(execute_tags.read_only, "False");
+
+        let query_tags = AOMessageTags::new_query(
+            "GetCFrag",
+            r#"{"kfrag_id":"K","capsule_id":"C"}"#,
+            "process_123",
+            "wallet_addr",
+            "2025-10-17T12:00:00Z"
+        );
+
+        assert_eq!(query_tags.read_only, "True");
     }
 }
