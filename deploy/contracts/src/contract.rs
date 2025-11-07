@@ -1,10 +1,8 @@
-use cosmwasm_std::{
-    Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
-};
+use cosmwasm_std::{Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 
 use crate::handlers::{execute_handler, query_handler, ContractError};
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{Config, CONFIG, DEFAULT_CHUNK_THRESHOLD, DEFAULT_LIST_LIMIT, MAX_CHUNKS};
+use crate::state::{Config, CONFIG, DEFAULT_LIST_LIMIT};
 
 type ContractResult<T = Response> = Result<T, ContractError>;
 
@@ -22,8 +20,6 @@ pub fn instantiate(
     // 設定の初期化
     let config = Config {
         process_id: msg.process_id.clone(),
-        chunk_threshold: DEFAULT_CHUNK_THRESHOLD,
-        max_chunks: MAX_CHUNKS,
         default_list_limit: DEFAULT_LIST_LIMIT,
     };
 
@@ -32,8 +28,6 @@ pub fn instantiate(
     Ok(Response::new()
         .add_attribute("action", "instantiate")
         .add_attribute("process_id", msg.process_id)
-        .add_attribute("chunk_threshold", DEFAULT_CHUNK_THRESHOLD.to_string())
-        .add_attribute("max_chunks", MAX_CHUNKS.to_string())
         .add_attribute("default_list_limit", DEFAULT_LIST_LIMIT.to_string()))
 }
 
@@ -75,7 +69,6 @@ mod tests {
         // 設定が正しく保存されているかチェック
         let config = CONFIG.load(&deps.storage).unwrap();
         assert_eq!(config.process_id, "test_process_123");
-        assert_eq!(config.chunk_threshold, DEFAULT_CHUNK_THRESHOLD);
     }
 
     #[test]

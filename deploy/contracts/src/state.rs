@@ -2,16 +2,12 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Binary;
 use cw_storage_plus::{Item, Map};
 
-pub const DEFAULT_CHUNK_THRESHOLD: u32 = 4 * 1024;
-pub const MAX_CHUNKS: u32 = 32;
 pub const DEFAULT_LIST_LIMIT: u32 = 50;
 
 // --------------------- 設定 ---------------------
 #[cw_serde]
 pub struct Config {
     pub process_id: String,
-    pub chunk_threshold: u32,
-    pub max_chunks: u32,
     pub default_list_limit: u32,
 }
 pub const CONFIG: Item<Config> = Item::new("config");
@@ -32,7 +28,7 @@ pub enum CapsuleStatus {
     Received,
     ReencInProgress,
     CFragReady,
-    Error
+    Error,
 }
 
 #[cw_serde]
@@ -72,35 +68,17 @@ pub struct IdemFlag {
     pub updated_ts: Rfc3339String,
 }
 
-#[cw_serde]
-pub struct AuditLogEntry {
-    pub event: String,
-    pub actor_wallet: String,
-    pub kfrag_id: String,
-    pub capsule_id: String,
-    pub reason_or_meta: String,
-    pub ext_ts: Rfc3339String,
-}
 
-#[cw_serde]
-pub struct ChunkMeta {
-    pub size_bytes: u64,
-    pub parts: u32,
-    pub sha256_hex: String,
-    pub updated_ts: Rfc3339String,
-}
 
 // --------------------- マッピング ---------------------
 // すべて process_id を先頭キーに含むタプルキー
 
-pub const OWNER_KFRAGS: Map<(String, String), OwnerKFragData> =
-    Map::new("owner_kfrags");
+pub const OWNER_KFRAGS: Map<(String, String), OwnerKFragData> = Map::new("owner_kfrags");
 
 pub const OWNER_CAPSULES: Map<(String, String, String), OwnerCapsuleData> =
     Map::new("owner_capsules");
 
-pub const HOLDER_CFRAGS: Map<(String, String, String), HolderCFragData> =
-    Map::new("holder_cfrags");
+pub const HOLDER_CFRAGS: Map<(String, String, String), HolderCFragData> = Map::new("holder_cfrags");
 
 pub const INDEX_KFRAG_TO_CAPS: Map<(String, String, String), IndexKFragToCapsValue> =
     Map::new("index_kfrag_to_caps");
@@ -108,17 +86,9 @@ pub const INDEX_KFRAG_TO_CAPS: Map<(String, String, String), IndexKFragToCapsVal
 pub const INDEX_CAPS_TO_CFRAG: Map<(String, String, String), IndexCapsToCFragValue> =
     Map::new("index_caps_to_cfrag");
 
-pub const IDEM_FLAGS: Map<(String, String, String), IdemFlag> =
-    Map::new("idem_flags");
+pub const IDEM_FLAGS: Map<(String, String, String), IdemFlag> = Map::new("idem_flags");
 
-pub const AUDIT_LOGS: Map<String, AuditLogEntry> =
-    Map::new("audit_logs");
 
-pub const CHUNK_META: Map<(String, String, String), ChunkMeta> =
-    Map::new("chunk_meta");
-
-pub const CHUNK_PARTS: Map<(String, String, String, u32), Binary> =
-    Map::new("chunk_parts");
 
 // --------------------- エラー型 ---------------------
 #[derive(thiserror::Error, Debug)]
@@ -139,7 +109,10 @@ pub enum StorageError {
     KFragNotFound { kfrag_id: String },
 
     #[error("CFrag not ready: {kfrag_id}/{capsule_id}")]
-    CFragNotReady { kfrag_id: String, capsule_id: String },
+    CFragNotReady {
+        kfrag_id: String,
+        capsule_id: String,
+    },
 
     #[error("Reencryption failed: {reason}")]
     ReencryptionFailed { reason: String },
@@ -232,25 +205,6 @@ impl IdemFlag {
     }
 }
 
-impl AuditLogEntry {
-    pub fn new(
-        event: String,
-        actor_wallet: String,
-        kfrag_id: String,
-        capsule_id: String,
-        reason_or_meta: String,
-        ext_ts: String,
-    ) -> Self {
-        Self {
-            event,
-            actor_wallet,
-            kfrag_id,
-            capsule_id,
-            reason_or_meta,
-            ext_ts,
-        }
-    }
-}
 
 // --------------------- KVユーティリティ ---------------------
 pub fn get_current_timestamp(env: &cosmwasm_std::Env) -> String {
@@ -258,15 +212,6 @@ pub fn get_current_timestamp(env: &cosmwasm_std::Env) -> String {
     format!("{}Z", timestamp) // 簡易RFC3339形式
 }
 
-pub fn generate_audit_key(
-    ext_ts: &str,
-    event: &str,
-    process_id: &str,
-    kfrag_id: &str,
-    capsule_id: &str,
-) -> String {
-    format!("audit|{}|{}|{}|{}|{}", ext_ts, event, process_id, kfrag_id, capsule_id)
-}
 
 // --------------------- バリデーション ---------------------
 pub fn validate_id(id: &str, max_len: usize) -> Result<(), StorageError> {
@@ -277,7 +222,10 @@ pub fn validate_id(id: &str, max_len: usize) -> Result<(), StorageError> {
     }
 
     // ASCII安全文字のみ許可
-    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
         return Err(StorageError::BadRequest {
             msg: "ID must contain only ASCII alphanumeric, underscore, or hyphen".to_string(),
         });
@@ -327,7 +275,10 @@ mod tests {
 
         assert!(matches!(data.status, CapsuleStatus::Received));
 
-        data.update_status(CapsuleStatus::CFragReady, "2025-10-17T12:01:00Z".to_string());
+        data.update_status(
+            CapsuleStatus::CFragReady,
+            "2025-10-17T12:01:00Z".to_string(),
+        );
         assert!(matches!(data.status, CapsuleStatus::CFragReady));
     }
 }

@@ -36,7 +36,6 @@ pub fn query(deps: Deps, env: Env, msg: msg::QueryMsg) -> StdResult<Binary> {
     contract::query(deps, env, msg)
 }
 
-
 // 公開API（テスト用）
 pub use msg::*;
 pub use state::*;
