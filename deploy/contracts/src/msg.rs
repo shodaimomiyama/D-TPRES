@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
-use cosmwasm_std::Binary;
 use crate::state::{BlobMeta, CapsuleStatus};
+use cosmwasm_std::Binary;
+use serde::{Deserialize, Serialize};
 
 // --------------------- インスタンス化メッセージ ---------------------
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -88,13 +88,20 @@ impl ValidateMessage for ExecuteMsg {
                 validate_binary_data(kfrag, "kfrag")?;
                 Ok(())
             }
-            ExecuteMsg::SubmitCapsule { kfrag_id, capsule_id, capsule } => {
+            ExecuteMsg::SubmitCapsule {
+                kfrag_id,
+                capsule_id,
+                capsule,
+            } => {
                 validate_kfrag_id(kfrag_id)?;
                 validate_capsule_id(capsule_id)?;
                 validate_binary_data(capsule, "capsule")?;
                 Ok(())
             }
-            ExecuteMsg::Reencrypt { kfrag_id, capsule_id } => {
+            ExecuteMsg::Reencrypt {
+                kfrag_id,
+                capsule_id,
+            } => {
                 validate_kfrag_id(kfrag_id)?;
                 validate_capsule_id(capsule_id)?;
                 Ok(())
@@ -106,12 +113,19 @@ impl ValidateMessage for ExecuteMsg {
 impl ValidateMessage for QueryMsg {
     fn validate(&self) -> Result<(), String> {
         match self {
-            QueryMsg::GetCFrag { kfrag_id, capsule_id } => {
+            QueryMsg::GetCFrag {
+                kfrag_id,
+                capsule_id,
+            } => {
                 validate_kfrag_id(kfrag_id)?;
                 validate_capsule_id(capsule_id)?;
                 Ok(())
             }
-            QueryMsg::ListCapsulesByKFrag { kfrag_id, start_after, limit } => {
+            QueryMsg::ListCapsulesByKFrag {
+                kfrag_id,
+                start_after,
+                limit,
+            } => {
                 validate_kfrag_id(kfrag_id)?;
                 if let Some(start_after) = start_after {
                     validate_capsule_id(start_after)?;
@@ -145,8 +159,14 @@ fn validate_id(id: &str, field_name: &str) -> Result<(), String> {
     }
 
     // ASCII安全文字のみ許可
-    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
-        return Err(format!("{} must contain only ASCII alphanumeric, underscore, or hyphen", field_name));
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err(format!(
+            "{} must contain only ASCII alphanumeric, underscore, or hyphen",
+            field_name
+        ));
     }
 
     Ok(())
@@ -166,6 +186,8 @@ fn validate_binary_data(data: &Binary, field_name: &str) -> Result<(), String> {
 }
 
 // --------------------- AOメッセージタグ ---------------------
+// 将来的なAO Network環境での実行時に使用する予定の構造体
+// 現在の実装では標準CosmWasmインターフェース（MessageInfo等）を使用
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AOMessageTags {
     pub app_name: String,
@@ -277,7 +299,7 @@ mod tests {
             r#"{"kfrag_id":"K","kfrag":"<base64>"}"#,
             "process_123",
             "wallet_addr",
-            "2025-10-17T12:00:00Z"
+            "2025-10-17T12:00:00Z",
         );
 
         assert_eq!(execute_tags.app_name, "cwao");
@@ -289,7 +311,7 @@ mod tests {
             r#"{"kfrag_id":"K","capsule_id":"C"}"#,
             "process_123",
             "wallet_addr",
-            "2025-10-17T12:00:00Z"
+            "2025-10-17T12:00:00Z",
         );
 
         assert_eq!(query_tags.read_only, "True");
