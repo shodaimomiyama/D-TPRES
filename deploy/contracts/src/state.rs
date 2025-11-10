@@ -3,6 +3,7 @@ use cosmwasm_std::Binary;
 use cw_storage_plus::{Item, Map};
 
 pub const DEFAULT_LIST_LIMIT: u32 = 50;
+pub const DEFAULT_HOLDER_PROCESS_ID: &str = "holder_process_placeholder";
 
 // --------------------- 設定 ---------------------
 #[cw_serde]
@@ -11,6 +12,9 @@ pub struct Config {
     pub default_list_limit: u32,
 }
 pub const CONFIG: Item<Config> = Item::new("config");
+
+// Owner-Holder 委譲マッピング（将来的にRandAO差し替え予定）
+pub const KFRAG_HOLDERS: Map<(String, String), String> = Map::new("kfrag_holders");
 
 // --------------------- メタ ---------------------
 pub type Rfc3339String = String;
@@ -68,8 +72,6 @@ pub struct IdemFlag {
     pub updated_ts: Rfc3339String,
 }
 
-
-
 // --------------------- マッピング ---------------------
 // すべて process_id を先頭キーに含むタプルキー
 
@@ -87,8 +89,6 @@ pub const INDEX_CAPS_TO_CFRAG: Map<(String, String, String), IndexCapsToCFragVal
     Map::new("index_caps_to_cfrag");
 
 pub const IDEM_FLAGS: Map<(String, String, String), IdemFlag> = Map::new("idem_flags");
-
-
 
 // --------------------- エラー型 ---------------------
 #[derive(thiserror::Error, Debug)]
@@ -205,13 +205,10 @@ impl IdemFlag {
     }
 }
 
-
 // --------------------- KVユーティリティ ---------------------
 pub fn get_current_timestamp(env: &cosmwasm_std::Env) -> String {
-    let timestamp = env.block.time.seconds();
-    format!("{}Z", timestamp) // 簡易RFC3339形式
+    format!("{}Z", env.block.time.seconds())
 }
-
 
 // --------------------- バリデーション ---------------------
 pub fn validate_id(id: &str, max_len: usize) -> Result<(), StorageError> {
@@ -243,42 +240,4 @@ pub fn validate_base64_data(data: &[u8]) -> Result<(), StorageError> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use cosmwasm_std::Binary;
-
-    #[test]
-    fn test_validate_id() {
-        assert!(validate_id("valid_id-123", 128).is_ok());
-        assert!(validate_id("", 128).is_err());
-        assert!(validate_id("a".repeat(129).as_str(), 128).is_err());
-        assert!(validate_id("invalid@id", 128).is_err());
-    }
-
-    #[test]
-    fn test_owner_kfrag_data_creation() {
-        let kfrag = Binary::from(b"test_kfrag_data");
-        let timestamp = "2025-10-17T12:00:00Z".to_string();
-        let data = OwnerKFragData::new(kfrag.clone(), timestamp.clone());
-
-        assert_eq!(data.kfrag, kfrag);
-        assert_eq!(data.meta.size_bytes, kfrag.len() as u64);
-        assert_eq!(data.meta.updated_ts, timestamp);
-    }
-
-    #[test]
-    fn test_capsule_status_update() {
-        let capsule = Binary::from(b"test_capsule_data");
-        let timestamp = "2025-10-17T12:00:00Z".to_string();
-        let mut data = OwnerCapsuleData::new(capsule, timestamp);
-
-        assert!(matches!(data.status, CapsuleStatus::Received));
-
-        data.update_status(
-            CapsuleStatus::CFragReady,
-            "2025-10-17T12:01:00Z".to_string(),
-        );
-        assert!(matches!(data.status, CapsuleStatus::CFragReady));
-    }
-}
+// tests moved to `tests/`

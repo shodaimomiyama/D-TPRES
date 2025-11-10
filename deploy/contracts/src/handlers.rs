@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult,
+    to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Storage,
 };
 use cw_storage_plus::Bound;
 use serde::{Deserialize, Serialize};
@@ -12,10 +12,10 @@ use crate::msg::{
     ValidateMessage,
 };
 use crate::state::{
-    get_current_timestamp, CapsuleStatus, HolderCFragData,
-    IdemFlag, IndexCapsToCFragValue, IndexKFragToCapsValue, OwnerCapsuleData, OwnerKFragData,
-    StorageError, CONFIG, DEFAULT_LIST_LIMIT, HOLDER_CFRAGS, IDEM_FLAGS,
-    INDEX_CAPS_TO_CFRAG, INDEX_KFRAG_TO_CAPS, OWNER_CAPSULES, OWNER_KFRAGS,
+    get_current_timestamp, CapsuleStatus, Config, HolderCFragData, IdemFlag, IndexCapsToCFragValue,
+    IndexKFragToCapsValue, OwnerCapsuleData, OwnerKFragData, StorageError, CONFIG,
+    DEFAULT_HOLDER_PROCESS_ID, HOLDER_CFRAGS, IDEM_FLAGS, INDEX_CAPS_TO_CFRAG, INDEX_KFRAG_TO_CAPS,
+    KFRAG_HOLDERS, OWNER_CAPSULES, OWNER_KFRAGS,
 };
 
 // --------------------- カスタムエラー型 ---------------------
@@ -30,11 +30,17 @@ pub enum ContractError {
     #[error("Validation error: {msg}")]
     ValidationError { msg: String },
 
-    #[error("KFrag not found: {kfrag_id}")]
+    #[error("ERR_KFRAG_NOT_FOUND: {kfrag_id}")]
     KFragNotFound { kfrag_id: String },
 
-    #[error("CFrag not ready: {kfrag_id}/{capsule_id}")]
+    #[error("ERR_CFRAG_NOT_READY: {kfrag_id}/{capsule_id}")]
     CFragNotReady {
+        kfrag_id: String,
+        capsule_id: String,
+    },
+
+    #[error("ERR_CAPSULE_NOT_FOUND: {kfrag_id}/{capsule_id}")]
+    CapsuleNotFound {
         kfrag_id: String,
         capsule_id: String,
     },
@@ -56,6 +62,73 @@ type ContractResult<T = Response> = Result<T, ContractError>;
 
 // --------------------- Execute ハンドラー ---------------------
 
+pub fn handle_delegate_kfrag(
+    deps: DepsMut,
+    env: Env,
+    _info: MessageInfo,
+    kfrag_id: String,
+    kfrag: Binary,
+) -> ContractResult {
+    let config = CONFIG.load(deps.storage)?;
+    let timestamp = get_current_timestamp(&env);
+    let holder_process_id = DEFAULT_HOLDER_PROCESS_ID.to_string();
+    let process_id = config.process_id.clone();
+
+    let holder_key = (process_id.clone(), kfrag_id.clone());
+    if let Some(existing_holder) = KFRAG_HOLDERS.may_load(deps.storage, holder_key.clone())? {
+        if existing_holder != holder_process_id {
+            return Err(ContractError::BadRequest {
+                msg: format!("kFrag already delegated to holder {}", existing_holder),
+            });
+        }
+    } else {
+        KFRAG_HOLDERS.save(deps.storage, holder_key, &holder_process_id)?;
+    }
+
+    let created = persist_kfrag(deps.storage, &process_id, &kfrag_id, kfrag, &timestamp)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "delegate_kfrag")
+        .add_attribute("kfrag_id", kfrag_id)
+        .add_attribute("holder_process_id", holder_process_id)
+        .add_attribute("process_id", process_id)
+        .add_attribute("status", if created { "success" } else { "no_op" }))
+}
+
+pub fn handle_delegate_capsule(
+    deps: DepsMut,
+    env: Env,
+    _info: MessageInfo,
+    kfrag_id: String,
+    capsule_id: String,
+    capsule: Binary,
+) -> ContractResult {
+    let config = CONFIG.load(deps.storage)?;
+    let process_id = config.process_id.clone();
+    let holder_process_id = KFRAG_HOLDERS
+        .may_load(deps.storage, (process_id.clone(), kfrag_id.clone()))?
+        .ok_or(ContractError::KFragNotFound {
+            kfrag_id: kfrag_id.clone(),
+        })?;
+
+    let status = process_capsule_submission(
+        deps,
+        env,
+        config.clone(),
+        kfrag_id.clone(),
+        capsule_id.clone(),
+        capsule,
+    )?;
+
+    Ok(Response::new()
+        .add_attribute("action", "delegate_capsule")
+        .add_attribute("kfrag_id", kfrag_id)
+        .add_attribute("capsule_id", capsule_id)
+        .add_attribute("holder_process_id", holder_process_id)
+        .add_attribute("process_id", config.process_id)
+        .add_attribute("status", status.as_str()))
+}
+
 pub fn handle_submit_kfrag(
     deps: DepsMut,
     env: Env,
@@ -65,26 +138,19 @@ pub fn handle_submit_kfrag(
 ) -> ContractResult {
     let config = CONFIG.load(deps.storage)?;
     let timestamp = get_current_timestamp(&env);
-
-    // kFragIDの重複チェック
-    let kfrag_key = (config.process_id.clone(), kfrag_id.clone());
-    if OWNER_KFRAGS.has(deps.storage, kfrag_key.clone()) {
-        // 既存の場合はNo-Op
-        return Ok(Response::new()
-            .add_attribute("action", "submit_kfrag")
-            .add_attribute("kfrag_id", kfrag_id)
-            .add_attribute("status", "no_op"));
-    }
-
-    // kFragデータ作成・保存
-    let kfrag_data = OwnerKFragData::new(kfrag, timestamp);
-    OWNER_KFRAGS.save(deps.storage, kfrag_key, &kfrag_data)?;
+    let created = persist_kfrag(
+        deps.storage,
+        &config.process_id,
+        &kfrag_id,
+        kfrag,
+        &timestamp,
+    )?;
 
     Ok(Response::new()
         .add_attribute("action", "submit_kfrag")
         .add_attribute("kfrag_id", kfrag_id)
         .add_attribute("process_id", config.process_id)
-        .add_attribute("status", "success"))
+        .add_attribute("status", if created { "success" } else { "no_op" }))
 }
 
 pub fn handle_submit_capsule(
@@ -96,119 +162,45 @@ pub fn handle_submit_capsule(
     capsule: Binary,
 ) -> ContractResult {
     let config = CONFIG.load(deps.storage)?;
-    let timestamp = get_current_timestamp(&env);
-    let process_id = config.process_id.clone();
+    let status = process_capsule_submission(
+        deps,
+        env,
+        config.clone(),
+        kfrag_id.clone(),
+        capsule_id.clone(),
+        capsule,
+    )?;
 
-    // 1. kFragの存在確認（順序固定）
-    let kfrag_blob = OWNER_KFRAGS
-        .may_load(deps.storage, (process_id.clone(), kfrag_id.clone()))?
-        .ok_or(ContractError::KFragNotFound {
-            kfrag_id: kfrag_id.clone(),
-        })?
-        .kfrag;
-
-    // 2. 冪等性チェック
-    let idem_key = (process_id.clone(), kfrag_id.clone(), capsule_id.clone());
-    if IDEM_FLAGS.has(deps.storage, idem_key.clone()) {
-        // 冪等ONの場合は完全No-Op
-        return Ok(Response::new()
-            .add_attribute("action", "submit_capsule")
-            .add_attribute("kfrag_id", kfrag_id)
-            .add_attribute("capsule_id", capsule_id)
-            .add_attribute("status", "no_op"));
-    }
-
-    // 3. Capsule本体保存
-    let capsule_blob = capsule.clone();
-    let capsule_key = (process_id.clone(), kfrag_id.clone(), capsule_id.clone());
-    let mut capsule_data = OwnerCapsuleData::new(capsule, timestamp.clone());
-    OWNER_CAPSULES.save(deps.storage, capsule_key.clone(), &capsule_data)?;
-
-    // 4. 列挙用インデックス追加
-    let index_kfrag_caps_key = (process_id.clone(), kfrag_id.clone(), capsule_id.clone());
-    let index_value = IndexKFragToCapsValue::new(CapsuleStatus::Received, timestamp.clone());
-    INDEX_KFRAG_TO_CAPS.save(deps.storage, index_kfrag_caps_key.clone(), &index_value)?;
-
-    // 5. 状態遷移: REENC_IN_PROGRESS
-    capsule_data.update_status(CapsuleStatus::ReencInProgress, timestamp.clone());
-    OWNER_CAPSULES.save(deps.storage, capsule_key.clone(), &capsule_data)?;
-
-    // 6. 再暗号化処理（umbral-pre）
-    let cfrag_result = perform_reencryption(&kfrag_blob, &capsule_blob);
-
-    match cfrag_result {
-        Ok(cfrag_data) => {
-            // 7. cFrag本体保存
-            let cfrag_key = (process_id.clone(), kfrag_id.clone(), capsule_id.clone());
-            let cfrag = HolderCFragData::new(cfrag_data, timestamp.clone());
-            HOLDER_CFRAGS.save(deps.storage, cfrag_key, &cfrag)?;
-
-            // 8. 存在インデックス追加
-            let index_caps_cfrag_key = (process_id.clone(), kfrag_id.clone(), capsule_id.clone());
-            let index_cfrag_value = IndexCapsToCFragValue::new(timestamp.clone());
-            INDEX_CAPS_TO_CFRAG.save(deps.storage, index_caps_cfrag_key, &index_cfrag_value)?;
-
-            // 9. 冪等フラグON
-            let idem_flag = IdemFlag::new(timestamp.clone());
-            IDEM_FLAGS.save(deps.storage, idem_key, &idem_flag)?;
-
-            // 10. 最終状態更新
-            capsule_data.update_status(CapsuleStatus::CFragReady, timestamp.clone());
-            OWNER_CAPSULES.save(deps.storage, capsule_key, &capsule_data)?;
-
-            // 11. インデックス状態も更新
-            let updated_index_value =
-                IndexKFragToCapsValue::new(CapsuleStatus::CFragReady, timestamp);
-            INDEX_KFRAG_TO_CAPS.save(deps.storage, index_kfrag_caps_key, &updated_index_value)?;
-
-            Ok(Response::new()
-                .add_attribute("action", "submit_capsule")
-                .add_attribute("kfrag_id", kfrag_id)
-                .add_attribute("capsule_id", capsule_id)
-                .add_attribute("status", "success"))
-        }
-        Err(err) => {
-            // 再暗号化失敗時
-            capsule_data.update_status(CapsuleStatus::Error, timestamp.clone());
-            OWNER_CAPSULES.save(deps.storage, capsule_key, &capsule_data)?;
-
-
-            Err(err)
-        }
-    }
+    Ok(Response::new()
+        .add_attribute("action", "submit_capsule")
+        .add_attribute("kfrag_id", kfrag_id)
+        .add_attribute("capsule_id", capsule_id)
+        .add_attribute("process_id", config.process_id)
+        .add_attribute("status", status.as_str()))
 }
 
 pub fn handle_reencrypt(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     _info: MessageInfo,
     kfrag_id: String,
     capsule_id: String,
 ) -> ContractResult {
     let config = CONFIG.load(deps.storage)?;
-
-    // 冪等性チェック（既に成功している場合はNo-Op）
-    let idem_key = (
-        config.process_id.clone(),
+    let status = retry_reencryption(
+        deps,
+        env,
+        config.clone(),
         kfrag_id.clone(),
         capsule_id.clone(),
-    );
-    if IDEM_FLAGS.has(deps.storage, idem_key) {
-        return Ok(Response::new()
-            .add_attribute("action", "reencrypt")
-            .add_attribute("kfrag_id", kfrag_id)
-            .add_attribute("capsule_id", capsule_id)
-            .add_attribute("status", "no_op"));
-    }
-
-    // handle_submit_capsuleの4〜7を再実行
-    // 実際の実装では必要な処理のみを抽出
+    )?;
 
     Ok(Response::new()
         .add_attribute("action", "reencrypt")
         .add_attribute("kfrag_id", kfrag_id)
         .add_attribute("capsule_id", capsule_id)
-        .add_attribute("status", "retry"))
+        .add_attribute("process_id", config.process_id)
+        .add_attribute("status", status.as_str()))
 }
 
 // --------------------- Query ハンドラー ---------------------
@@ -224,23 +216,20 @@ pub fn handle_get_cfrag(
     let _timestamp = get_current_timestamp(&env);
 
     // 1. 存在判定（O(1)）
-    let index_key = (
+    let key = (
         config.process_id.clone(),
         kfrag_id.clone(),
         capsule_id.clone(),
     );
-    if !INDEX_CAPS_TO_CFRAG.has(deps.storage, index_key) {
-        return Err(StdError::not_found("CFrag not ready"));
+    if !INDEX_CAPS_TO_CFRAG.has(deps.storage, key.clone()) {
+        return Err(StdError::generic_err(format!(
+            "ERR_CFRAG_NOT_READY: {}/{}",
+            kfrag_id, capsule_id
+        )));
     }
 
     // 2. cFrag本体取得
-    let cfrag_key = (
-        config.process_id.clone(),
-        kfrag_id.clone(),
-        capsule_id.clone(),
-    );
-    let cfrag_data = HOLDER_CFRAGS.load(deps.storage, cfrag_key)?;
-
+    let cfrag_data = HOLDER_CFRAGS.load(deps.storage, key)?;
 
     // 4. レスポンス構築
     let response = GetCFragResponse {
@@ -259,7 +248,7 @@ pub fn handle_list_capsules_by_kfrag(
     limit: Option<u32>,
 ) -> StdResult<Binary> {
     let config = CONFIG.load(deps.storage)?;
-    let limit = limit.unwrap_or(DEFAULT_LIST_LIMIT).min(100) as usize;
+    let limit = limit.unwrap_or(config.default_list_limit).min(100) as usize;
 
     // プレフィックス決定
     let prefix = (config.process_id.clone(), kfrag_id.clone());
@@ -305,6 +294,282 @@ pub fn handle_list_capsules_by_kfrag(
 }
 
 // --------------------- ヘルパー関数 ---------------------
+
+#[derive(Debug, PartialEq, Eq)]
+enum PipelineStatus {
+    Success,
+    NoOp,
+}
+
+impl PipelineStatus {
+    fn as_str(&self) -> &'static str {
+        match self {
+            PipelineStatus::Success => "success",
+            PipelineStatus::NoOp => "no_op",
+        }
+    }
+}
+
+fn persist_kfrag(
+    storage: &mut dyn Storage,
+    process_id: &str,
+    kfrag_id: &str,
+    kfrag: Binary,
+    timestamp: &str,
+) -> Result<bool, ContractError> {
+    let key = (process_id.to_string(), kfrag_id.to_string());
+    if OWNER_KFRAGS.has(storage, key.clone()) {
+        return Ok(false);
+    }
+
+    let kfrag_data = OwnerKFragData::new(kfrag, timestamp.to_string());
+    OWNER_KFRAGS.save(storage, key, &kfrag_data)?;
+    Ok(true)
+}
+
+fn save_index_status(
+    storage: &mut dyn Storage,
+    process_id: &str,
+    kfrag_id: &str,
+    capsule_id: &str,
+    status: CapsuleStatus,
+    timestamp: &str,
+) -> Result<(), ContractError> {
+    let key = (
+        process_id.to_string(),
+        kfrag_id.to_string(),
+        capsule_id.to_string(),
+    );
+    let value = IndexKFragToCapsValue::new(status, timestamp.to_string());
+    INDEX_KFRAG_TO_CAPS.save(storage, key, &value)?;
+    Ok(())
+}
+
+fn finalize_capsule_success(
+    storage: &mut dyn Storage,
+    process_id: &str,
+    kfrag_id: &str,
+    capsule_id: &str,
+    capsule_data: &mut OwnerCapsuleData,
+    timestamp: &str,
+    cfrag_binary: Binary,
+) -> Result<(), ContractError> {
+    let cfrag_key = (
+        process_id.to_string(),
+        kfrag_id.to_string(),
+        capsule_id.to_string(),
+    );
+    let cfrag_entry = HolderCFragData::new(cfrag_binary, timestamp.to_string());
+    HOLDER_CFRAGS.save(storage, cfrag_key, &cfrag_entry)?;
+
+    let caps_index_key = (
+        process_id.to_string(),
+        kfrag_id.to_string(),
+        capsule_id.to_string(),
+    );
+    let caps_index_value = IndexCapsToCFragValue::new(timestamp.to_string());
+    INDEX_CAPS_TO_CFRAG.save(storage, caps_index_key, &caps_index_value)?;
+
+    let idem_key = (
+        process_id.to_string(),
+        kfrag_id.to_string(),
+        capsule_id.to_string(),
+    );
+    let idem_flag = IdemFlag::new(timestamp.to_string());
+    IDEM_FLAGS.save(storage, idem_key, &idem_flag)?;
+
+    capsule_data.update_status(CapsuleStatus::CFragReady, timestamp.to_string());
+    let capsule_key = (
+        process_id.to_string(),
+        kfrag_id.to_string(),
+        capsule_id.to_string(),
+    );
+    OWNER_CAPSULES.save(storage, capsule_key, capsule_data)?;
+
+    save_index_status(
+        storage,
+        process_id,
+        kfrag_id,
+        capsule_id,
+        CapsuleStatus::CFragReady,
+        timestamp,
+    )?;
+
+    Ok(())
+}
+
+fn mark_capsule_error(
+    storage: &mut dyn Storage,
+    process_id: &str,
+    kfrag_id: &str,
+    capsule_id: &str,
+    capsule_data: &mut OwnerCapsuleData,
+    timestamp: &str,
+) -> Result<(), ContractError> {
+    capsule_data.update_status(CapsuleStatus::Error, timestamp.to_string());
+    let capsule_key = (
+        process_id.to_string(),
+        kfrag_id.to_string(),
+        capsule_id.to_string(),
+    );
+    OWNER_CAPSULES.save(storage, capsule_key, capsule_data)?;
+    save_index_status(
+        storage,
+        process_id,
+        kfrag_id,
+        capsule_id,
+        CapsuleStatus::Error,
+        timestamp,
+    )?;
+
+    Ok(())
+}
+
+fn process_capsule_submission(
+    deps: DepsMut,
+    env: Env,
+    config: Config,
+    kfrag_id: String,
+    capsule_id: String,
+    capsule: Binary,
+) -> Result<PipelineStatus, ContractError> {
+    let storage = deps.storage;
+    let timestamp = get_current_timestamp(&env);
+    let process_id = config.process_id.clone();
+
+    let kfrag_key = (process_id.clone(), kfrag_id.clone());
+    let kfrag_blob = OWNER_KFRAGS
+        .may_load(storage, kfrag_key)?
+        .ok_or(ContractError::KFragNotFound {
+            kfrag_id: kfrag_id.clone(),
+        })?
+        .kfrag;
+
+    let idem_key = (process_id.clone(), kfrag_id.clone(), capsule_id.clone());
+    if IDEM_FLAGS.has(storage, idem_key) {
+        return Ok(PipelineStatus::NoOp);
+    }
+
+    let capsule_key = (process_id.clone(), kfrag_id.clone(), capsule_id.clone());
+    let mut capsule_data = OwnerCapsuleData::new(capsule.clone(), timestamp.clone());
+    OWNER_CAPSULES.save(storage, capsule_key.clone(), &capsule_data)?;
+    save_index_status(
+        storage,
+        &process_id,
+        &kfrag_id,
+        &capsule_id,
+        CapsuleStatus::Received,
+        &timestamp,
+    )?;
+
+    capsule_data.update_status(CapsuleStatus::ReencInProgress, timestamp.clone());
+    OWNER_CAPSULES.save(storage, capsule_key, &capsule_data)?;
+    save_index_status(
+        storage,
+        &process_id,
+        &kfrag_id,
+        &capsule_id,
+        CapsuleStatus::ReencInProgress,
+        &timestamp,
+    )?;
+
+    match perform_reencryption(&kfrag_blob, &capsule) {
+        Ok(cfrag_data) => {
+            finalize_capsule_success(
+                storage,
+                &process_id,
+                &kfrag_id,
+                &capsule_id,
+                &mut capsule_data,
+                &timestamp,
+                cfrag_data,
+            )?;
+            Ok(PipelineStatus::Success)
+        }
+        Err(err) => {
+            mark_capsule_error(
+                storage,
+                &process_id,
+                &kfrag_id,
+                &capsule_id,
+                &mut capsule_data,
+                &timestamp,
+            )?;
+            Err(err)
+        }
+    }
+}
+
+fn retry_reencryption(
+    deps: DepsMut,
+    env: Env,
+    config: Config,
+    kfrag_id: String,
+    capsule_id: String,
+) -> Result<PipelineStatus, ContractError> {
+    let storage = deps.storage;
+    let timestamp = get_current_timestamp(&env);
+    let process_id = config.process_id.clone();
+
+    let idem_key = (process_id.clone(), kfrag_id.clone(), capsule_id.clone());
+    if IDEM_FLAGS.has(storage, idem_key) {
+        return Ok(PipelineStatus::NoOp);
+    }
+
+    let kfrag_key = (process_id.clone(), kfrag_id.clone());
+    let kfrag_blob = OWNER_KFRAGS
+        .may_load(storage, kfrag_key)?
+        .ok_or(ContractError::KFragNotFound {
+            kfrag_id: kfrag_id.clone(),
+        })?
+        .kfrag;
+
+    let capsule_key = (process_id.clone(), kfrag_id.clone(), capsule_id.clone());
+    let mut capsule_data = OWNER_CAPSULES
+        .may_load(storage, capsule_key.clone())?
+        .ok_or(ContractError::CapsuleNotFound {
+            kfrag_id: kfrag_id.clone(),
+            capsule_id: capsule_id.clone(),
+        })?;
+
+    let capsule_blob = capsule_data.capsule.clone();
+    capsule_data.update_status(CapsuleStatus::ReencInProgress, timestamp.clone());
+    OWNER_CAPSULES.save(storage, capsule_key, &capsule_data)?;
+    save_index_status(
+        storage,
+        &process_id,
+        &kfrag_id,
+        &capsule_id,
+        CapsuleStatus::ReencInProgress,
+        &timestamp,
+    )?;
+
+    match perform_reencryption(&kfrag_blob, &capsule_blob) {
+        Ok(cfrag_data) => {
+            finalize_capsule_success(
+                storage,
+                &process_id,
+                &kfrag_id,
+                &capsule_id,
+                &mut capsule_data,
+                &timestamp,
+                cfrag_data,
+            )?;
+            Ok(PipelineStatus::Success)
+        }
+        Err(err) => {
+            mark_capsule_error(
+                storage,
+                &process_id,
+                &kfrag_id,
+                &capsule_id,
+                &mut capsule_data,
+                &timestamp,
+            )?;
+            Err(err)
+        }
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct StoredKeyFrag {
@@ -428,7 +693,6 @@ fn perform_reencryption(
     Ok(Binary::from(serialized_cfrag))
 }
 
-
 // --------------------- 公開インターフェース ---------------------
 
 pub fn execute_handler(
@@ -442,6 +706,14 @@ pub fn execute_handler(
         .map_err(|e| ContractError::ValidationError { msg: e })?;
 
     match msg {
+        ExecuteMsg::DelegateKFrag { kfrag_id, kfrag } => {
+            handle_delegate_kfrag(deps, env, info, kfrag_id, kfrag)
+        }
+        ExecuteMsg::DelegateCapsule {
+            kfrag_id,
+            capsule_id,
+            capsule,
+        } => handle_delegate_capsule(deps, env, info, kfrag_id, capsule_id, capsule),
         ExecuteMsg::SubmitKFrag { kfrag_id, kfrag } => {
             handle_submit_kfrag(deps, env, info, kfrag_id, kfrag)
         }
@@ -474,199 +746,4 @@ pub fn query_handler(deps: Deps, env: Env, info: MessageInfo, msg: QueryMsg) -> 
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::state::Config;
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::Binary;
-
-    #[test]
-    fn test_submit_kfrag_success() {
-        let mut deps = mock_dependencies();
-        let env = mock_env();
-        let info = mock_info("sender", &[]);
-
-        // Configの初期化
-        let config = Config {
-            process_id: "test_process".to_string(),
-            default_list_limit: 50,
-        };
-        CONFIG.save(&mut deps.storage, &config).unwrap();
-
-        let result = handle_submit_kfrag(
-            deps.as_mut(),
-            env,
-            info,
-            "test_kfrag".to_string(),
-            Binary::from(b"test_kfrag_data"),
-        );
-
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_submit_capsule_kfrag_not_found() {
-        let mut deps = mock_dependencies();
-        let env = mock_env();
-        let info = mock_info("sender", &[]);
-
-        // Configの初期化
-        let config = Config {
-            process_id: "test_process".to_string(),
-            default_list_limit: 50,
-        };
-        CONFIG.save(&mut deps.storage, &config).unwrap();
-
-        let result = handle_submit_capsule(
-            deps.as_mut(),
-            env,
-            info,
-            "nonexistent_kfrag".to_string(),
-            "test_capsule".to_string(),
-            Binary::from(b"test_capsule_data"),
-        );
-
-        assert!(matches!(result, Err(ContractError::KFragNotFound { .. })));
-    }
-
-    #[test]
-    fn test_submit_capsule_success_with_reencryption() {
-        let mut deps = mock_dependencies();
-        let env = mock_env();
-
-        // Configの初期化
-        let config = Config {
-            process_id: "test_process".to_string(),
-            default_list_limit: 50,
-        };
-        CONFIG.save(&mut deps.storage, &config).unwrap();
-
-        // Umbral鍵セットアップ
-        let delegating_sk = umbral_pre::SecretKey::random();
-        let delegating_pk = delegating_sk.public_key();
-        let receiving_sk = umbral_pre::SecretKey::random();
-        let receiving_pk = receiving_sk.public_key();
-        let signing_sk = umbral_pre::SecretKey::random();
-        let verifying_pk = signing_sk.public_key();
-        let signer = umbral_pre::Signer::new(signing_sk);
-
-        // kFrag生成
-        let verified_kfrags =
-            umbral_pre::generate_kfrags(&delegating_sk, &receiving_pk, &signer, 1, 1, true, true);
-        let kfrag = verified_kfrags
-            .first()
-            .expect("kFrag generation failed")
-            .clone()
-            .unverify();
-        let kfrag_bytes = kfrag
-            .to_bytes()
-            .expect("kFrag serialization failed")
-            .to_vec();
-
-        let verification = VerificationData {
-            verifying_pk: bincode::serialize(&verifying_pk).unwrap(),
-            delegating_pk: bincode::serialize(&delegating_pk).unwrap(),
-            receiving_pk: bincode::serialize(&receiving_pk).unwrap(),
-        };
-        let verification_bytes = bincode::serialize(&verification).unwrap();
-
-        let stored_kfrag = StoredKeyFrag {
-            id: 0,
-            key_data: kfrag_bytes,
-            verification_data: verification_bytes.clone(),
-            precursor: vec![],
-        };
-        let serialized_kfrag = bincode::serialize(&stored_kfrag).unwrap();
-
-        // kFrag登録
-        let kfrag_info = mock_info("sender", &[]);
-        handle_submit_kfrag(
-            deps.as_mut(),
-            env.clone(),
-            kfrag_info,
-            "kfrag1".to_string(),
-            Binary::from(serialized_kfrag),
-        )
-        .unwrap();
-
-        // Capsule生成
-        let plaintext = b"secret payload".to_vec();
-        let (capsule_struct, ciphertext_box) =
-            umbral_pre::encrypt(&delegating_pk, &plaintext).expect("encryption failed");
-        let capsule_bytes = bincode::serialize(&capsule_struct).unwrap();
-        let ciphertext = ciphertext_box.to_vec();
-
-        // Capsule送信
-        let capsule_info = mock_info("sender", &[]);
-        let response = handle_submit_capsule(
-            deps.as_mut(),
-            env.clone(),
-            capsule_info,
-            "kfrag1".to_string(),
-            "capsule1".to_string(),
-            Binary::from(capsule_bytes.clone()),
-        )
-        .expect("submit_capsule should succeed");
-
-        assert_eq!(
-            response
-                .attributes
-                .iter()
-                .find(|a| a.key == "status")
-                .unwrap()
-                .value,
-            "success"
-        );
-
-        // cFrag取得・検証
-        let cfrag_key = (
-            "test_process".to_string(),
-            "kfrag1".to_string(),
-            "capsule1".to_string(),
-        );
-        let stored_cfrag_data = HOLDER_CFRAGS
-            .load(&deps.storage, cfrag_key)
-            .expect("cFrag should be stored");
-        let stored_cfrag: StoredCFrag =
-            bincode::deserialize(stored_cfrag_data.cfrag.as_slice()).unwrap();
-
-        assert_eq!(stored_cfrag.fragment_id, 0);
-        assert_eq!(stored_cfrag.proof, verification_bytes);
-
-        let capsule_frag = umbral_pre::CapsuleFrag::from_bytes(&stored_cfrag.capsule_fragment)
-            .expect("capsule fragment decode failed");
-        let verified_cfrag = capsule_frag
-            .verify(
-                &capsule_struct,
-                &verifying_pk,
-                &delegating_pk,
-                &receiving_pk,
-            )
-            .expect("capsule fragment verification failed");
-
-        let recovered = umbral_pre::decrypt_reencrypted(
-            &receiving_sk,
-            &delegating_pk,
-            &capsule_struct,
-            vec![verified_cfrag],
-            ciphertext.as_slice(),
-        )
-        .expect("decrypt reencrypted failed");
-
-        assert_eq!(recovered.to_vec(), plaintext);
-
-        // Capsuleステータス確認
-        let capsule_state = OWNER_CAPSULES
-            .load(
-                &deps.storage,
-                (
-                    "test_process".to_string(),
-                    "kfrag1".to_string(),
-                    "capsule1".to_string(),
-                ),
-            )
-            .expect("capsule state should exist");
-        assert!(matches!(capsule_state.status, CapsuleStatus::CFragReady));
-    }
-}
+// tests moved to `tests/`

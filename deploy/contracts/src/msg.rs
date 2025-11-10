@@ -24,6 +24,15 @@ impl InstantiateMsg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecuteMsg {
+    DelegateKFrag {
+        kfrag_id: String,
+        kfrag: Binary,
+    },
+    DelegateCapsule {
+        kfrag_id: String,
+        capsule_id: String,
+        capsule: Binary,
+    },
     SubmitKFrag {
         kfrag_id: String,
         kfrag: Binary,
@@ -83,6 +92,21 @@ pub trait ValidateMessage {
 impl ValidateMessage for ExecuteMsg {
     fn validate(&self) -> Result<(), String> {
         match self {
+            ExecuteMsg::DelegateKFrag { kfrag_id, kfrag } => {
+                validate_kfrag_id(kfrag_id)?;
+                validate_binary_data(kfrag, "kfrag")?;
+                Ok(())
+            }
+            ExecuteMsg::DelegateCapsule {
+                kfrag_id,
+                capsule_id,
+                capsule,
+            } => {
+                validate_kfrag_id(kfrag_id)?;
+                validate_capsule_id(capsule_id)?;
+                validate_binary_data(capsule, "capsule")?;
+                Ok(())
+            }
             ExecuteMsg::SubmitKFrag { kfrag_id, kfrag } => {
                 validate_kfrag_id(kfrag_id)?;
                 validate_binary_data(kfrag, "kfrag")?;
@@ -225,95 +249,4 @@ impl AOMessageTags {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use cosmwasm_std::Binary;
-
-    #[test]
-    fn test_instantiate_msg_validation() {
-        let valid_msg = InstantiateMsg {
-            process_id: "test_process_123".to_string(),
-        };
-        assert!(valid_msg.validate().is_ok());
-
-        let empty_msg = InstantiateMsg {
-            process_id: "".to_string(),
-        };
-        assert!(empty_msg.validate().is_err());
-
-        let long_msg = InstantiateMsg {
-            process_id: "a".repeat(129),
-        };
-        assert!(long_msg.validate().is_err());
-    }
-
-    #[test]
-    fn test_execute_msg_validation() {
-        let valid_msg = ExecuteMsg::SubmitKFrag {
-            kfrag_id: "test_kfrag_123".to_string(),
-            kfrag: Binary::from(b"test_kfrag_data"),
-        };
-        assert!(valid_msg.validate().is_ok());
-
-        let invalid_id_msg = ExecuteMsg::SubmitKFrag {
-            kfrag_id: "invalid@id".to_string(),
-            kfrag: Binary::from(b"test_kfrag_data"),
-        };
-        assert!(invalid_id_msg.validate().is_err());
-
-        let empty_data_msg = ExecuteMsg::SubmitKFrag {
-            kfrag_id: "test_kfrag_123".to_string(),
-            kfrag: Binary::from(b""),
-        };
-        assert!(empty_data_msg.validate().is_err());
-    }
-
-    #[test]
-    fn test_query_msg_validation() {
-        let valid_msg = QueryMsg::GetCFrag {
-            kfrag_id: "test_kfrag_123".to_string(),
-            capsule_id: "test_capsule_456".to_string(),
-        };
-        assert!(valid_msg.validate().is_ok());
-
-        let valid_list_msg = QueryMsg::ListCapsulesByKFrag {
-            kfrag_id: "test_kfrag_123".to_string(),
-            start_after: Some("test_capsule_456".to_string()),
-            limit: Some(50),
-        };
-        assert!(valid_list_msg.validate().is_ok());
-
-        let invalid_limit_msg = QueryMsg::ListCapsulesByKFrag {
-            kfrag_id: "test_kfrag_123".to_string(),
-            start_after: None,
-            limit: Some(0),
-        };
-        assert!(invalid_limit_msg.validate().is_err());
-    }
-
-    #[test]
-    fn test_ao_message_tags() {
-        let execute_tags = AOMessageTags::new_execute(
-            "SubmitKFrag",
-            r#"{"kfrag_id":"K","kfrag":"<base64>"}"#,
-            "process_123",
-            "wallet_addr",
-            "2025-10-17T12:00:00Z",
-        );
-
-        assert_eq!(execute_tags.app_name, "cwao");
-        assert_eq!(execute_tags.action, "SubmitKFrag");
-        assert_eq!(execute_tags.read_only, "False");
-
-        let query_tags = AOMessageTags::new_query(
-            "GetCFrag",
-            r#"{"kfrag_id":"K","capsule_id":"C"}"#,
-            "process_123",
-            "wallet_addr",
-            "2025-10-17T12:00:00Z",
-        );
-
-        assert_eq!(query_tags.read_only, "True");
-    }
-}
+// tests moved to `tests/`
