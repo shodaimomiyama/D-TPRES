@@ -12,13 +12,16 @@
 
 * **プロセス主キー**: `process.id` を状態キー空間のルートに採用（署名ウォレットは監査用メタに記録）。
 * **ロール**: Owner / Holder / Requester（**同一プロセスに論理共存**）。
-* **順序固定**: **必ず `SubmitKFrag` → `SubmitCapsule` → `GetCFrag`** の順で到着する前提。
+  * **Ownerロール**: ClientからkFrag/Capsuleを受信し、適切なHolderプロセスに委譲
+  * **Holderロール**: kFrag/Capsuleを保管し、再暗号化を実行してcFragを生成
+  * **Requesterロール**: cFragの取得と一覧表示
+* **順序固定**: **必ず `handle_delegate_kFrag` → `handle_delegate_cFrag` → `handle_get_cFrag`** の順で到着する前提。
 
-  * `kFrag` 未登録で `SubmitCapsule` が来たら **`ERR_KFRAG_NOT_FOUND`**（何も書かない）。
+  * `kFrag` 未登録で `handle_delegate_cFrag` が来たら **`ERR_KFRAG_NOT_FOUND`**（何も書かない）。
 * **同期制約**: 他プロセスの同期読取なし（必要データは当該プロセスに保持）。
 * **ACL/DoS**: 当面なし（将来拡張前提）。
-* **監査（Audit）**: **失敗イベント**と**cFrag配布イベント**を必ず記録。時刻は**外部時刻（メッセージタグ）**を採用。
-* **チャンク**: 原則**非分割**。4KB超のみ分割、最大32パーツ（合計≲128KB）。
+* **Holder選出**: 現在はハードコード（`DEFAULT_HOLDER_PROCESS_ID`）。将来的にRandAO統合予定。
+* **監査・チャンク**: **将来実装予定**（AOのイベントソーシングで代替）。
 * **一覧ページング**: 既定 `limit = 50`。
 
 ---
@@ -39,6 +42,71 @@
 
 ### 2.1 本体（Owner / Holder）
 
+#### キーテンプレート表記の読み方
+
+KVストレージのキー表記 `owner|<process.id>|kfrag|<kFragID>` は以下のように解釈します：
+
+* **パイプ記号（`|`）**: 階層的な名前空間を作成するセパレータ
+* **固定文字列**: `owner`, `kfrag` など（リテラル文字列として使用）
+* **変数部分**: `<process.id>`, `<kFragID>` など（実際の値に置換される）
+
+**具体例**: process.id=`"123"`, kFragID=`"A"`, capsuleID=`"cap001"` の場合
+
+```
+OWNER_KFRAGS:
+  テンプレート: owner|<process.id>|kfrag|<kFragID>
+  実際のキー:   owner|123|kfrag|A
+
+OWNER_CAPSULES:
+  テンプレート: owner|<process.id>|capsule|<kFragID>|<capsuleID>
+  実際のキー:   owner|123|capsule|A|cap001
+
+KFRAG_HOLDERS:
+  テンプレート: kfrag_holders|<process.id>|<kFragID>
+  実際のキー:   kfrag_holders|123|A
+
+HOLDER_CFRAGS:
+  テンプレート: holder|<process.id>|cfrag|<kFragID>|<capsuleID>
+  実際のキー:   holder|123|cfrag|A|cap001
+```
+
+#### CosmWasm/cw-storage-plus での実装
+
+```rust
+// Map定義（タプルキー）
+pub const OWNER_KFRAGS: Map<(String, String), OwnerKFragData> =
+    Map::new("owner_kfrags");
+
+// 使用例
+let key = (process_id.clone(), kfrag_id.clone()); // ("123", "A")
+OWNER_KFRAGS.save(deps.storage, key, &kfrag_data)?;
+
+// 内部的には namespace + encode(tuple) でキーが生成される
+// 実際のストレージキー: "owner_kfrags" + binary_encoded(("123", "A"))
+```
+
+#### Prefix スキャンの仕組み
+
+```rust
+// kFragID="A" に関連する全Capsuleを取得
+let prefix = (process_id.clone(), kfrag_id.clone()); // ("123", "A")
+let capsules = INDEX_KFRAG_TO_CAPS
+    .prefix(prefix)  // "holder|123|index|kfrag_to_caps|A|*" の範囲をスキャン
+    .range(deps.storage, None, None, Order::Ascending)
+    .collect::<StdResult<Vec<_>>>()?;
+```
+
+#### キー設計の利点
+
+1. **階層的な整理**: ロール（owner/holder）→プロセス→リソースタイプ→ID
+2. **効率的なスキャン**: Prefixによる範囲検索が高速
+3. **名前空間の分離**: 異なるプロセス間でデータが混在しない
+4. **可読性**: デバッグ時にキーを見て内容が推測可能
+
+---
+
+#### KVマッピング定義
+
 * **OWNER_KFRAGS**
 
   * key: `owner|<process.id>|kfrag|<kFragID>`
@@ -48,6 +116,11 @@
   * key: `owner|<process.id>|capsule|<kFragID>|<capsuleID>`
   * value: `{ capsule_bytes, status, meta }`
   * `status ∈ { RECEIVED, REENC_IN_PROGRESS, CFRAG_READY, ERROR }`
+* **KFRAG_HOLDERS**（Ownerロール用：kFragとHolderプロセスの対応）
+
+  * key: `owner|<process.id>|kfrag_holder|<kFragID>`
+  * value: `{ holder_process_id }`
+  * 現在はハードコード（`DEFAULT_HOLDER_PROCESS_ID`）、将来的にRandAOで選出
 * **HOLDER_CFRAGS**
 
   * key: `holder|<process.id>|cfrag|<kFragID>|<capsuleID>`
@@ -64,21 +137,25 @@
   * key: `holder|<process.id>|index|caps_to_cfrag|<kFragID>|<capsuleID>`
   * value: `{ exists: true, updated_ts }`
 
-### 2.3 冪等・監査・チャンク
+### 2.3 冪等・将来実装予定機能
 
 * **IDEM_FLAGS**
 
   * key: `idem|<process.id>|<kFragID>|<capsuleID>`
   * value: `{ generated: true, updated_ts }`
-* **AUDIT_LOGS**（Append-only）
+
+### 2.4 将来実装予定（現在未実装）
+
+* **AUDIT_LOGS**（Append-only）- **AOのイベントソーシングで代替**
 
   * key: `audit|<ext_ts>|<EVENT>|...`
   * value: `{ event, actor_wallet, kFragID, capsuleID, reason_or_meta }`
-  * `EVENT ∈ { ERROR, GET_CFRAG, ... }` / `ext_ts` は外部時刻（タグ `Ts`）
-* **CHUNK_META / CHUNK_PART**（4KB超のみ）
+  * 理由：AOはメッセージ履歴を完全に記録するため、独自の監査ログは冗長
+* **CHUNK_META / CHUNK_PART**（4KB超のデータ分割）
 
   * meta key: `....|meta` → `{ size_bytes, parts, sha256, updated_ts }`
   * part key: `....|part/<i>` → `part_bytes`
+  * 現在：4KB以下のデータのみサポート
 
 ---
 
@@ -100,7 +177,36 @@
 
 ### 3.2 Execute
 
-* **SubmitKFrag**（順序：常に先行）
+#### Ownerロール（Clientからの受信と委譲）
+
+* **handle_delegate_kFrag**（順序：常に先行）
+
+  ```json
+  {
+    "kFragID": "string<=128",
+    "kFrag": "base64"
+  }
+  ```
+
+  * ClientからkFragを受信し、ハードコードされたHolderプロセスに委譲
+  * KFRAG_HOLDERSマップにHolder情報を記録
+
+* **handle_delegate_cFrag**（kFrag受信後）
+
+  ```json
+  {
+    "kFragID": "string<=128",
+    "capsuleID": "string<=128",
+    "capsule": "base64"
+  }
+  ```
+
+  * ClientからCapsuleを受信し、対応するHolderプロセスに委譲
+  * kFrag未委譲なら `ERR_KFRAG_NOT_FOUND`
+
+#### Holderロール（プロセス間での処理）
+
+* **handle_submit_kFrag**（Ownerプロセスから受信）
 
   ```json
   {
@@ -111,7 +217,7 @@
 
   * 既存なら No-Op。
 
-* **SubmitCapsule**（kFrag先行が**必須**）
+* **handle_submit_Capsule**（Ownerプロセスから受信）
 
   ```json
   {
@@ -135,7 +241,7 @@
 
 ### 3.3 Query
 
-* **GetCFrag**
+* **handle_get_cFrag**
 
   ```json
   {
@@ -147,7 +253,7 @@
   * 返却: `{ cFrag: "base64", meta: { size_bytes, sha256, updated_ts } }`
   * 監査: `GET_CFRAG` を必ず記録。
 
-* **ListCapsulesByKFrag**
+* **handle_list_Capsule_by_kFrag**
 
   ```json
   {
@@ -163,13 +269,28 @@
 
 ## 4. 動作フロー（厳密・順序固定）
 
-### 4.1 Execute：SubmitKFrag（先行）
+### 4.0 Owner：handle_delegate_kFrag（ClientからkFrag受信と委譲）
+
+1. 入力検証 → バリデーション完了
+2. `DEFAULT_HOLDER_PROCESS_ID`を使用してHolderプロセスを決定
+3. `put KFRAG_HOLDERS(pid, kFragID) = holder_process_id`
+4. SubMsgでHolderプロセスに`handle_submit_kFrag`メッセージ送信
+5. コミット
+
+### 4.0.1 Owner：handle_delegate_cFrag（ClientからCapsule受信と委譲）
+
+1. 入力検証
+2. `get KFRAG_HOLDERS(pid, kFragID)` → **無**なら`ERR_KFRAG_NOT_FOUND`（**終了**）
+3. 取得したHolder process_idに対してSubMsgで`handle_submit_Capsule`メッセージ送信
+4. コミット
+
+### 4.1 Holder：handle_submit_kFrag（Ownerプロセスから受信）
 
 1. 入力検証 → 既存なら No-Op
 2. `put owner|pid|kfrag|K = kFrag + meta`
 3. コミット
 
-### 4.2 Execute：SubmitCapsule（kFrag存在が前提）
+### 4.2 Execute：handle_submit_Capsule（kFrag存在が前提）
 
 1. 入力検証
 2. `get owner|pid|kfrag|K` が **無** → `ERR_KFRAG_NOT_FOUND`（**終了**）
@@ -186,7 +307,7 @@
 11. `update owner|pid|capsule|K|C.status = CFRAG_READY`
 12. コミット
 
-### 4.3 Query：GetCFrag
+### 4.3 Query：handle_get_cFrag
 
 1. 入力検証
 2. `get index caps_to_cfrag|K|C` **無** → `ERR_CFRAG_NOT_READY`
@@ -194,7 +315,7 @@
 4. 監査 `GET_CFRAG` 追記
 5. 返却
 
-### 4.4 Query：ListCapsulesByKFrag（limit=50 既定）
+### 4.4 Query：handle_list_Capsule_by_kFrag（limit=50 既定）
 
 * prefix = `holder|pid|index|kfrag_to_caps|K|`
 * `start_after` と `limit` でレンジ取得
@@ -209,6 +330,10 @@
 
 ```mermaid
 erDiagram
+    KFRAG_HOLDERS {
+      string key "kfrag_holders|<process.id>|<kFragID>"
+      string holder_process_id
+    }
     OWNER_KFRAGS {
       string key "owner|<process.id>|kfrag|<kFragID>"
       bytes  kFrag_bytes
@@ -246,33 +371,14 @@ erDiagram
       bool   generated
       string updated_ts_rfc3339
     }
-    AUDIT_LOGS {
-      string key "audit|<ext_ts>|<EVENT>|..."
-      string event
-      string actor_wallet
-      string kFragID
-      string capsuleID
-      string reason_or_meta
-    }
-    CHUNK_META {
-      string key "....|meta"
-      uint64 size_bytes
-      uint32 parts
-      string sha256_hex
-      string updated_ts_rfc3339
-    }
-    CHUNK_PART {
-      string key "....|part/<i>"
-      bytes  part_bytes
-    }
 
+    KFRAG_HOLDERS ||..|| OWNER_KFRAGS : "kFrag委譲マッピング: <kFragID>"
+    KFRAG_HOLDERS ||..|| OWNER_CAPSULES : "Holder選択: <kFragID>"
     OWNER_KFRAGS ||..|| OWNER_CAPSULES : "prefix関係: <kFragID>"
     OWNER_CAPSULES ||..|| HOLDER_CFRAGS : "論理従属: (kFragID,capsuleID)"
     OWNER_CAPSULES ||..|| INDEX_KFRAG_TO_CAPS : "列挙index"
     HOLDER_CFRAGS ||..|| INDEX_CAPS_TO_CFRAG : "存在index"
     OWNER_CAPSULES ||..|| IDEM_FLAGS : "冪等フラグ"
-    HOLDER_CFRAGS ||..|| CHUNK_META : "4KB超で分割時のみ"
-    CHUNK_META ||--o{ CHUNK_PART : "parts"
 ```
 
 ---
@@ -285,55 +391,59 @@ erDiagram
 ```mermaid
 sequenceDiagram
   autonumber
-  participant OW as Owner Client
-  participant REQ as Requester Client
+  participant CL as Client
+  participant OP as Owner Process
+  participant HP as Holder Process
   participant SU as Scheduler/Messenger
   participant CU as CUノード（実行）
-  participant P as Process（Wasm on AO）
   participant ST as 永続層
 
-  %% A) SubmitKFrag（先行）
-  OW->>SU: Msg(Action=SubmitKFrag, Input={K,kFrag}, Ts, Actor)
-  SU->>CU: deliver
+  %% A) Owner: handle_delegate_kFrag（委譲フロー）
+  CL->>SU: Msg(Action=handle_delegate_kFrag, Input={K,kFrag}, Ts, Actor)
+  SU->>CU: deliver to Owner Process
   CU->>ST: 最新状態ロード（メモリ展開）
-  CU->>P: execute SubmitKFrag
-  P->>ST: put owner|pid|kfrag|K = kFrag + meta
-  P-->>CU: ok
+  CU->>OP: execute handle_delegate_kFrag
+  OP->>ST: put kfrag_holders|pid|K = DEFAULT_HOLDER_PROCESS_ID
+  OP->>HP: SubMsg(Action=handle_submit_kFrag, Input={K,kFrag})
+  HP->>ST: put owner|holder_pid|kfrag|K = kFrag + meta
+  HP-->>OP: success
+  OP-->>CU: ok
   CU-->>SU: success（コミット）
 
-  %% B) SubmitCapsule（kFrag存在が条件）
-  OW->>SU: Msg(Action=SubmitCapsule, Input={K,C,capsule}, Ts, Actor)
-  SU->>CU: deliver
+  %% B) Owner: handle_delegate_cFrag（委譲フロー）
+  CL->>SU: Msg(Action=handle_delegate_cFrag, Input={K,C,capsule}, Ts, Actor)
+  SU->>CU: deliver to Owner Process
   CU->>ST: 最新状態ロード
-  CU->>P: execute SubmitCapsule
-  P->>ST: get owner|pid|kfrag|K ?（無: ERR_KFRAG_NOT_FOUND, 終了）
-  P->>ST: put owner|pid|capsule|K|C = capsule, status=RECEIVED
-  P->>ST: put index kfrag_to_caps|K|C = {status,ts}
-  P->>ST: update owner|pid|capsule|K|C.status = REENC_IN_PROGRESS
-  P->>P:  再暗号化→cFrag生成
+  CU->>OP: execute handle_delegate_cFrag
+  OP->>ST: get kfrag_holders|pid|K ?（無: ERR_KFRAG_NOT_FOUND, 終了）
+  OP->>HP: SubMsg(Action=handle_submit_Capsule, Input={K,C,capsule})
+  HP->>ST: get owner|holder_pid|kfrag|K ?（無: ERR_KFRAG_NOT_FOUND, 終了）
+  HP->>ST: put owner|holder_pid|capsule|K|C = capsule, status=RECEIVED
+  HP->>ST: put index kfrag_to_caps|K|C = {status,ts}
+  HP->>ST: update owner|holder_pid|capsule|K|C.status = REENC_IN_PROGRESS
+  HP->>HP: 再暗号化→cFrag生成
   alt 成功
-    P->>ST: put holder|pid|cfrag|K|C = cFrag + meta
-    P->>ST: put index caps_to_cfrag|K|C = {exists:true,ts}
-    P->>ST: put idem|pid|K|C = true
-    P->>ST: update owner|pid|capsule|K|C.status = CFRAG_READY
-    P-->>CU: ok
+    HP->>ST: put holder|holder_pid|cfrag|K|C = cFrag + meta
+    HP->>ST: put index caps_to_cfrag|K|C = {exists:true,ts}
+    HP->>ST: put idem|holder_pid|K|C = true
+    HP->>ST: update owner|holder_pid|capsule|K|C.status = CFRAG_READY
+    HP-->>OP: success
   else 失敗
-    P->>ST: update owner|pid|capsule|K|C.status = ERROR
-    P->>ST: append audit|Ts|ERROR|Reencrypt|...
-    P-->>CU: error
+    HP->>ST: update owner|holder_pid|capsule|K|C.status = ERROR
+    HP-->>OP: error
   end
+  OP-->>CU: result
   CU-->>SU: result（コミット）
 
-  %% C) GetCFrag
-  REQ->>SU: Msg(Action=GetCFrag, Input={K,C}, Ts, Actor)
-  SU->>CU: deliver
+  %% C) handle_get_cFrag（Holderプロセスに直接クエリ）
+  CL->>SU: Msg(Action=handle_get_cFrag, Input={K,C}, Ts, Actor)
+  SU->>CU: deliver to Holder Process
   CU->>ST: 最新状態ロード
-  CU->>P: query GetCFrag
-  P->>ST: get index caps_to_cfrag|K|C ?（無: ERR_CFRAG_NOT_READY）
-  P->>ST: get holder|pid|cfrag|K|C
-  P->>ST: append audit|Ts|GET_CFRAG|requester=...
-  P-->>CU: {cFrag, meta}
-  CU-->>REQ: レスポンス
+  CU->>HP: query handle_get_cFrag
+  HP->>ST: get index caps_to_cfrag|K|C ?（無: ERR_CFRAG_NOT_READY）
+  HP->>ST: get holder|holder_pid|cfrag|K|C
+  HP-->>CU: {cFrag, meta}
+  CU-->>CL: レスポンス
 
   %% D) CU再割当（別CUでも同じ）
   Note over SU,CU: 負荷分散・再起動などでCUが切替わっても
@@ -347,8 +457,8 @@ sequenceDiagram
 * **入力**: `kFragID/capsuleID`（非空・ASCII安全・≤128）、`kFrag/capsule`（Base64・サイズ>0）、`Ts`（任意時刻）
 * **代表エラー**
 
-  * `ERR_KFRAG_NOT_FOUND`（順序違反の `SubmitCapsule`。**何も書かない**）
-  * `ERR_CFRAG_NOT_READY`（未生成の `GetCFrag`）
+  * `ERR_KFRAG_NOT_FOUND`（順序違反の `handle_submit_Capsule`。**何も書かない**）
+  * `ERR_CFRAG_NOT_READY`（未生成の `handle_get_cFrag`）
   * `ERR_REENC_FAILED`（再暗号化失敗）
   * `ERR_DUPLICATE_KFRAG` / `ERR_DUPLICATE_CAPSULE`（通知が必要なら使用）
   * `ERR_BAD_REQUEST` / `ERR_OBJECT_TOO_LARGE`
@@ -357,7 +467,7 @@ sequenceDiagram
 
 ## 8. 既定値・運用ノート
 
-* `ListCapsulesByKFrag.limit` 既定 **50**
+* `handle_list_Capsule_by_kFrag.limit` 既定 **50**
 * 監査は **失敗** と **配布** を必ず記録（`ext_ts`=タグ`Ts`、`actor/requester`=タグ`Actor`）
 * チャンクは **4KB超のみ**（最大32パーツ）。通常は非分割で高速I/O。
 * index は「**一覧**（kfrag_to_caps）」と「**存在確認**（caps_to_cfrag）」に用途分離。
@@ -369,14 +479,14 @@ sequenceDiagram
 
 1. **instantiate**: `process.id` を state ルートに採用。
 2. **KVユーティリティ**: `kv_put/kv_get/kv_scan_prefix`、キー生成（`role|process.id|...`）、冪等I/F。
-3. **execute**: `SubmitKFrag` / `SubmitCapsule`（順序チェック・即時完結） / `Reencrypt`。
-4. **query**: `GetCFrag`（存在index→本体） / `ListCapsulesByKFrag(limit=50)`（prefixスキャン）。
+3. **execute**: `handle_submit_kFrag` / `handle_submit_Capsule`（順序チェック・即時完結） / `Reencrypt`。
+4. **query**: `handle_get_cFrag`（存在index→本体） / `handle_list_Capsule_by_kFrag(limit=50)`（prefixスキャン）。
 5. **監査ユーティリティ**: 失敗/配布の記録（外部時刻とアクター転記）。
 6. **テスト**:
 
-   * 正常系: kFrag→Capsule→GetCFrag、重複送信のNo-Op
-   * 異常系: `SubmitCapsule`の順序違反、再暗号化失敗、未生成取得、巨大入力
-   * ページング: `ListCapsulesByKFrag` 連続取得
+   * 正常系: kFrag→Capsule→handle_get_cFrag、重複送信のNo-Op
+   * 異常系: `handle_submit_Capsule`の順序違反、再暗号化失敗、未生成取得、巨大入力
+   * ページング: `handle_list_Capsule_by_kFrag` 連続取得
    * 監査: 失敗＋配布が必ず残ること
 
 ---
@@ -387,7 +497,7 @@ sequenceDiagram
 
 ### 10.1 事前状態（正常系完了後の永続KV）
 
-* 例：`SubmitKFrag(K)`→`SubmitCapsule(K,C)`成功後
+* 例：`handle_submit_kFrag(K)`→`handle_submit_Capsule(K,C)`成功後
 
   * `OWNER_KFRAGS(pid,K)`：存在
   * `OWNER_CAPSULES(pid,K,C).status = CFRAG_READY`
@@ -403,13 +513,13 @@ sequenceDiagram
 2. **新CU は永続層から最新スナップショット取得**
 3. **スナップショット以降の差分メッセージを再生**
 
-   * メッセージ順は **すでに順序固定**（`kFrag→Capsule→GetCFrag`）のため、再生は直列で安全
+   * メッセージ順は **すでに順序固定**（`kFrag→Capsule→handle_get_cFrag`）のため、再生は直列で安全
 4. **KVをメモリ上に展開**
 
    * `OWNER_* / HOLDER_* / INDEX_* / IDEM_* / AUDIT_*` が**直前と同一内容**に再構築
 5. **実行準備完了**（以降の`execute/query`はこの最新状態で即時実行）
 
-### 10.3 復元後のメッセージ到着（例：`GetCFrag(K,C)`）
+### 10.3 復元後のメッセージ到着（例：`handle_get_cFrag(K,C)`）
 
 1. **Requester→SU→新CU** に配送
 2. **新CU** はすでに最新KVをメモリに展開済み
@@ -428,7 +538,7 @@ sequenceDiagram
 
 > AOに送る**実体メッセージ**の例を示します（`data`は空を想定。CWAO流儀で`tags.Input`にJSONを詰める）。
 
-### 11.1 SubmitKFrag（execute）
+### 11.1 handle_submit_kFrag（execute）
 
 ```json
 {
@@ -436,7 +546,7 @@ sequenceDiagram
   "data": "",
   "tags": [
     {"name":"App-Name","value":"cwao"},
-    {"name":"Action","value":"SubmitKFrag"},
+    {"name":"Action","value":"handle_submit_kFrag"},
     {"name":"Read-Only","value":"False"},
     {"name":"Input","value":"{\"kFragID\":\"K\",\"kFrag\":\"<base64>\"}"},
     {"name":"Process-Id","value":"<process.id>"},
@@ -446,7 +556,7 @@ sequenceDiagram
 }
 ```
 
-### 11.2 SubmitCapsule（execute）
+### 11.2 handle_submit_Capsule（execute）
 
 ```json
 {
@@ -454,7 +564,7 @@ sequenceDiagram
   "data": "",
   "tags": [
     {"name":"App-Name","value":"cwao"},
-    {"name":"Action","value":"SubmitCapsule"},
+    {"name":"Action","value":"handle_submit_Capsule"},
     {"name":"Read-Only","value":"False"},
     {"name":"Input","value":"{\"kFragID\":\"K\",\"capsuleID\":\"C\",\"capsule\":\"<base64>\"}"},
     {"name":"Process-Id","value":"<process.id>"},
@@ -464,7 +574,7 @@ sequenceDiagram
 }
 ```
 
-### 11.3 GetCFrag（query）
+### 11.3 handle_get_cFrag（query）
 
 ```json
 {
@@ -472,7 +582,7 @@ sequenceDiagram
   "data": "",
   "tags": [
     {"name":"App-Name","value":"cwao"},
-    {"name":"Action","value":"GetCFrag"},
+    {"name":"Action","value":"handle_get_cFrag"},
     {"name":"Read-Only","value":"True"},
     {"name":"Input","value":"{\"kFragID\":\"K\",\"capsuleID\":\"C\"}"},
     {"name":"Process-Id","value":"<process.id>"},
@@ -492,19 +602,19 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Binary;
 use cw_storage_plus::{Item, Map};
 
-pub const DEFAULT_CHUNK_THRESHOLD: u32 = 4 * 1024;
-pub const MAX_CHUNKS: u32 = 32;
 pub const DEFAULT_LIST_LIMIT: u32 = 50;
 
 // --------------------- 設定 ---------------------
 #[cw_serde]
 pub struct Config {
     pub process_id: String,
-    pub chunk_threshold: u32,
-    pub max_chunks: u32,
     pub default_list_limit: u32,
 }
 pub const CONFIG: Item<Config> = Item::new("config");
+
+// Owner-Holder 委譲マッピング（ハードコード設定）
+pub const KFRAG_HOLDERS: Map<(String, String), String> = Map::new("kfrag_holders");
+pub const DEFAULT_HOLDER_PROCESS_ID: &str = "holder_process_placeholder";
 
 // --------------------- メタ ---------------------
 pub type Rfc3339String = String;
@@ -557,24 +667,6 @@ pub struct IdemFlag {
     pub updated_ts: Rfc3339String,
 }
 
-#[cw_serde]
-pub struct AuditLogEntry {
-    pub event: String,
-    pub actor_wallet: String,
-    pub kfrag_id: String,
-    pub capsule_id: String,
-    pub reason_or_meta: String,
-    pub ext_ts: Rfc3339String,
-}
-
-#[cw_serde]
-pub struct ChunkMeta {
-    pub size_bytes: u64,
-    pub parts: u32,
-    pub sha256_hex: String,
-    pub updated_ts: Rfc3339String,
-}
-
 // --------------------- マッピング ---------------------
 // すべて process_id を先頭キーに含むタプルキー
 
@@ -595,15 +687,6 @@ pub const INDEX_CAPS_TO_CFRAG: Map<(String, String, String), IndexCapsToCFragVal
 
 pub const IDEM_FLAGS: Map<(String, String, String), IdemFlag> =
     Map::new("idem_flags");
-
-pub const AUDIT_LOGS: Map<(String, String, String, String, String), AuditLogEntry> =
-    Map::new("audit_logs");
-
-pub const CHUNK_META: Map<(String, String, String), ChunkMeta> =
-    Map::new("chunk_meta");
-
-pub const CHUNK_PARTS: Map<(String, String, String, u32), Binary> =
-    Map::new("chunk_parts");
 ```
 
 ---
@@ -613,7 +696,7 @@ pub const CHUNK_PARTS: Map<(String, String, String, u32), Binary> =
 > 目的：**列挙の高速化**（`kFrag→Capsule`）と、**単件存在判定のO(1)**（`Capsule→cFrag`）。
 > 「順序固定」により、**一括更新**で一貫性を維持しやすい。
 
-### 13.1 書き込み時（`SubmitCapsule(K,C)` 成功パス）
+### 13.1 書き込み時（`handle_submit_Capsule(K,C)` 成功パス）
 
 1. **本体保存（Capsule）**
 
@@ -652,7 +735,7 @@ pub const CHUNK_PARTS: Map<(String, String, String, u32), Binary> =
 
 ---
 
-### 13.2 読み取り時：一覧（`ListCapsulesByKFrag(K, start_after, limit)`）
+### 13.2 読み取り時：一覧（`handle_list_Capsule_by_kFrag(K, start_after, limit)`）
 
 1. **prefix決定**
 
@@ -675,7 +758,7 @@ pub const CHUNK_PARTS: Map<(String, String, String, u32), Binary> =
 
 ---
 
-### 13.3 読み取り時：単件取得（`GetCFrag(K,C)`）
+### 13.3 読み取り時：単件取得（`handle_get_cFrag(K,C)`）
 
 1. **存在判定（O(1)）**
 
