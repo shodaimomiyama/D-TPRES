@@ -5,10 +5,7 @@ mod handlers;
 mod msg;
 mod state;
 
-#[cfg(test)]
-mod tests;
-
-use handlers::ContractError;
+pub use handlers::ContractError;
 
 // エントリーポイント関数
 #[entry_point]
