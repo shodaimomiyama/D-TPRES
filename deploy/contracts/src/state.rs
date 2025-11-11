@@ -3,7 +3,7 @@ use cosmwasm_std::Binary;
 use cw_storage_plus::{Item, Map};
 
 pub const DEFAULT_LIST_LIMIT: u32 = 50;
-pub const DEFAULT_HOLDER_PROCESS_ID: &str = "holder_process_placeholder";
+pub const DEFAULT_HOLDER_PROCESS_ID: &str = "holder_ABC123XYZ456DEF789GHI012JKL345MNO678PQR";
 
 // --------------------- 設定 ---------------------
 #[cw_serde]

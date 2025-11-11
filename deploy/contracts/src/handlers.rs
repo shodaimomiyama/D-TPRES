@@ -1,5 +1,6 @@
 use cosmwasm_std::{
-    to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdError, StdResult, Storage,
+    to_json_binary, Binary, CosmosMsg, Deps, DepsMut, Env, MessageInfo, Reply, ReplyOn, Response,
+    StdError, StdResult, Storage, SubMsg, SubMsgResult, WasmMsg,
 };
 use cw_storage_plus::Bound;
 use serde::{Deserialize, Serialize};
@@ -60,17 +61,19 @@ pub enum ContractError {
 
 type ContractResult<T = Response> = Result<T, ContractError>;
 
+pub const REPLY_DELEGATE_KFRAG: u64 = 1;
+pub const REPLY_DELEGATE_CAPSULE: u64 = 2;
+
 // --------------------- Execute ハンドラー ---------------------
 
 pub fn handle_delegate_kfrag(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     _info: MessageInfo,
     kfrag_id: String,
     kfrag: Binary,
 ) -> ContractResult {
     let config = CONFIG.load(deps.storage)?;
-    let timestamp = get_current_timestamp(&env);
     let holder_process_id = DEFAULT_HOLDER_PROCESS_ID.to_string();
     let process_id = config.process_id.clone();
 
@@ -85,19 +88,32 @@ pub fn handle_delegate_kfrag(
         KFRAG_HOLDERS.save(deps.storage, holder_key, &holder_process_id)?;
     }
 
-    let created = persist_kfrag(deps.storage, &process_id, &kfrag_id, kfrag, &timestamp)?;
+    let wasm_msg = WasmMsg::Execute {
+        contract_addr: holder_process_id.clone(),
+        msg: to_json_binary(&ExecuteMsg::SubmitKFrag {
+            kfrag_id: kfrag_id.clone(),
+            kfrag,
+        })?,
+        funds: vec![],
+    };
+    let sub_msg = SubMsg {
+        id: REPLY_DELEGATE_KFRAG,
+        msg: CosmosMsg::Wasm(wasm_msg),
+        gas_limit: None,
+        reply_on: ReplyOn::Error,
+    };
 
     Ok(Response::new()
+        .add_submessage(sub_msg)
         .add_attribute("action", "delegate_kfrag")
         .add_attribute("kfrag_id", kfrag_id)
         .add_attribute("holder_process_id", holder_process_id)
-        .add_attribute("process_id", process_id)
-        .add_attribute("status", if created { "success" } else { "no_op" }))
+        .add_attribute("process_id", process_id))
 }
 
 pub fn handle_delegate_capsule(
     deps: DepsMut,
-    env: Env,
+    _env: Env,
     _info: MessageInfo,
     kfrag_id: String,
     capsule_id: String,
@@ -111,22 +127,30 @@ pub fn handle_delegate_capsule(
             kfrag_id: kfrag_id.clone(),
         })?;
 
-    let status = process_capsule_submission(
-        deps,
-        env,
-        config.clone(),
-        kfrag_id.clone(),
-        capsule_id.clone(),
-        capsule,
-    )?;
+    let wasm_msg = WasmMsg::Execute {
+        contract_addr: holder_process_id.clone(),
+        msg: to_json_binary(&ExecuteMsg::SubmitCapsule {
+            kfrag_id: kfrag_id.clone(),
+            capsule_id: capsule_id.clone(),
+            capsule,
+        })?,
+        funds: vec![],
+    };
+
+    let sub_msg = SubMsg {
+        id: REPLY_DELEGATE_CAPSULE,
+        msg: CosmosMsg::Wasm(wasm_msg),
+        gas_limit: None,
+        reply_on: ReplyOn::Error,
+    };
 
     Ok(Response::new()
+        .add_submessage(sub_msg)
         .add_attribute("action", "delegate_capsule")
         .add_attribute("kfrag_id", kfrag_id)
         .add_attribute("capsule_id", capsule_id)
         .add_attribute("holder_process_id", holder_process_id)
-        .add_attribute("process_id", config.process_id)
-        .add_attribute("status", status.as_str()))
+        .add_attribute("process_id", config.process_id))
 }
 
 pub fn handle_submit_kfrag(
@@ -691,6 +715,36 @@ fn perform_reencryption(
         })?;
 
     Ok(Binary::from(serialized_cfrag))
+}
+
+// --------------------- Reply ハンドラー ---------------------
+
+pub fn handle_reply(deps: DepsMut, _env: Env, msg: Reply) -> ContractResult {
+    match msg.id {
+        REPLY_DELEGATE_KFRAG => handle_delegate_kfrag_reply(deps, msg),
+        REPLY_DELEGATE_CAPSULE => handle_delegate_capsule_reply(deps, msg),
+        _ => Err(ContractError::BadRequest {
+            msg: format!("Unknown reply id: {}", msg.id),
+        }),
+    }
+}
+
+fn handle_delegate_kfrag_reply(_deps: DepsMut, msg: Reply) -> ContractResult {
+    match msg.result {
+        SubMsgResult::Err(err) => Ok(Response::new()
+            .add_attribute("action", "delegate_kfrag_error")
+            .add_attribute("error", err)),
+        _ => Ok(Response::new().add_attribute("action", "delegate_kfrag_reply_ok")),
+    }
+}
+
+fn handle_delegate_capsule_reply(_deps: DepsMut, msg: Reply) -> ContractResult {
+    match msg.result {
+        SubMsgResult::Err(err) => Ok(Response::new()
+            .add_attribute("action", "delegate_capsule_error")
+            .add_attribute("error", err)),
+        _ => Ok(Response::new().add_attribute("action", "delegate_capsule_reply_ok")),
+    }
 }
 
 // --------------------- 公開インターフェース ---------------------
