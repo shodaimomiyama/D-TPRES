@@ -190,6 +190,7 @@ let capsules = INDEX_KFRAG_TO_CAPS
 
   * ClientからkFragを受信し、ハードコードされたHolderプロセスに委譲
   * KFRAG_HOLDERSマップにHolder情報を記録
+  * **SubMsg機能**: `WasmMsg::Execute`でHolderプロセスに`handle_submit_kFrag`を送信
 
 * **handle_delegate_cFrag**（kFrag受信後）
 
@@ -203,6 +204,7 @@ let capsules = INDEX_KFRAG_TO_CAPS
 
   * ClientからCapsuleを受信し、対応するHolderプロセスに委譲
   * kFrag未委譲なら `ERR_KFRAG_NOT_FOUND`
+  * **SubMsg機能**: `WasmMsg::Execute`でHolderプロセスに`handle_submit_Capsule`を送信
 
 #### Holderロール（プロセス間での処理）
 
@@ -274,15 +276,31 @@ let capsules = INDEX_KFRAG_TO_CAPS
 1. 入力検証 → バリデーション完了
 2. `DEFAULT_HOLDER_PROCESS_ID`を使用してHolderプロセスを決定
 3. `put KFRAG_HOLDERS(pid, kFragID) = holder_process_id`
-4. SubMsgでHolderプロセスに`handle_submit_kFrag`メッセージ送信
-5. コミット
+4. **SubMsg作成と送信**:
+   ```rust
+   let wasm_msg = WasmMsg::Execute {
+       contract_addr: holder_process_id,
+       msg: to_json_binary(&ExecuteMsg::handle_submit_kFrag { kfrag_id, kfrag }),
+       funds: vec![],
+   };
+   let sub_msg = SubMsg::new(wasm_msg);
+   ```
+5. コミット（SubMsgは非同期で実行）
 
 ### 4.0.1 Owner：handle_delegate_cFrag（ClientからCapsule受信と委譲）
 
 1. 入力検証
 2. `get KFRAG_HOLDERS(pid, kFragID)` → **無**なら`ERR_KFRAG_NOT_FOUND`（**終了**）
-3. 取得したHolder process_idに対してSubMsgで`handle_submit_Capsule`メッセージ送信
-4. コミット
+3. **SubMsg作成と送信**:
+   ```rust
+   let wasm_msg = WasmMsg::Execute {
+       contract_addr: holder_process_id,
+       msg: to_json_binary(&ExecuteMsg::handle_submit_Capsule { kfrag_id, capsule_id, capsule }),
+       funds: vec![],
+   };
+   let sub_msg = SubMsg::new(wasm_msg);
+   ```
+4. コミット（SubMsgは非同期で実行）
 
 ### 4.1 Holder：handle_submit_kFrag（Ownerプロセスから受信）
 
@@ -482,12 +500,18 @@ sequenceDiagram
 3. **execute**: `handle_submit_kFrag` / `handle_submit_Capsule`（順序チェック・即時完結） / `Reencrypt`。
 4. **query**: `handle_get_cFrag`（存在index→本体） / `handle_list_Capsule_by_kFrag(limit=50)`（prefixスキャン）。
 5. **監査ユーティリティ**: 失敗/配布の記録（外部時刻とアクター転記）。
-6. **テスト**:
+6. **SubMsg実装**（Owner→Holder委譲機能）:
+   * `handlers.rs`にCosmosMsg, SubMsg, WasmMsg インポート追加
+   * `handle_delegate_kfrag`と`handle_delegate_capsule`にSubMsg送信機能追加
+   * `lib.rs`にreplyエントリーポイント追加（オプション）
+   * Reply処理とエラーハンドリング実装
+7. **テスト**:
 
    * 正常系: kFrag→Capsule→handle_get_cFrag、重複送信のNo-Op
    * 異常系: `handle_submit_Capsule`の順序違反、再暗号化失敗、未生成取得、巨大入力
    * ページング: `handle_list_Capsule_by_kFrag` 連続取得
    * 監査: 失敗＋配布が必ず残ること
+   * **SubMsg**: SubMsg生成確認、プロセス間通信、エラー時のReply処理
 
 ---
 
@@ -794,4 +818,247 @@ pub const IDEM_FLAGS: Map<(String, String, String), IdemFlag> =
 
 ---
 
-以上が、**既存仕様に追記**した「状態復元の詳細」「ワイヤ具体例」「state.rsの宣言」「インデックス詳細」です。必要なら、このv2をベースに **`execute.rs` / `query.rs` の入出力スキーマ（JSON Schema）** も追加します。
+# 14. SubMsg実装仕様詳細（Owner→Holder プロセス間通信）
+
+## 14.1 概要
+
+D-TPRESにおけるOwner→Holder間のプロセス間通信は、CosmWasm標準の`SubMsg`を使用して実現します。これにより、単一プロセス内でのローカル処理ではなく、真のプロセス間分離が実現されます。
+
+## 14.2 必要なインポート
+
+### handlers.rs への追加
+```rust
+use cosmwasm_std::{
+    // 既存のインポート...
+    CosmosMsg, SubMsg, WasmMsg, Reply, ReplyOn
+};
+```
+
+### Reply ID定数定義
+```rust
+// handlers.rs の上部に追加
+const REPLY_DELEGATE_KFRAG: u64 = 1;
+const REPLY_DELEGATE_CAPSULE: u64 = 2;
+```
+
+## 14.3 実装パターン
+
+### handle_delegate_kfrag の実装パターン
+```rust
+pub fn handle_delegate_kfrag(
+    deps: DepsMut,
+    env: Env,
+    _info: MessageInfo,
+    kfrag_id: String,
+    kfrag: Binary,
+) -> ContractResult {
+    // 1. バリデーションと設定（既存コード維持）
+    let config = CONFIG.load(deps.storage)?;
+    let holder_process_id = DEFAULT_HOLDER_PROCESS_ID.to_string();
+
+    // 2. KFRAG_HOLDERSマッピング保存（既存コード維持）
+    let holder_key = (config.process_id.clone(), kfrag_id.clone());
+    KFRAG_HOLDERS.save(deps.storage, holder_key, &holder_process_id)?;
+
+    // 3. ローカル処理を削除し、SubMsgに置換
+    // 削除: let created = persist_kfrag(...);
+
+    // 4. SubMsg作成
+    let wasm_msg = WasmMsg::Execute {
+        contract_addr: holder_process_id.clone(),
+        msg: to_json_binary(&ExecuteMsg::SubmitKFrag {
+            kfrag_id: kfrag_id.clone(),
+            kfrag: kfrag.clone(),
+        })?,
+        funds: vec![],
+    };
+
+    let sub_msg = SubMsg {
+        id: REPLY_DELEGATE_KFRAG,
+        msg: CosmosMsg::Wasm(wasm_msg),
+        gas_limit: None,
+        reply_on: ReplyOn::Error, // エラー時のみReply
+    };
+
+    // 5. SubMsgを含むレスポンス返却
+    Ok(Response::new()
+        .add_submessage(sub_msg)
+        .add_attribute("action", "delegate_kfrag")
+        .add_attribute("kfrag_id", kfrag_id)
+        .add_attribute("holder_process_id", holder_process_id))
+}
+```
+
+### handle_delegate_capsule の実装パターン
+```rust
+pub fn handle_delegate_capsule(
+    deps: DepsMut,
+    env: Env,
+    _info: MessageInfo,
+    kfrag_id: String,
+    capsule_id: String,
+    capsule: Binary,
+) -> ContractResult {
+    // 1. Holderマッピング取得（既存コード維持）
+    let config = CONFIG.load(deps.storage)?;
+    let holder_process_id = KFRAG_HOLDERS
+        .may_load(deps.storage, (config.process_id.clone(), kfrag_id.clone()))?
+        .ok_or(ContractError::KFragNotFound { kfrag_id: kfrag_id.clone() })?;
+
+    // 2. ローカル処理を削除し、SubMsgに置換
+    // 削除: let status = process_capsule_submission(...);
+
+    // 3. SubMsg作成
+    let wasm_msg = WasmMsg::Execute {
+        contract_addr: holder_process_id.clone(),
+        msg: to_json_binary(&ExecuteMsg::SubmitCapsule {
+            kfrag_id: kfrag_id.clone(),
+            capsule_id: capsule_id.clone(),
+            capsule: capsule.clone(),
+        })?,
+        funds: vec![],
+    };
+
+    let sub_msg = SubMsg {
+        id: REPLY_DELEGATE_CAPSULE,
+        msg: CosmosMsg::Wasm(wasm_msg),
+        gas_limit: None,
+        reply_on: ReplyOn::Error,
+    };
+
+    Ok(Response::new()
+        .add_submessage(sub_msg)
+        .add_attribute("action", "delegate_capsule")
+        .add_attribute("kfrag_id", kfrag_id)
+        .add_attribute("capsule_id", capsule_id)
+        .add_attribute("holder_process_id", holder_process_id))
+}
+```
+
+## 14.4 Reply処理（オプション）
+
+### handlers.rs への Reply処理追加
+```rust
+pub fn handle_reply(deps: DepsMut, _env: Env, msg: Reply) -> ContractResult {
+    match msg.id {
+        REPLY_DELEGATE_KFRAG => handle_delegate_kfrag_reply(deps, msg),
+        REPLY_DELEGATE_CAPSULE => handle_delegate_capsule_reply(deps, msg),
+        _ => Err(ContractError::BadRequest {
+            msg: format!("Unknown reply id: {}", msg.id),
+        }),
+    }
+}
+
+fn handle_delegate_kfrag_reply(_deps: DepsMut, msg: Reply) -> ContractResult {
+    match msg.result {
+        cosmwasm_std::SubMsgResult::Err(err) => {
+            Ok(Response::new()
+                .add_attribute("action", "delegate_kfrag_error")
+                .add_attribute("error", err))
+        }
+        _ => Ok(Response::new()),
+    }
+}
+
+fn handle_delegate_capsule_reply(_deps: DepsMut, msg: Reply) -> ContractResult {
+    match msg.result {
+        cosmwasm_std::SubMsgResult::Err(err) => {
+            Ok(Response::new()
+                .add_attribute("action", "delegate_capsule_error")
+                .add_attribute("error", err))
+        }
+        _ => Ok(Response::new()),
+    }
+}
+```
+
+### lib.rs への reply エントリーポイント追加
+```rust
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn reply(deps: DepsMut, env: Env, msg: Reply) -> Result<Response, ContractError> {
+    handlers::handle_reply(deps, env, msg)
+}
+```
+
+## 14.5 テスト実装
+
+### SubMsg生成の確認テスト
+```rust
+#[test]
+fn test_delegate_kfrag_creates_submsg() {
+    let mut deps = mock_dependencies();
+    instantiate_process(&mut deps, "test_process");
+
+    let env = mock_env();
+    let info = mock_info("owner", &[]);
+
+    let msg = ExecuteMsg::DelegateKFrag {
+        kfrag_id: "kfrag1".to_string(),
+        kfrag: Binary::from(b"kfrag_data"),
+    };
+
+    let response = contract_execute(deps.as_mut(), env, info, msg).unwrap();
+
+    // SubMsg生成確認
+    assert_eq!(response.messages.len(), 1);
+    let sub_msg = &response.messages[0];
+    assert_eq!(sub_msg.id, REPLY_DELEGATE_KFRAG);
+
+    // WasmMsg内容確認
+    match &sub_msg.msg {
+        CosmosMsg::Wasm(WasmMsg::Execute { contract_addr, msg, .. }) => {
+            assert_eq!(contract_addr, DEFAULT_HOLDER_PROCESS_ID);
+            let decoded: ExecuteMsg = from_json(msg).unwrap();
+            assert!(matches!(decoded, ExecuteMsg::SubmitKFrag { .. }));
+        }
+        _ => panic!("Expected WasmMsg::Execute"),
+    }
+
+    // KFRAG_HOLDERSマッピング確認
+    let holder = KFRAG_HOLDERS
+        .load(&deps.storage, ("test_process".to_string(), "kfrag1".to_string()))
+        .unwrap();
+    assert_eq!(holder, DEFAULT_HOLDER_PROCESS_ID);
+}
+```
+
+## 14.6 実装チェックリスト
+
+```
+□ handlers.rs にCosmosMsg, SubMsg, WasmMsg, Reply, ReplyOn インポート追加
+□ Reply ID定数定義（REPLY_DELEGATE_KFRAG, REPLY_DELEGATE_CAPSULE）
+□ handle_delegate_kfrag からpersist_kfrag呼び出し削除
+□ handle_delegate_capsule からprocess_capsule_submission呼び出し削除
+□ SubMsg作成・送信コード追加
+□ handle_reply関数実装（オプション）
+□ lib.rs にreplyエントリーポイント追加（オプション）
+□ テストコード更新
+□ cargo test実行して全テストパス確認
+□ DEFAULT_HOLDER_PROCESS_IDを実際のAO Process ID形式に更新
+```
+
+## 14.7 AO Network固有の考慮事項
+
+### Process ID形式
+```rust
+// state.rs での実際のAO Process ID設定例
+pub const DEFAULT_HOLDER_PROCESS_ID: &str = "holder_ABC123XYZ456DEF789GHI012JKL345MNO678PQR";
+```
+
+### AOメッセージタグ（将来拡張）
+```rust
+// 必要に応じてAO固有のタグを属性として追加
+.add_attribute("ao_target", holder_process_id)
+.add_attribute("ao_action", "delegate")
+.add_attribute("ao_timestamp", env.block.time.to_string())
+```
+
+## 14.8 段階的実装アプローチ
+
+1. **Phase 1（最小実装）**: SubMsg送信のみ、Replyなし
+2. **Phase 2（エラー処理）**: Reply実装追加
+3. **Phase 3（完全統合）**: AO Network統合テスト
+
+---
+
+以上が、**SubMsg実装仕様の完全版**です。この仕様に従って実装することで、CosmWasm標準に準拠した安全で効率的なOwner→Holderプロセス間通信が実現されます。

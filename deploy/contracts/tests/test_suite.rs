@@ -3,12 +3,12 @@ use contract::{
     validate_id, CapsuleStatus, ContractError, ExecuteMsg, InstantiateMsg,
     ListCapsulesByKFragResponse, OwnerCapsuleData, OwnerKFragData, QueryMsg, ValidateMessage,
     CONFIG, DEFAULT_HOLDER_PROCESS_ID, HOLDER_CFRAGS, IDEM_FLAGS, INDEX_KFRAG_TO_CAPS,
-    KFRAG_HOLDERS, OWNER_CAPSULES,
+    KFRAG_HOLDERS, OWNER_CAPSULES, REPLY_DELEGATE_CAPSULE, REPLY_DELEGATE_KFRAG,
 };
 use cosmwasm_std::testing::{
     mock_dependencies, mock_env, mock_info, MockApi, MockQuerier, MockStorage,
 };
-use cosmwasm_std::{from_json, Binary, Empty, OwnedDeps};
+use cosmwasm_std::{from_json, Binary, CosmosMsg, Empty, OwnedDeps, WasmMsg};
 use serde::{Deserialize, Serialize};
 use umbral_pre::{self, DefaultDeserialize, DefaultSerialize};
 
@@ -228,7 +228,49 @@ fn submit_capsule_flow_produces_cfrag_and_indexes() {
 }
 
 #[test]
-fn delegate_flow_produces_cfrag() {
+fn delegate_kfrag_creates_submsg() {
+    let mut deps = mock_dependencies();
+    instantiate_process(&mut deps, "test_process");
+
+    let env = mock_env();
+    let info = mock_info("owner", &[]);
+    let response = contract_execute(
+        deps.as_mut(),
+        env,
+        info,
+        ExecuteMsg::DelegateKFrag {
+            kfrag_id: "kfrag1".into(),
+            kfrag: Binary::from(b"kfrag_data".as_ref()),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(response.messages.len(), 1);
+    let sub_msg = &response.messages[0];
+    assert_eq!(sub_msg.id, REPLY_DELEGATE_KFRAG);
+    match &sub_msg.msg {
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr, msg, ..
+        }) => {
+            assert_eq!(contract_addr, DEFAULT_HOLDER_PROCESS_ID);
+            let decoded: ExecuteMsg = from_json(msg).unwrap();
+            if let ExecuteMsg::SubmitKFrag { kfrag_id, .. } = decoded {
+                assert_eq!(kfrag_id, "kfrag1");
+            } else {
+                panic!("expected SubmitKFrag message");
+            }
+        }
+        _ => panic!("expected WasmMsg::Execute"),
+    }
+
+    let holder = KFRAG_HOLDERS
+        .load(&deps.storage, ("test_process".into(), "kfrag1".into()))
+        .unwrap();
+    assert_eq!(holder, DEFAULT_HOLDER_PROCESS_ID);
+}
+
+#[test]
+fn delegate_capsule_creates_submsg() {
     let mut deps = mock_dependencies();
     instantiate_process(&mut deps, "test_process");
     let fixtures = build_crypto_fixture();
@@ -247,10 +289,10 @@ fn delegate_flow_produces_cfrag() {
     .unwrap();
 
     let (capsule_bytes, _, _) = encrypt_capsule(&fixtures.delegating_pk, b"secret payload");
-    contract_execute(
+    let response = contract_execute(
         deps.as_mut(),
-        env.clone(),
-        info.clone(),
+        env,
+        info,
         ExecuteMsg::DelegateCapsule {
             kfrag_id: "kfrag1".into(),
             capsule_id: "capsule1".into(),
@@ -259,11 +301,23 @@ fn delegate_flow_produces_cfrag() {
     )
     .unwrap();
 
-    let holder = KFRAG_HOLDERS
-        .load(&deps.storage, ("test_process".into(), "kfrag1".into()))
-        .unwrap();
-    assert_eq!(holder, DEFAULT_HOLDER_PROCESS_ID);
-    log_test_value("delegate_flow_produces_cfrag", "holder", &holder);
+    assert_eq!(response.messages.len(), 1);
+    let sub_msg = &response.messages[0];
+    assert_eq!(sub_msg.id, REPLY_DELEGATE_CAPSULE);
+    match &sub_msg.msg {
+        CosmosMsg::Wasm(WasmMsg::Execute {
+            contract_addr, msg, ..
+        }) => {
+            assert_eq!(contract_addr, DEFAULT_HOLDER_PROCESS_ID);
+            let decoded: ExecuteMsg = from_json(msg).unwrap();
+            if let ExecuteMsg::SubmitCapsule { capsule_id, .. } = decoded {
+                assert_eq!(capsule_id, "capsule1");
+            } else {
+                panic!("expected SubmitCapsule message");
+            }
+        }
+        _ => panic!("expected WasmMsg::Execute"),
+    }
 }
 
 #[test]
