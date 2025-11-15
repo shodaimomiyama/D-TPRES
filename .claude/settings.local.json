@@ -30,7 +30,11 @@
       "WebFetch(domain:docs.rs)",
       "WebFetch(domain:crates.io)",
       "Read(/Users/momiyamashodai/.cargo/registry/src/**)",
-      "mcp__serena__initial_instructions"
+      "mcp__serena__initial_instructions",
+      "Bash(cargo --version)",
+      "Bash(rustup target list:*)",
+      "Bash(cargo wasm:*)",
+      "Bash(npm ls:*)"
     ],
     "deny": []
   },
