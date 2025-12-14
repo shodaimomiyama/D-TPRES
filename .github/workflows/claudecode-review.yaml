@@ -59,7 +59,7 @@ jobs:
 
           # Add PR context at the beginning
           PR_NUMBER="${{ steps.pr.outputs.number }}"
-          PROMPT_CONTENT=$(printf '%s\n\n%s' "Please review Pull Request #${PR_NUMBER} in repository ango-ya/crescent-uniswapx-quoter." "$PROMPT_TEMPLATE")
+          PROMPT_CONTENT=$(printf '%s\n\n%s' "Please review Pull Request #${PR_NUMBER} in repository ${{{{ github.repository }}}}" "$PROMPT_TEMPLATE")
 
           # Set the prompt as output
           echo "content<<PROMPT_END_DELIMITER" >> $GITHUB_OUTPUT
