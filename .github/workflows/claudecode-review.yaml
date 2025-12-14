@@ -1,0 +1,80 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull Request number to review"
+        required: true
+        type: number
+
+jobs:
+  review:
+    # Only run on PR events or @claude-review mentions or manual dispatch
+    if: |
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request && contains(github.event.comment.body, '@claude-review')) ||
+      (github.event_name == 'workflow_dispatch')
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Get PR number
+        id: pr
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "number=${{ github.event.inputs.pr_number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Load review prompt from file
+        id: prompt
+        run: |
+          # Read prompt template
+          PROMPT_TEMPLATE=$(cat .github/prompts/claude-review-prompt.md)
+
+          # Add PR context at the beginning
+          PR_NUMBER="${{ steps.pr.outputs.number }}"
+          PROMPT_CONTENT=$(printf '%s\n\n%s' "Please review Pull Request #${PR_NUMBER} in repository ${{ github.repository }}" "$PROMPT_TEMPLATE")
+
+          # Set the prompt as output
+          echo "content<<PROMPT_END_DELIMITER" >> $GITHUB_OUTPUT
+          echo "$PROMPT_CONTENT" >> $GITHUB_OUTPUT
+          echo "PROMPT_END_DELIMITER" >> $GITHUB_OUTPUT
+
+      - name: Run Claude Code Review
+        uses: anthropics/claude-code-action@v1.0.20
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: ${{ steps.prompt.outputs.content }}
+          claude_args: |
+            --model claude-3-7-sonnet-20250219
+            --allowedTools "mcp__github__get_pull_request_files,mcp__github__get_file_contents,mcp__github__create_pending_pull_request_review,mcp__github__add_pull_request_review_comment_to_pending_review,mcp__github__submit_pending_pull_request_review,mcp__github__create_and_submit_pull_request_review,mcp__github__get_pull_request_reviews,Read,Glob,Grep"
+          use_sticky_comment: true
+        env:
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MAX_THINKING_TOKENS: "31999"
