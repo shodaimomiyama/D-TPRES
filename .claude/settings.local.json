@@ -40,6 +40,8 @@
   },
   "enabledMcpjsonServers": [
     "context7",
-    "serena"
-  ]
+    "serena",
+    "spec-workflow"
+  ],
+  "enableAllProjectMcpServers": true
 }
