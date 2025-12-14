@@ -59,8 +59,8 @@ GitHub MCP を使用してIssueの内容を取得します：
 
 ```bash
 # gh issue viewにて検索
-owner: ango-ya
-repo: crescent-uniswapx-quoter
+owner: shodaimomiyama
+repo: D-TPRES
 issue_number: {issue番号}
 ```
 
