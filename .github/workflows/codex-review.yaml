@@ -1,0 +1,677 @@
+name: Codex PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    concurrency:
+      group: codex-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          sparse-checkout: |
+            /*
+            !node_modules
+            !.next
+            !.amplify
+          sparse-checkout-cone-mode: false
+
+      - name: Build Codex diff workspace
+        run: |
+          set -euo pipefail
+          WORKDIR=".codex/pr-changes"
+          rm -rf "${WORKDIR}"
+          mkdir -p "${WORKDIR}/.github/prompts"
+          cp .github/prompts/codex-review-prompt.md "${WORKDIR}/.github/prompts/codex-review-prompt.md"
+
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.sha }}"
+          CHANGED_LIST="${WORKDIR}/.codex-changed-files"
+          git diff --name-only "${BASE_SHA}" "${HEAD_SHA}" > "${CHANGED_LIST}"
+
+          if [ ! -s "${CHANGED_LIST}" ]; then
+            echo "No files changed in this PR; copying minimal metadata for context." >&2
+            printf "%s\n" README.md package.json >> "${CHANGED_LIST}"
+          fi
+
+          while IFS= read -r file; do
+            [ -z "${file}" ] && continue
+            if [ -f "${file}" ]; then
+              dest="${WORKDIR}/${file}"
+              mkdir -p "$(dirname "${dest}")"
+              cp "${file}" "${dest}"
+            else
+              echo "Warning: ${file} does not exist in the working tree (possibly deleted file); skipping copy." >&2
+            fi
+          done < "${CHANGED_LIST}"
+
+          # 常設の開発ガイドをCodexワークスペースへ常に含める
+          for constant_dir in docs; do
+            if [ -d "${constant_dir}" ]; then
+              cp -a "${constant_dir}" "${WORKDIR}/"
+            else
+              echo "Warning: ${constant_dir} is missing; skipped constant copy." >&2
+            fi
+          done
+
+          git diff "${BASE_SHA}" "${HEAD_SHA}" > "${WORKDIR}/PR_DIFF.patch"
+          printf "Codex workspace prepared at %s with %s tracked files.\n" "${WORKDIR}" "$(wc -l < "${CHANGED_LIST}")"
+
+      - name: Collect Codex conversation context
+        uses: actions/github-script@v7
+        env:
+          CONVERSATION_MD_PATH: .codex/pr-changes/.github/codex-conversations.md
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const conversationMdPath = process.env.CONVERSATION_MD_PATH;
+            if (!conversationMdPath) {
+              core.setFailed('CONVERSATION_MD_PATH is not defined.');
+              return;
+            }
+
+            const conversationDir = path.dirname(conversationMdPath);
+            fs.mkdirSync(conversationDir, { recursive: true });
+            const conversationJsonPath = path.join(conversationDir, 'codex-conversations.json');
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.payload.pull_request.number;
+
+            const query = `
+              query ($owner: String!, $name: String!, $number: Int!, $cursor: String) {
+                repository(owner: $owner, name: $name) {
+                  pullRequest(number: $number) {
+                    reviewThreads(first: 50, after: $cursor) {
+                      pageInfo {
+                        hasNextPage
+                        endCursor
+                      }
+                      nodes {
+                        id
+                        isResolved
+                        resolvedBy {
+                          login
+                        }
+                        path
+                        line
+                        startLine
+                        originalLine
+                        originalStartLine
+                        comments(first: 100) {
+                          nodes {
+                            id
+                            body
+                            createdAt
+                            url
+                            author {
+                              login
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+
+            async function fetchCodexThreads() {
+              const codexThreads = [];
+              let cursor = null;
+              let hasNextPage = true;
+
+              while (hasNextPage) {
+                const response = await github.graphql(query, {
+                  owner,
+                  name: repo,
+                  number: prNumber,
+                  cursor,
+                });
+
+                const reviewThreads = response?.repository?.pullRequest?.reviewThreads;
+                if (!reviewThreads) {
+                  break;
+                }
+
+                for (const node of reviewThreads.nodes ?? []) {
+                  if (!node || !node.comments) {
+                    continue;
+                  }
+
+                  const comments = [...(node.comments.nodes ?? [])]
+                    .filter(comment => comment)
+                    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+                  const root = comments[0];
+                  if (!root || root.author?.login !== 'github-actions[bot]') {
+                    continue;
+                  }
+
+                  const lastBotIndex = comments.reduce((acc, comment, idx) => {
+                    return comment.author?.login === 'github-actions[bot]' ? idx : acc;
+                  }, -1);
+                  const respondedAfterBot = lastBotIndex >= 0 && comments.some((comment, idx) => {
+                    return idx > lastBotIndex && comment.author?.login !== 'github-actions[bot]';
+                  });
+
+                  const normalizedComments = comments.map(comment => ({
+                    id: comment.id,
+                    author: comment.author?.login ?? 'ghost',
+                    body: comment.body ?? '',
+                    createdAt: comment.createdAt,
+                    url: comment.url,
+                  }));
+
+                  const lineCandidates = [node.line, node.startLine, node.originalLine, node.originalStartLine]
+                    .filter(value => Number.isInteger(value));
+                  const firstLine = lineCandidates.length > 0 ? lineCandidates[0] : null;
+
+                  codexThreads.push({
+                    id: node.id,
+                    path: node.path ?? '(no path)',
+                    line: firstLine,
+                    isResolved: Boolean(node.isResolved),
+                    resolvedBy: node.resolvedBy?.login ?? null,
+                    respondedAfterBot,
+                    comments: normalizedComments,
+                  });
+                }
+
+                hasNextPage = Boolean(reviewThreads.pageInfo?.hasNextPage);
+                cursor = reviewThreads.pageInfo?.endCursor ?? null;
+              }
+
+              return codexThreads;
+            }
+
+            const codexThreads = await fetchCodexThreads();
+
+            let markdown = '# Codex Review Conversations\n\n';
+            if (codexThreads.length === 0) {
+              markdown += '_No Codex-authored review threads were found._\n';
+            } else {
+              for (const thread of codexThreads) {
+                const location = thread.line ? `${thread.path}:${thread.line}` : thread.path;
+                const status = thread.isResolved ? 'resolved' : 'unresolved';
+                markdown += `## ${location} (${status})\n`;
+                if (thread.resolvedBy) {
+                  markdown += `- resolvedBy: @${thread.resolvedBy}\n`;
+                }
+                markdown += `- respondedAfterBot: ${thread.respondedAfterBot ? 'true' : 'false'}\n\n`;
+                for (const comment of thread.comments) {
+                  markdown += `### ${comment.author} (${comment.createdAt})\n`;
+                  markdown += `${comment.body || '_No content_'}\n\n`;
+                }
+              }
+            }
+
+            fs.writeFileSync(conversationMdPath, markdown, 'utf8');
+            fs.writeFileSync(conversationJsonPath, JSON.stringify(codexThreads, null, 2));
+
+            core.info(`Wrote ${codexThreads.length} Codex conversation thread(s) to ${conversationMdPath}`);
+
+      - name: Run Codex review
+        id: codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: .github/prompts/codex-review-prompt.md
+          safety-strategy: drop-sudo
+          sandbox: workspace-write
+          working-directory: .codex/pr-changes
+
+      - name: Post Codex review comment
+        if: ${{ steps.codex.outputs.final-message != '' }}
+        uses: actions/github-script@v7
+        env:
+          CODEX_REVIEW_COMMENT: ${{ steps.codex.outputs.final-message }}
+          CODEX_CONVERSATION_JSON: .codex/pr-changes/.github/codex-conversations.json
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const body = process.env.CODEX_REVIEW_COMMENT;
+            if (!body || !body.trim()) {
+              core.warning('Codex review output is empty; skipping comment posting.');
+              return;
+            }
+
+            core.info(`Debug: Full Codex output:\n${body}`);
+
+            function extractSection(text, header) {
+              const pattern = new RegExp(`##\\s+${header}\\s*\\n([\\s\\S]*?)(?=\\n##\\s+|$)`, 'i');
+              core.info(`Debug: Searching for header: ${header}`);
+              core.info(`Debug: Pattern: ${pattern}`);
+              const match = text.match(pattern);
+              core.info(`Debug: Match result: ${match ? 'found' : 'not found'}`);
+              if (match) {
+                core.info(`Debug: Matched content: ${match[1]}`);
+              }
+              return match ? match[1].trim() : '';
+            }
+
+            function parseFindings(text) {
+              const section = extractSection(text, 'Findings');
+              if (!section || /^none\.?$/i.test(section.trim())) {
+                return [];
+              }
+              const lines = section.split('\n');
+              const findings = [];
+              let current = null;
+
+              for (const rawLine of lines) {
+                const line = rawLine.replace(/\r$/, '');
+                if (!line.trim()) {
+                  if (current) {
+                    current.bodyLines.push('');
+                  }
+                  continue;
+                }
+
+                if (/^- \[[A-Z]+\]/.test(line.trim())) {
+                  if (current) {
+                    findings.push({
+                      severity: current.severity,
+                      path: current.path,
+                      line: current.line,
+                      body: current.bodyLines.join('\n').trim(),
+                    });
+                  }
+                  const headerMatch = line.trim().match(/^- \[([A-Z]+)\]\s+`?([^`]+?)`?\s*\|\s*(.*)$/);
+                  if (!headerMatch) {
+                    core.warning(`ヘッダーの解析に失敗したためスキップしました: ${line}`);
+                    current = null;
+                    continue;
+                  }
+                  const severity = headerMatch[1];
+                  const location = headerMatch[2];
+                  const summary = headerMatch[3].trim();
+                  const colonIndex = location.lastIndexOf(':');
+                  if (colonIndex === -1) {
+                    core.warning(`行番号の区切りが見つからないためスキップしました: ${location}`);
+                    current = null;
+                    continue;
+                  }
+                  const path = location.slice(0, colonIndex);
+                  const lineNumber = Number(location.slice(colonIndex + 1));
+                  if (!Number.isInteger(lineNumber)) {
+                    core.warning(`行番号が不正のためスキップしました: ${location}`);
+                    current = null;
+                    continue;
+                  }
+                  current = {
+                    severity,
+                    path,
+                    line: lineNumber,
+                    bodyLines: [`[${severity}] ${summary}`],
+                  };
+                } else if (current) {
+                  const normalized = line.startsWith('  ') ? line.slice(2) : line;
+                  current.bodyLines.push(normalized);
+                }
+              }
+
+              if (current) {
+                findings.push({
+                  severity: current.severity,
+                  path: current.path,
+                  line: current.line,
+                  body: current.bodyLines.join('\n').trim(),
+                });
+              }
+
+              return findings;
+            }
+
+            function extractChangedLinesFromPatch(patch) {
+              const lines = new Set();
+              if (!patch) {
+                return lines;
+              }
+              const diffLines = patch.split('\n');
+              let headLine = 0;
+
+              for (const diffLine of diffLines) {
+                const hunkMatch = diffLine.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
+                if (hunkMatch) {
+                  headLine = Number(hunkMatch[1]);
+                  continue;
+                }
+
+                if (diffLine.startsWith('+') && !diffLine.startsWith('+++')) {
+                  lines.add(headLine);
+                  headLine += 1;
+                  continue;
+                }
+
+                if (diffLine.startsWith(' ')) {
+                  lines.add(headLine);
+                  headLine += 1;
+                  continue;
+                }
+
+                if (diffLine.startsWith('-') && !diffLine.startsWith('---')) {
+                  continue;
+                }
+              }
+
+              return lines;
+            }
+
+            function loadCodexConversations(jsonPath) {
+              if (!jsonPath) {
+                core.info('CODEX_CONVERSATION_JSON is not set; no conversations loaded.');
+                return [];
+              }
+              try {
+                if (!fs.existsSync(jsonPath)) {
+                  core.info(`Conversation file not found at ${jsonPath}; skipping.`);
+                  return [];
+                }
+                const raw = fs.readFileSync(jsonPath, 'utf8');
+                if (!raw.trim()) {
+                  return [];
+                }
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                  return parsed;
+                }
+                if (Array.isArray(parsed?.threads)) {
+                  return parsed.threads;
+                }
+                core.warning(`Unexpected structure in ${jsonPath}; expected array.`);
+                return [];
+              } catch (error) {
+                core.warning(`Failed to parse ${jsonPath}: ${error.message}`);
+                return [];
+              }
+            }
+
+            function buildConversationIndex(threads) {
+              const index = new Map();
+              for (const thread of threads) {
+                if (!thread || !thread.path) {
+                  continue;
+                }
+                const hasLine = Number.isInteger(thread.line);
+                if (hasLine) {
+                  const key = `${thread.path}:${thread.line}`;
+                  if (!index.has(key)) {
+                    index.set(key, []);
+                  }
+                  index.get(key).push(thread);
+                } else {
+                  if (!index.has(thread.path)) {
+                    index.set(thread.path, []);
+                  }
+                  index.get(thread.path).push(thread);
+                }
+              }
+              return index;
+            }
+
+            function findResponderAfterLastBot(thread) {
+              const comments = Array.isArray(thread?.comments) ? thread.comments : [];
+              if (comments.length === 0) {
+                return null;
+              }
+              let lastBotIndex = -1;
+              for (let i = 0; i < comments.length; i += 1) {
+                if (comments[i]?.author === 'github-actions[bot]') {
+                  lastBotIndex = i;
+                }
+              }
+              if (lastBotIndex === -1 || lastBotIndex === comments.length - 1) {
+                return null;
+              }
+              for (let i = lastBotIndex + 1; i < comments.length; i += 1) {
+                const comment = comments[i];
+                if (comment && comment.author !== 'github-actions[bot]') {
+                  return comment;
+                }
+              }
+              return null;
+            }
+
+            function determineThreadSkipReason(thread) {
+              if (!thread) {
+                return null;
+              }
+              if (thread.isResolved) {
+                return {
+                  label: thread.resolvedBy ? `resolved by @${thread.resolvedBy}` : 'resolved',
+                  status: 'resolved',
+                };
+              }
+              const responder = findResponderAfterLastBot(thread);
+              if (responder) {
+                return {
+                  label: responder.author ? `返信済み (@${responder.author})` : '返信済み',
+                  status: 'responded',
+                };
+              }
+              return null;
+            }
+
+            function matchAcknowledgedThread(finding, conversationIndex) {
+              if (!conversationIndex || typeof conversationIndex.get !== 'function') {
+                return null;
+              }
+              const keys = [];
+              if (Number.isInteger(finding.line)) {
+                keys.push(`${finding.path}:${finding.line}`);
+              }
+              keys.push(finding.path);
+
+              for (const key of keys) {
+                const threads = conversationIndex.get(key);
+                if (!threads) {
+                  continue;
+                }
+                for (const thread of threads) {
+                  const reason = determineThreadSkipReason(thread);
+                  if (reason) {
+                    return { thread, reason };
+                  }
+                }
+              }
+
+              return null;
+            }
+
+            function formatAcknowledgedSection(findings) {
+              if (!findings.length) {
+                return '';
+              }
+              const lines = findings.map((finding) => {
+                const location = Number.isInteger(finding.line) ? `${finding.path}:${finding.line}` : finding.path;
+                const summary = finding.body.split('\n')[0];
+                return `- **[${finding.severity}]** \`${location}\` (${finding.skipReason})\n  ${summary}`;
+              }).join('\n\n');
+              return `## 既存スレッドにより投稿を抑止した指摘\n以下の指摘は既存の Codex スレッドが解決済み、または開発者レスポンス待ちのため再投稿していません:\n\n${lines}`;
+            }
+
+            function appendAcknowledgedSection(body, section) {
+              if (!section) {
+                return body;
+              }
+              const trimmedBody = body.trimEnd();
+              if (!trimmedBody) {
+                return section;
+              }
+              return `${trimmedBody}\n\n${section}`;
+            }
+
+            const conversationJsonPath = process.env.CODEX_CONVERSATION_JSON
+              ? path.resolve(process.env.CODEX_CONVERSATION_JSON)
+              : null;
+            const codexThreads = loadCodexConversations(conversationJsonPath);
+            const conversationIndex = buildConversationIndex(codexThreads);
+            core.info(`Debug: Loaded ${codexThreads.length} conversation thread(s) for deduplication.`);
+
+            const prNumber = context.payload.pull_request.number;
+
+            const parsedFindings = parseFindings(body);
+            const acknowledgedFindings = [];
+            const findings = [];
+            let changedFiles;
+            let changedFileLines;
+            {
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                ...context.repo,
+                pull_number: prNumber,
+                per_page: 100,
+              });
+              changedFiles = new Set();
+              changedFileLines = new Map();
+              for (const file of files) {
+                if (!file.filename) {
+                  continue;
+                }
+                changedFiles.add(file.filename);
+                changedFileLines.set(file.filename, extractChangedLinesFromPatch(file.patch));
+              }
+              core.info(`Debug: Changed files in PR (${changedFiles.size} files): ${Array.from(changedFiles).join(', ')}`);
+            }
+
+            for (const finding of parsedFindings) {
+              const isChangedFile = changedFiles.has(finding.path);
+              const changedLines = changedFileLines.get(finding.path);
+              const isChangedLine = changedLines?.has(finding.line);
+              if (!isChangedFile || !isChangedLine) {
+                core.info(`Debug: Dropping finding for ${finding.path}:${finding.line} (outside diff).`);
+                continue;
+              }
+              const match = matchAcknowledgedThread(finding, conversationIndex);
+              if (match) {
+                acknowledgedFindings.push({
+                  ...finding,
+                  skipReason: match.reason.label,
+                  skipStatus: match.reason.status,
+                  threadId: match.thread?.id ?? null,
+                });
+                continue;
+              }
+              findings.push(finding);
+            }
+            const suggestionSection = extractSection(body, 'Suggestions');
+            const trimmedSuggestions = suggestionSection.trim();
+            const hasSuggestions = trimmedSuggestions && !/^none\.?$/i.test(trimmedSuggestions);
+
+            // Check if there are any MUST-level findings
+            const mustFindings = findings.filter(f => f.severity === 'MUST');
+            const unresolvedAcknowledgedMust = acknowledgedFindings.filter(
+              (finding) => finding.severity === 'MUST' && finding.skipStatus !== 'resolved',
+            );
+            const shouldApprove = mustFindings.length === 0 && unresolvedAcknowledgedMust.length === 0;
+            const acknowledgedSection = formatAcknowledgedSection(acknowledgedFindings);
+
+            core.info(`Debug: parsedFindings.length = ${parsedFindings.length}`);
+            core.info(`Debug: acknowledgedFindings.length = ${acknowledgedFindings.length}`);
+            core.info(`Debug: findings.length = ${findings.length}`);
+            core.info(`Debug: mustFindings.length = ${mustFindings.length}`);
+            core.info(`Debug: unresolvedAcknowledgedMust.length = ${unresolvedAcknowledgedMust.length}`);
+            core.info(`Debug: shouldApprove = ${shouldApprove}`);
+            core.info(`Debug: suggestionSection = "${suggestionSection}"`);
+            core.info(`Debug: trimmedSuggestions = "${trimmedSuggestions}"`);
+            core.info(`Debug: hasSuggestions = ${hasSuggestions}`);
+
+            const inlineFindings = findings;
+            core.info(`Debug: inlineFindings.length = ${inlineFindings.length}`);
+
+            if (inlineFindings.length > 0) {
+              // Post inline comments for files changed in PR
+              const reviewEvent = shouldApprove ? 'APPROVE' : 'REQUEST_CHANGES';
+              let reviewBody = `🤖 **Codex AI Review**\n\n`;
+
+              if (shouldApprove) {
+                reviewBody += '✅ MUSTレベルの指摘はありませんでした。';
+                if (inlineFindings.length > 0 || hasSuggestions) {
+                  reviewBody += '改善提案をご確認ください。\n\n';
+                } else {
+                  reviewBody += '\n\n';
+                }
+              }
+
+              if (hasSuggestions) {
+                reviewBody += `## Suggestions\n${trimmedSuggestions}\n\n`;
+              } else if (!shouldApprove && inlineFindings.length > 0) {
+                reviewBody += 'インラインコメントをご確認ください。\n\n';
+              }
+
+              reviewBody = appendAcknowledgedSection(reviewBody, acknowledgedSection);
+
+              await github.rest.pulls.createReview({
+                ...context.repo,
+                pull_number: prNumber,
+                event: reviewEvent,
+                body: reviewBody.trim(),
+                comments: inlineFindings.map((finding) => ({
+                  path: finding.path,
+                  line: finding.line,
+                  side: 'RIGHT',
+                  body: `🤖 **Codex**\n\n${finding.body}`,
+                })),
+              });
+              core.info(`Posted ${inlineFindings.length} inline review comment(s) with event: ${reviewEvent}`);
+            } else if (shouldApprove && hasSuggestions) {
+              // No inline findings, but have suggestions, and should approve
+              let reviewBody = `🤖 **Codex AI Review**\n\n✅ MUSTレベルの指摘はありませんでした。\n\n`;
+              reviewBody += `## Suggestions\n${trimmedSuggestions}`;
+
+              reviewBody = appendAcknowledgedSection(reviewBody, acknowledgedSection);
+
+              await github.rest.pulls.createReview({
+                ...context.repo,
+                pull_number: prNumber,
+                event: 'APPROVE',
+                body: reviewBody.trim(),
+              });
+              core.info('Posted approval review with skipped findings/suggestions.');
+            } else if (!shouldApprove && hasSuggestions) {
+              // No inline findings, but have suggestions, and should NOT approve
+              let reviewBody = `🤖 **Codex AI Review**\n\n`;
+              reviewBody += `## Suggestions\n${trimmedSuggestions}`;
+
+              reviewBody = appendAcknowledgedSection(reviewBody, acknowledgedSection);
+
+              await github.rest.pulls.createReview({
+                ...context.repo,
+                pull_number: prNumber,
+                event: 'REQUEST_CHANGES',
+                body: reviewBody.trim(),
+              });
+              core.info('Posted REQUEST_CHANGES review with skipped findings/suggestions.');
+            } else if (shouldApprove) {
+              // No findings at all, post simple approval review
+              let reviewBody = '🤖 **Codex AI Review**\n\n✅ MUSTレベルの指摘はありませんでした。';
+              reviewBody = appendAcknowledgedSection(reviewBody, acknowledgedSection);
+              await github.rest.pulls.createReview({
+                ...context.repo,
+                pull_number: prNumber,
+                event: 'APPROVE',
+                body: reviewBody.trim(),
+              });
+              core.info('Posted approval review with no findings.');
+            } else {
+              core.info('No findings or suggestions to post.');
+            }
