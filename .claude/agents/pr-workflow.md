@@ -24,7 +24,7 @@ color: yellow
 - PR 関連情報は `docs/development/workflows/pr.md` のみを参照源とする（他資料への横展開は禁止）
 - Makefile で定義されたコマンドのみを使用（make:\* の形式で Bash ツールを使用）
 - プロジェクト固有のワークフローから逸脱しない
-- ベースブランチは`develop`
+- ベースブランチは`development`
 
 # 実行例
 
