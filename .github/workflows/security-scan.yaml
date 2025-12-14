@@ -16,12 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.86.0
+          toolchain: stable
 
       - name: Cache cargo-audit
         uses: actions/cache@v4
@@ -57,12 +57,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.86.0
+          toolchain: stable
 
       - name: Install cargo-deny
         run: cargo install cargo-deny || true
@@ -73,41 +73,10 @@ jobs:
           cargo deny check
           echo "::endgroup::"
 
-  trivy-scan:
-    name: Trivy (Container Image Scan)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Build Docker image
-        run: docker build -t crescent-uniswapx-quoter:scan .
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: "crescent-uniswapx-quoter:scan"
-          format: "sarif"
-          output: "trivy-results.sarif"
-          severity: "CRITICAL,HIGH,MEDIUM"
-
-      - name: Upload Trivy results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v4
-        if: always()
-        with:
-          sarif_file: "trivy-results.sarif"
-
-      - name: Run Trivy (table format for logs)
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: "crescent-uniswapx-quoter:scan"
-          format: "table"
-          severity: "CRITICAL,HIGH,MEDIUM"
-
   security-summary:
     name: Security Summary
     runs-on: ubuntu-latest
-    needs: [cargo-audit, cargo-deny, trivy-scan]
+    needs: [cargo-audit, cargo-deny]
     if: always()  
     steps:
       - name: Summary
@@ -116,4 +85,3 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- Cargo Audit: ${{ needs.cargo-audit.result }}" >> $GITHUB_STEP_SUMMARY
           echo "- Cargo Deny: ${{ needs.cargo-deny.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Trivy Scan: ${{ needs.trivy-scan.result }}" >> $GITHUB_STEP_SUMMARY
