@@ -20,7 +20,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.86.0
+          toolchain: stable
           override: true
       - uses: actions-rs/cargo@v1
         with:
@@ -35,7 +35,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.86.0
+          toolchain: stable
           override: true
           components: rustfmt
       - uses: actions-rs/cargo@v1
@@ -51,7 +51,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.86.0
+          toolchain: stable
           override: true
           components: clippy
       - uses: actions-rs/cargo@v1
@@ -67,7 +67,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.86.0
+          toolchain: stable
           override: true
       - uses: actions-rs/cargo@v1
         with:
@@ -83,7 +83,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.86.0
+          toolchain: stable
           override: true
       - name: Run cargo test
         uses: actions-rs/cargo@v1
@@ -100,7 +100,7 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.86.0
+          toolchain: stable
           override: true
           components: wasm32-unknown-unknown
       - name: Install wasm-pack
