@@ -2,9 +2,9 @@ name: Rust CI
 
 on:
   push:
-    branches: [ develop, main ]
+    branches: [ development, main ]
   pull_request:
-    branches: [ develop, main ]
+    branches: [ development, main ]
 
 env:
   CARGO_TERM_COLOR: always
