@@ -174,4 +174,4 @@ git gtr rm {ブランチ名} --delete-branch
 - `git gtr` コマンドのみを使用（直接の `git worktree` は使用しない）
 - GitHub MCPを使用してIssue情報を取得
 - プロジェクトの命名規則に従う
-- defaultのブランチは `develop`
+- defaultのブランチは `development`
