@@ -1,0 +1,57 @@
+{
+  "id": "approval_1765704711568_7q5hnrlgz",
+  "title": "D-TPRES 技術スタックドキュメント",
+  "filePath": ".spec-workflow/steering/tech.md",
+  "type": "document",
+  "status": "needs-revision",
+  "createdAt": "2025-12-14T09:31:51.568Z",
+  "category": "steering",
+  "categoryName": "steering",
+  "response": "Feedback Summary (3 comments):\n\nSpecific Text Comments:\n1. \"（`deploy/`）で処理\n- **SharedService**: 複数UseCaseから呼び出...\": ここに関しては、　実際はAO Process（コントラクト）の振る舞いになるので、実際に @deploy/cotracts/src/ 配下のロジックを確認して、述べてください\n2. \"`client/`（ローカル処理）と`deploy/`（AOプロセス）の橋渡し\": ユーザーが、D-TPRESを使う時のエンドポイントとして機能し、D-TPRESでは内部的に`client/`（ローカル処理）の処理から、`deploy/`（AOプロセス）の呼び出しまで、一気通貫して行うので、表現を実情に合わせて改善して\n3. \"// Phase 1: 秘密を共有（Owner側）\nconst result = await dtp...\": Owner側は、秘密鍵 skₒ(PRE)を生成するか、入力して秘密鍵 skₒ(PRE)に紐付いたsecretの共有を行う必要があるので、ここのフローは考える必要がある\n",
+  "annotations": "{\n  \"decision\": \"needs-revision\",\n  \"comments\": [\n    {\n      \"type\": \"selection\",\n      \"comment\": \"ここに関しては、　実際はAO Process（コントラクト）の振る舞いになるので、実際に @deploy/cotracts/src/ 配下のロジックを確認して、述べてください\",\n      \"timestamp\": \"2025-12-15T16:24:59.093Z\",\n      \"selectedText\": \"（`deploy/`）で処理\\n- **SharedService**: 複数UseCaseから呼び出される共通業務ロジック\\n  - CryptoService: TPRE・Shamir操作（純粋な暗号ロジック）\\n  - StorageService: Arweave操作\\n  - 設計原則: 責務の境界で分離し、再利用可能な単位として構成\",\n      \"highlightColor\": {\n        \"bg\": \"rgba(255, 235, 59, 0.3)\",\n        \"border\": \"#FFEB3B\",\n        \"name\": \"#ffeb3b\"\n      },\n      \"id\": \"comment_1765815899093_8gip8r1wl\",\n      \"startOffset\": 2558,\n      \"endOffset\": 2727\n    },\n    {\n      \"type\": \"selection\",\n      \"comment\": \"ユーザーが、D-TPRESを使う時のエンドポイントとして機能し、D-TPRESでは内部的に`client/`（ローカル処理）の処理から、`deploy/`（AOプロセス）の呼び出しまで、一気通貫して行うので、表現を実情に合わせて改善して\",\n      \"timestamp\": \"2025-12-15T16:31:05.702Z\",\n      \"selectedText\": \"`client/`（ローカル処理）と`deploy/`（AOプロセス）の橋渡し\",\n      \"highlightColor\": {\n        \"bg\": \"rgba(255, 235, 59, 0.3)\",\n        \"border\": \"#FFEB3B\",\n        \"name\": \"#ffeb3b\"\n      },\n      \"id\": \"comment_1765816265702_upmirnjjz\",\n      \"startOffset\": 3683,\n      \"endOffset\": 3722\n    },\n    {\n      \"type\": \"selection\",\n      \"comment\": \"Owner側は、秘密鍵 skₒ(PRE)を生成するか、入力して秘密鍵 skₒ(PRE)に紐付いたsecretの共有を行う必要があるので、ここのフローは考える必要がある\",\n      \"timestamp\": \"2025-12-15T16:34:03.914Z\",\n      \"selectedText\": \"// Phase 1: 秘密を共有（Owner側）\\nconst result = await dtpres.share(secret, {\\n  k: 3,                        // 閾値\\n  n: 5,                        // 総Holder数\\n  requesterPublicKey: \\\"...\\\",   // Requesterの公開鍵（必須）\\n  metadata?: { name, description }\\n});\",\n      \"highlightColor\": {\n        \"bg\": \"rgba(255, 235, 59, 0.3)\",\n        \"border\": \"#FFEB3B\",\n        \"name\": \"#ffeb3b\"\n      },\n      \"id\": \"comment_1765816443914_l5c51povr\",\n      \"startOffset\": 4203,\n      \"endOffset\": 4443\n    }\n  ],\n  \"summary\": \"Feedback Summary (3 comments):\\n\\nSpecific Text Comments:\\n1. \\\"（`deploy/`）で処理\\n- **SharedService**: 複数UseCaseから呼び出...\\\": ここに関しては、　実際はAO Process（コントラクト）の振る舞いになるので、実際に @deploy/cotracts/src/ 配下のロジックを確認して、述べてください\\n2. \\\"`client/`（ローカル処理）と`deploy/`（AOプロセス）の橋渡し\\\": ユーザーが、D-TPRESを使う時のエンドポイントとして機能し、D-TPRESでは内部的に`client/`（ローカル処理）の処理から、`deploy/`（AOプロセス）の呼び出しまで、一気通貫して行うので、表現を実情に合わせて改善して\\n3. \\\"// Phase 1: 秘密を共有（Owner側）\\nconst result = await dtp...\\\": Owner側は、秘密鍵 skₒ(PRE)を生成するか、入力して秘密鍵 skₒ(PRE)に紐付いたsecretの共有を行う必要があるので、ここのフローは考える必要がある\\n\",\n  \"timestamp\": \"2025-12-15T16:34:58.699Z\"\n}",
+  "respondedAt": "2025-12-15T16:34:58.728Z",
+  "comments": [
+    {
+      "type": "selection",
+      "comment": "ここに関しては、　実際はAO Process（コントラクト）の振る舞いになるので、実際に @deploy/cotracts/src/ 配下のロジックを確認して、述べてください",
+      "timestamp": "2025-12-15T16:24:59.093Z",
+      "selectedText": "（`deploy/`）で処理\n- **SharedService**: 複数UseCaseから呼び出される共通業務ロジック\n  - CryptoService: TPRE・Shamir操作（純粋な暗号ロジック）\n  - StorageService: Arweave操作\n  - 設計原則: 責務の境界で分離し、再利用可能な単位として構成",
+      "highlightColor": {
+        "bg": "rgba(255, 235, 59, 0.3)",
+        "border": "#FFEB3B",
+        "name": "#ffeb3b"
+      },
+      "id": "comment_1765815899093_8gip8r1wl",
+      "startOffset": 2558,
+      "endOffset": 2727
+    },
+    {
+      "type": "selection",
+      "comment": "ユーザーが、D-TPRESを使う時のエンドポイントとして機能し、D-TPRESでは内部的に`client/`（ローカル処理）の処理から、`deploy/`（AOプロセス）の呼び出しまで、一気通貫して行うので、表現を実情に合わせて改善して",
+      "timestamp": "2025-12-15T16:31:05.702Z",
+      "selectedText": "`client/`（ローカル処理）と`deploy/`（AOプロセス）の橋渡し",
+      "highlightColor": {
+        "bg": "rgba(255, 235, 59, 0.3)",
+        "border": "#FFEB3B",
+        "name": "#ffeb3b"
+      },
+      "id": "comment_1765816265702_upmirnjjz",
+      "startOffset": 3683,
+      "endOffset": 3722
+    },
+    {
+      "type": "selection",
+      "comment": "Owner側は、秘密鍵 skₒ(PRE)を生成するか、入力して秘密鍵 skₒ(PRE)に紐付いたsecretの共有を行う必要があるので、ここのフローは考える必要がある",
+      "timestamp": "2025-12-15T16:34:03.914Z",
+      "selectedText": "// Phase 1: 秘密を共有（Owner側）\nconst result = await dtpres.share(secret, {\n  k: 3,                        // 閾値\n  n: 5,                        // 総Holder数\n  requesterPublicKey: \"...\",   // Requesterの公開鍵（必須）\n  metadata?: { name, description }\n});",
+      "highlightColor": {
+        "bg": "rgba(255, 235, 59, 0.3)",
+        "border": "#FFEB3B",
+        "name": "#ffeb3b"
+      },
+      "id": "comment_1765816443914_l5c51povr",
+      "startOffset": 4203,
+      "endOffset": 4443
+    }
+  ]
+}
