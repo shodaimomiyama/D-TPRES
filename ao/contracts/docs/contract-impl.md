@@ -3,13 +3,13 @@
 ## コアコンセプト: 単一ロジック、複数ロール
 
 ### 1. **統一されたWASMモジュール**
-D-TPRESネットワークのすべてのプロセスは、`deploy/contracts/` からコンパイルされた**同一のWASMモジュール**をロードして実行します。このモジュールには3つのロール用のハンドラーがすべて含まれています：
+D-TPRESネットワークのすべてのプロセスは、`ao/contracts/` からコンパイルされた**同一のWASMモジュール**をロードして実行します。このモジュールには3つのロール用のハンドラーがすべて含まれています：
 - Ownerハンドラー
 - Holderハンドラー
 - Requesterハンドラー
 
 ```
-deploy/contracts/
+ao/contracts/
 └── 単一のRustコードベース
     ├── Ownerハンドラー
     ├── Holderハンドラー
@@ -116,7 +116,7 @@ Process_A（Ownerとして動作）がProcess_B（Holderとして動作）にkFr
 
 ```
 開発:
-1. deploy/contracts/ の単一コードベース
+1. ao/contracts/ の単一コードベース
 2. WASMにコンパイル
 3. Arweaveにデプロイ → tx_id取得
 
