@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/steering/structure.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2025-12-15T17:22:11.494Z",
+      "trigger": "initial",
+      "approvalId": "approval_1765819331460_sxlmmlm71",
+      "approvalTitle": "D-TPRES プロジェクト構造ドキュメント"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2025-12-16T06:36:13.766Z",
+      "trigger": "approved",
+      "approvalId": "approval_1765866859679_khegplq30",
+      "approvalTitle": "D-TPRES プロジェクト構造ドキュメント（client/src/ 5層アーキテクチャ更新版）"
+    }
+  ]
+}
