@@ -1,644 +1,457 @@
-# D-TPRES アーキテクチャ概要
+# D-TPRES クライアントライブラリ アーキテクチャ概要
 
-> **目的**: D-TPRES (Deterministic Threshold Proxy Re-Encryption System) の全体設計とPoC実装計画
+> **目的**: client/ ライブラリの5層レイヤードアーキテクチャ設計
 
 ---
 
 ## 1. システム概要
 
-D-TPRESは、Threshold Proxy Re-Encryption (TPRE) を用いた分散型鍵管理システムです。単一リポジトリ構成でのプロトタイプ開発により、早急なPoC実現を目指します。
+client/ は D-TPRES システムにおけるローカル暗号処理ライブラリです。Rust で実装され、WebAssembly としてブラウザで動作します。
 
-### 1.1 主要コンポーネント
+### 1.1 責務
+
+client/ ライブラリは以下の2つのフェーズを担当します：
+
+| Phase | 処理 | 実行環境 | 説明 |
+|-------|------|---------|------|
+| **Phase 1** | 秘密分割 | O-Browser | TPRE暗号化、Shamir分割、kFrag生成 |
+| **Phase 3** | 秘密復元 | R-Browser | cFrag結合、TPRE復号、Shamir補間 |
+
+**Note**: Phase 2（kFrag配布・再暗号化）は ao/ コントラクトが自律的に処理します。
+
+### 1.2 システム全体の中での位置づけ
 
 ```mermaid
 graph TB
-    subgraph "External Systems"
-        subgraph "Browser Applications"
-            OB[O-Browser<br/>クライアントライブラリ]
-            RB[R-Browser<br/>クライアントライブラリ]
-        end
+    subgraph "Browser"
+        OB[O-Browser]
+        RB[R-Browser]
+        CL[client/<br/>WASM Library]
+    end
 
-        subgraph "External Access Control"
-            EXT[External Access Control System<br/>pk_A検証済み]
-        end
+    subgraph "Arweave / AO Network"
+        AR[Arweave<br/>Immutable Storage]
+        AO[ao/<br/>Contracts]
+    end
 
-        subgraph "Storage"
-            AR[Arweave<br/>Immutable Storage]
+    subgraph "dtpres-sdk"
+        SDK[SDK<br/>統合エンドポイント]
+    end
+
+    SDK --> CL
+    SDK --> AO
+    OB --> CL
+    RB --> CL
+    CL --> AR
+    AO --> AR
+
+    style CL fill:#e6f3ff,stroke:#0066cc,stroke-width:3px
+```
+
+### 1.3 暗号化フロー
+
+```
+Phase 1: 秘密分割 (O-Browser)
+┌─────────────────────────────────────────────────────────────┐
+│ 1. 鍵ペア生成 (sk_O, pk_O)                                   │
+│ 2. 秘密データを対称鍵 k_O で AES-GCM 暗号化                    │
+│ 3. k_O を pk_O で TPRE 暗号化 → Capsule 生成                  │
+│ 4. Shamir Secret Sharing で k_O を n シェアに分割             │
+│ 5. kFrag を生成 (sk_O → pk_R への再暗号化鍵フラグメント)       │
+│ 6. Capsule, 暗号化シェア, kFrag を Arweave に保存             │
+└─────────────────────────────────────────────────────────────┘
+
+Phase 2: kFrag配布・再暗号化 (ao/)
+┌─────────────────────────────────────────────────────────────┐
+│ ※ ao/ コントラクトが自律的に処理                              │
+│ - Holder選出 (RandAO)                                        │
+│ - kFrag配布                                                  │
+│ - 再暗号化 (kFrag → cFrag)                                   │
+└─────────────────────────────────────────────────────────────┘
+
+Phase 3: 秘密復元 (R-Browser)
+┌─────────────────────────────────────────────────────────────┐
+│ 1. cFrag を収集 (k-of-n 以上)                                 │
+│ 2. Capsule + cFrag を結合                                    │
+│ 3. sk_R で TPRE 復号 → k_O を復元                            │
+│ 4. Shamir 補間で k_O を再構築                                 │
+│ 5. k_O で AES-GCM 復号 → 秘密データを復元                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## 2. 5層レイヤードアーキテクチャ
+
+### 2.1 アーキテクチャ構造
+
+```mermaid
+graph TB
+    subgraph "UseCase層"
+        UC1[share.rs<br/>share API]
+        UC2[recover.rs<br/>recover API]
+        UC3[keygen.rs<br/>generateKeyPair API]
+    end
+
+    subgraph "Controller層"
+        V[validator.rs<br/>入力検証]
+        E[extractor.rs<br/>DTO変換]
+    end
+
+    subgraph "Service層"
+        subgraph "WorkflowService"
+            WS1[secret_sharing.rs<br/>Phase 1]
+            WS2[secret_recovery.rs<br/>Phase 3]
+        end
+        subgraph "CoreService"
+            CS1[crypto.rs<br/>TPRE・Shamir]
+            CS2[storage.rs<br/>Arweave操作]
         end
     end
-    
-    subgraph AO_Network_WebAssembly_Runtime
-        subgraph "Application Layer"
-            subgraph "UseCase Handlers"
-                OH[Owner Handlers<br/>・Initialize-Owner<br/>・Split-Secret<br/>・Generate-ReKey]
-                HH[Holder Handlers<br/>・Store-KFrag<br/>・Perform-Reencryption<br/>・Send-CFrag]
-                RH[Requester Handlers<br/>・Access-Request<br/>・Collect-CFrag<br/>・Recover-Secret]
-            end
-            
-            subgraph "Controller Components"
-                MH[MessageHandler<br/>処理統括]
-                MR[MessageRouter<br/>アクション振り分け]
-                MV[MessageValidator<br/>妥当性検証]
-                MC[MessageContextExtractor<br/>DTO変換]
-            end
+
+    subgraph "Domain層"
+        subgraph "Entities"
+            E1[Secret<br/>集約ルート]
+            E2[Share]
+            E3[Capsule]
+            E4[KFrag]
+            E5[CFrag]
         end
-        
-        subgraph "Business Layer"
-            subgraph "Workflow Services"
-                WS1[AccessWorkflow]
-                WS2[RecoveryWorkflow]
-                WS3[DistributionWorkflow]
-            end
-            subgraph "Core Services"
-                CS1[CryptoService]
-                CS2[ProcessService]
-                CS3[StorageService]
-            end
-        end
-        
-        subgraph "Domain Layer"
-            subgraph "Entities"
-                E1[ProcessEntity]
-                E2[ShareEntity]
-                E3[CapsuleEntity]
-                E4[AccessRequestEntity]
-                E5[RekeyFragmentEntity]
-            end
-            subgraph "Repository Interfaces"
-                R1[ProcessEntityRepository]
-                R2[ShareEntityRepository]
-                R3[CapsuleEntityRepository]
-                R4[AccessRequestEntityRepository]
-            end
-        end
-        
-        subgraph "Infrastructure Layer"
-            subgraph "Repository Implementations"
-                RI[ArweaveRepositoryImpl<br/>ProcessEntityRepositoryImpl<br/>ShareEntityRepositoryImpl<br/>etc.]
-            end
-            subgraph "External Adapters"
-                AC[ArweaveClient]
-            end
+        subgraph "Repository Interfaces"
+            R1[SecretRepository]
+            R2[ShareRepository]
+            R3[CapsuleRepository]
+            R4[KFragRepository]
+            R5[CFragRepository]
         end
     end
-    
-    %% Browser to UseCase
-    OB --> OH
-    RB --> RH
-    EXT -.->|pk_A verified| OB
-    
-    %% UseCase to Controller
-    OH --> MH
-    HH --> MH
-    RH --> MH
-    
-    %% Controller Internal Flow
-    MH --> MR
-    MH --> MV
-    MH --> MC
-    
-    %% Controller to Service
-    MC --> WS1
-    MC --> WS2
-    MC --> WS3
-    
-    %% Workflow to Core Services
+
+    subgraph "Infrastructure層"
+        subgraph "Repository実装"
+            RI1[ArweaveSecretRepository]
+            RI2[ArweaveShareRepository]
+            RI3[ArweaveCapsuleRepository]
+            RI4[ArweaveKFragRepository]
+            RI5[ArweaveCFragRepository]
+        end
+        subgraph "External"
+            AC[ArweaveClient]
+            AOC[AOClient]
+        end
+    end
+
+    UC1 --> V
+    UC2 --> V
+    UC3 --> V
+    V --> E
+    E --> WS1
+    E --> WS2
     WS1 --> CS1
     WS1 --> CS2
-    WS2 --> CS3
-    WS3 --> CS1
-    
-    %% Service to Domain
+    WS2 --> CS1
+    WS2 --> CS2
     CS1 --> E1
-    CS2 --> E2
-    CS3 --> E3
-    CS4 --> E4
-    
-    %% Service to Repository Interfaces
-    CS1 --> R1
+    CS1 --> E2
+    CS1 --> E3
+    CS1 --> E4
+    CS1 --> E5
+    CS2 --> R1
     CS2 --> R2
-    CS3 --> R3
-    CS4 --> R4
-    
-    %% Repository Interfaces to Implementations (DIP)
-    R1 -.-> RI
-    R2 -.-> RI
-    R3 -.-> RI
-    R4 -.-> RI
-    
-    %% Infrastructure to External Systems
-    RI --> AC
-    AC --> AR
-    
-    %% Inter-process communication within AO
-    OH -.->|kFrag配布| HH
-    RH -.->|cFrag要求| HH
-    
-    style AO_Network_WebAssembly_Runtime fill:#e6f3ff,stroke:#0066cc,stroke-width:3px
+    CS2 --> R3
+    CS2 --> R4
+    CS2 --> R5
+    R1 -.-> RI1
+    R2 -.-> RI2
+    R3 -.-> RI3
+    R4 -.-> RI4
+    R5 -.-> RI5
+    RI1 --> AC
+    RI2 --> AC
+    RI3 --> AC
+    RI4 --> AC
+    RI5 --> AC
+    RI5 --> AOC
+
     style R1 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray:5,5
     style R2 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray:5,5
     style R3 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray:5,5
     style R4 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray:5,5
+    style R5 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray:5,5
 ```
 
-### 1.2 暗号化フロー
-
-**Phase 1-3の簡潔な暗号化ワークフロー**:
-1. **Phase 1**: 秘密の分割と初期配布
-   - O-Browserで秘密分散・暗号化・Capsule作成
-   - 再暗号化キー生成とkFrag分割
-   - ArweaveへのCapsule・暗号化シェア保存
-
-2. **Phase 2**: キーフラグメントの分散管理
-   - Owner-ProcessによるHolder選出
-   - kFrag配布とHolder側での再暗号化
-   - cFragのArweave保存
-
-3. **Phase 3**: 秘密の復元
-   - Requester-ProcessによるcFrag収集
-   - R-BrowserでのCapsule結合・復号
-   - シャミア補間による秘密復元
-
-## 2. アーキテクチャ設計
-
-### 2.1 単一リポジトリ構成
+### 2.2 ディレクトリ構造
 
 ```
-D-TPRES/
-├── src/                           # AO WebAssembly (Rust) - レイヤードアーキテクチャ
-│   ├── main.rs                    # AOエントリーポイント & ハンドラー登録
-│   ├── di.rs                      # 依存性注入コンテナ
-│   ├── lib.rs                     # WASMライブラリエクスポート
-│   │
-│   ├── usecase/                   # UseCase Layer - AOメッセージハンドラー
-│   │   ├── mod.rs                 # 公開エクスポート
-│   │   ├── handlers/              # ロールベースメッセージハンドラー
-│   │   │   ├── mod.rs
-│   │   │   ├── owner_handlers.rs  # Ownerロールハンドラー
-│   │   │   ├── holder_handlers.rs # Holderロールハンドラー
-│   │   │   ├── requester_handlers.rs # Requesterロールハンドラー
-│   │   │   └── common_handlers.rs # 共通ハンドラーユーティリティ
-│   │   ├── context.rs             # ハンドラーコンテキスト管理
-│   │   └── errors.rs              # UseCase層エラー定義
-│   │
-│   ├── controller/                # Controller Layer - メッセージ処理
+client/src/
+├── lib.rs                      # ライブラリエントリーポイント
+├── di.rs                       # 依存性注入コンテナ
+│
+├── usecase/                    # UseCase層（Facade）
+│   ├── mod.rs
+│   ├── share.rs               # share() API
+│   ├── recover.rs             # recover() API
+│   └── keygen.rs              # generateKeyPair() API
+│
+├── controller/                 # Controller層
+│   ├── mod.rs
+│   ├── validator.rs           # 入力の妥当性検証
+│   └── extractor.rs           # Service層向けDTO変換
+│
+├── service/                    # Service層
+│   ├── mod.rs
+│   ├── error.rs               # Service層エラー定義
+│   ├── workflow/              # WorkflowService
 │   │   ├── mod.rs
-│   │   ├── message_handler.rs     # 中央MessageHandler
-│   │   ├── router.rs              # MessageRouter実装
-│   │   ├── validator.rs           # MessageValidator & バリデーションロジック
-│   │   ├── extractor.rs           # MessageContextExtractor & DTOs
-│   │   ├── response.rs            # レスポンス生成ユーティリティ
-│   │   └── errors.rs              # Controller層エラー定義
-│   │
-│   ├── service/                   # Service Layer - ビジネスロジック
-│   │   ├── mod.rs
-│   │   ├── workflow/              # Workflow Services (Phaseオーケストレーション)
-│   │   │   ├── mod.rs
-│   │   │   ├── secret_sharing.rs  # Phase 1: SecretSharingWorkflowService
-│   │   │   ├── key_distribution.rs  # Phase 2: KeyDistributionWorkflowService
-│   │   │   └── secret_recovery.rs   # Phase 3: SecretRecoveryWorkflowService
-│   │   ├── core/                  # Core Services (基本操作)
-│   │   │   ├── mod.rs
-│   │   │   ├── crypto.rs          # CryptoService (TPRE, Shamir)
-│   │   │   ├── process.rs         # ProcessManagementService
-│   │   │   ├── messaging.rs       # MessageRoutingService
-│   │   │   └── storage.rs         # ArweaveStorageService
-│   │   ├── container.rs           # ServiceContainer for DI
-│   │   └── errors.rs              # Service層エラー定義
-│   │
-│   ├── domain/                    # Domain Layer - エンティティ & Repository Interface
-│   │   ├── mod.rs
-│   │   ├── entities/              # 純粋データ構造
-│   │   │   ├── mod.rs
-│   │   │   ├── process.rs         # ProcessEntity
-│   │   │   ├── share.rs           # ShareEntity
-│   │   │   ├── capsule.rs         # CapsuleEntity
-│   │   │   ├── access_request.rs  # AccessRequestEntity
-│   │   │   ├── rekey_fragment.rs  # RekeyFragmentEntity
-│   │   │   ├── reencryption.rs    # ReencryptionEntity
-│   │   │   ├── secret_details.rs  # SecretDetailsEntity
-│   │   │   └── value_objects.rs           # Union型定義（ProcessRole, SecretStatus等）
-│   │   ├── repositories/          # Repository Interface (DIP)
-│   │   │   ├── mod.rs
-│   │   │   ├── process.rs         # ProcessEntityRepository trait
-│   │   │   ├── share.rs           # ShareEntityRepository trait
-│   │   │   ├── capsule.rs         # CapsuleEntityRepository trait
-│   │   │   ├── access_request.rs  # AccessRequestEntityRepository trait
-│   │   │   ├── rekey_fragment.rs  # RekeyFragmentEntityRepository trait
-│   │   │   └── reencryption.rs    # ReencryptionEntityRepository trait
-│   │   └── errors.rs              # Domain層エラー定義
-│   │
-│   ├── infrastructure/            # Infrastructure Layer - 技術実装
-│   │   ├── mod.rs
-│   │   ├── repositories/          # Repository実装
-│   │   │   ├── mod.rs
-│   │   │   ├── arweave_base.rs    # 基盤ArweaveRepository実装
-│   │   │   ├── process_impl.rs    # ProcessEntityRepositoryImpl
-│   │   │   ├── share_impl.rs      # ShareEntityRepositoryImpl
-│   │   │   ├── capsule_impl.rs    # CapsuleEntityRepositoryImpl
-│   │   │   ├── access_request_impl.rs # AccessRequestEntityRepositoryImpl
-│   │   │   ├── rekey_fragment_impl.rs # RekeyFragmentEntityRepositoryImpl
-│   │   │   └── reencryption_impl.rs # ReencryptionEntityRepositoryImpl
-│   │   ├── external/              # 外部システムアダプター
-│   │   │   ├── mod.rs
-│   │   │   └── arweave_client.rs  # ArweaveClient
-│   │   ├── cache.rs               # メッセージスコープキャッシュ
-│   │   └── errors.rs              # Infrastructure層エラー定義
-│   │
-│   ├── crypto/                    # 暗号化ユーティリティ
-│   │   ├── mod.rs
-│   │   ├── umbral.rs              # Umbral TPRE操作
-│   │   ├── shamir.rs              # Shamir Secret Sharing
-│   │   └── utils.rs               # 暗号化ユーティリティ関数
-│   │
-│   └── utils/                     # 共有ユーティリティ
+│   │   ├── secret_sharing.rs  # Phase 1処理
+│   │   └── secret_recovery.rs # Phase 3処理
+│   └── core/                  # CoreService
 │       ├── mod.rs
-│       ├── serialization.rs       # Serdeヘルパー
-│       ├── time.rs                # タイムスタンプユーティリティ
-│       └── constants.rs           # システム定数
+│       ├── crypto.rs          # CryptoService（TPRE・Shamir）
+│       └── storage.rs         # StorageService
 │
-├── local/                         # ローカル環境用Rust実装 (O-Browser/R-Browser)
-│   ├── Cargo.toml                 # ローカル環境用Cargo設定
-│   ├── build.rs                   # wasm-pack ビルド設定
-│   └── src/
-│       ├── lib.rs                 # ローカルエントリーポイント
-│       ├── wasm_bindings.rs       # wasm-bindgen API
-│       ├── owner/                 # O-Browser実装
-│       │   ├── mod.rs
-│       │   ├── key_generation.rs  # 鍵生成（skₒ, pkₒ, kₒ）
-│       │   ├── secret_sharing.rs  # シャミア秘密分散
-│       │   ├── encryption.rs      # AES-GCM暗号化
-│       │   ├── capsule.rs         # Capsule生成
-│       │   └── rekey.rs           # 再暗号化キー生成
-│       ├── requester/             # R-Browser実装
-│       │   ├── mod.rs
-│       │   ├── capsule_combine.rs # Capsule再構築
-│       │   ├── decryption.rs      # PRE復号・AES復号
-│       │   ├── secret_recovery.rs # シャミア補間
-│       │   └── cfrag_collection.rs # cFrag収集
-│       ├── crypto/                # 暗号プリミティブ共通実装
-│       │   ├── mod.rs
-│       │   ├── umbral.rs          # umbral-preラッパー
-│       │   ├── shamir.rs          # Shamir Secret Sharing
-│       │   └── aes.rs             # AES-GCM
-│       ├── storage/               # ローカルストレージ
-│       │   ├── mod.rs
-│       │   ├── arweave_client.rs  # Arweaveアップロード/取得
-│       │   └── local_cache.rs     # ブラウザキャッシュ
-│       └── types/                 # 共通型定義
-│           ├── mod.rs
-│           ├── keys.rs            # 鍵型定義
-│           ├── shares.rs          # シェア型定義
-│           └── capsule.rs         # Capsule型定義
+├── domain/                     # Domain層
+│   ├── mod.rs
+│   ├── errors.rs              # Domain層エラー定義
+│   ├── entities/              # エンティティ（5つ）
+│   │   ├── mod.rs
+│   │   ├── secret.rs          # Secret（集約ルート）
+│   │   ├── share.rs           # Share（Shamirシェア）
+│   │   ├── capsule.rs         # Capsule（PREカプセル）
+│   │   ├── kfrag.rs           # KFrag（鍵フラグメント）
+│   │   └── cfrag.rs           # CFrag（再暗号化フラグメント）
+│   └── repositories/          # Repository Interface（5トレイト）
+│       ├── mod.rs
+│       ├── secret.rs          # SecretRepository trait
+│       ├── share.rs           # ShareRepository trait
+│       ├── capsule.rs         # CapsuleRepository trait
+│       ├── kfrag.rs           # KFragRepository trait
+│       └── cfrag.rs           # CFragRepository trait
 │
-├── dtpres-sdk/                   # JavaScript/TypeScript 統合SDK
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── src/
-│       ├── index.ts               # 統合エクスポート
-│       ├── types/                 # TypeScript型定義
-│       ├── owner/                 # O-Browser SDK
-│       │   ├── index.ts
-│       │   └── OBrowser.ts
-│       ├── requester/             # R-Browser SDK
-│       │   ├── index.ts
-│       │   └── RBrowser.ts
-│       └── ao/                    # AOプロセス操作SDK
-│           ├── index.ts
-│           ├── spawn.ts
-│           └── message.ts
-├── wasm/                          # WebAssembly ビルド成果物
-│   ├── umbral_wasm.js
-│   └── umbral_wasm.wasm
-├── scripts/                       # ビルド・デプロイスクリプト
-└── docs/
+└── infrastructure/             # Infrastructure層
+    ├── mod.rs
+    ├── errors.rs              # Infrastructure層エラー定義
+    ├── repositories/          # Repository実装（Arweave永続化）
+    │   ├── mod.rs
+    │   ├── secret_impl.rs     # ArweaveSecretRepository
+    │   ├── share_impl.rs      # ArweaveShareRepository
+    │   ├── capsule_impl.rs    # ArweaveCapsuleRepository
+    │   ├── kfrag_impl.rs      # ArweaveKFragRepository
+    │   └── cfrag_impl.rs      # ArweaveCFragRepository
+    └── external/              # 外部システムアダプター
+        ├── mod.rs
+        ├── arweave_client.rs  # ArweaveClient（Arweave通信）
+        └── ao_client.rs       # AOClient（AO通信）
 ```
 
-### 2.2 技術スタック
+### 2.3 各層の責務
 
-| Layer | Component | Technology |
-|-------|-----------|------------|
-| **Client Library** | Core Library | JavaScript/TypeScript (OSS) |
-| | Cryptography | Rust WASM (umbral-pre + sssa + aes-gcm) |
-| | Storage | IndexedDB (暗号化) |
-| | Deployment | CosmWasm-ao (プロセスspawn) |
-| **AO Runtime** | Process Engine | Rust WebAssembly (単一バイナリ) |
-| | Cryptography | umbral-pre + sssa + aes-gcm |
-| | Communication | AO Message Protocol |
-| | Role Support | Owner/Holder/Requester (マルチロール) |
-| **Storage** | Persistent | Arweave (Capsule + 暗号化シェア + WASMモジュール) |
-| | Access Control | 外部システム (検証済みpk_A受信) |
-| **Package Distribution** | Client Library | npm パッケージ |
-| | WASM Module | Arweave 永続保存 |
+| 層 | 責務 | 依存先 |
+|---|------|-------|
+| **UseCase** | 開発者向けAPIエンドポイント（Facade） | Controller |
+| **Controller** | 入力検証、Service層向けDTO変換 | Service |
+| **Service** | ビジネスロジック（暗号処理オーケストレーション） | Domain |
+| **Domain** | エンティティ定義、Repository Interface | なし |
+| **Infrastructure** | 技術的実装（Arweave永続化、外部通信） | Domain Interface |
 
-## 3. PoC実装計画
+### 2.4 依存関係フロー
 
-### 3.1 最小実装フロー
-
-**目標**: Phase 1-3の基本フローを最小限の機能で実現（外部アクセス制御前提）
-
-#### PoC Phase 1: Core Cryptographic Library (Week 1-2)
-- [ ] umbral-pre + sssa + aes-gcm WebAssembly ビルド
-- [ ] O-Browser Library: 鍵生成・Capsule作成・kFrag分割
-- [ ] R-Browser Library: cFrag結合・復号・秘密復元
-- [ ] 暗号化→復号の単体テスト
-
-#### PoC Phase 2: AO Process Implementation (Week 3-4)
-- [ ] Owner-Process: kFrag受信・Holder選出・配布
-- [ ] Holder-Process: kFrag保持・再暗号化・cFrag生成
-- [ ] Requester-Process: cFrag収集・Browserへ送信
-- [ ] AO Network上での動作確認
-
-#### PoC Phase 3: Client Library & Testing (Week 5-6)
-- [ ] JavaScript/TypeScript クライアントライブラリ実装
-- [ ] npm パッケージ化・OSS公開準備
-- [ ] E2E フロー統合テスト（外部アクセス制御システム連携）
-
-### 3.2 検証項目
-
-#### 技術的実現可能性
-- ✅ umbral-pre + sssa + aes-gcm の WebAssembly 変換
-- ✅ AO Network での Rust WebAssembly 実行
-- ✅ 単一WASMバイナリでの ブラウザ・AO両対応
-- ✅ CosmWasm-ao による プロセスデプロイ
-
-#### パフォーマンス要件
-- WebAssembly 読み込み時間 < 3秒
-- 暗号化処理時間 < 5秒 (1MB ファイル)
-- k-of-n 再暗号化時間 < 10秒
-
-#### セキュリティ要件
-- 秘密鍵のブラウザメモリ外漏洩防止
-- TPRE による確率的暗号化の確認
-- k-of-n 閾値での正確な秘密復元
-
-## 4. 開発環境・ビルド設定
-
-### 4.1 Makefile 拡張
-
-```makefile
-# 既存のRust WebAssembly向け
-check:
-	cargo check
-fmt:
-	cargo fmt --all
-clippy:
-	cargo clippy -- -A dead_code -A clippy::module_inception -A unused_variables -A unused_imports -A unused_mut -A unused_assignments -D warnings
-test:
-	cargo test
-
-# PoC用追加ターゲット
-wasm:
-	wasm-pack build --target web --out-dir wasm
-	
-browser-dev:
-	cd browser && npm run dev
-	
-browser-build:
-	cd browser && npm run build
-	
-client-lib-build:
-	cd client-lib && npm run build
-	
-poc-test:
-	make test && make wasm && cd browser && npm test
-	
-poc-integration:
-	make poc-test && npm run test:e2e
+```
+UseCase層 (share, recover, keygen)
+    │
+    ↓ 呼び出し
+Controller層 (Validator, Extractor)
+    │
+    ↓ 検証済みDTO
+Service層
+    ├── WorkflowService (オーケストレーション)
+    │       │
+    │       ↓ 使用
+    └── CoreService (CryptoService, StorageService)
+            │
+            ↓ 使用
+Domain層
+    ├── Entities (Secret, Share, Capsule, KFrag, CFrag)
+    └── Repository Interface (traits)
+            │
+            ↓ 実装 (DIP)
+Infrastructure層
+    ├── Repository実装 (Arweave永続化)
+    │       │
+    │       ↓ 使用
+    └── External (ArweaveClient, AOClient)
 ```
 
-### 4.2 WebAssembly ビルド設定
+## 3. エンティティ設計
 
-#### Cargo.toml の拡張
+### 3.1 エンティティ一覧
+
+| エンティティ | 説明 | 集約 |
+|------------|------|------|
+| **Secret** | 秘密メタデータ | 集約ルート |
+| **Share** | Shamirシェア | Secret配下 |
+| **Capsule** | PREカプセル | Secret配下 |
+| **KFrag** | 鍵フラグメント（Owner→Holder） | Secret配下 |
+| **CFrag** | 再暗号化フラグメント（Holder→Requester） | Secret配下 |
+
+### 3.2 エンティティ構造
+
+#### Secret（集約ルート）
+```rust
+pub struct Secret {
+    id: SecretId,
+    owner_public_key: PublicKey,
+    threshold: u8,           // k
+    total_shares: u8,        // n
+    requester_public_key: PublicKey,
+    status: SecretStatus,
+    metadata: Option<SecretMetadata>,
+    created_at: u64,
+}
+```
+
+#### Share
+```rust
+pub struct Share {
+    id: ShareId,
+    secret_id: SecretId,
+    index: u8,
+    encrypted_data: Vec<u8>,
+    integrity_hash: [u8; 32],
+}
+```
+
+#### Capsule
+```rust
+pub struct Capsule {
+    id: CapsuleId,
+    secret_id: SecretId,
+    capsule_data: Vec<u8>,
+    owner_public_key: PublicKey,
+}
+```
+
+#### KFrag
+```rust
+pub struct KFrag {
+    id: KFragId,
+    secret_id: SecretId,
+    index: u8,
+    kfrag_data: Vec<u8>,
+    holder_process_id: Option<String>,
+}
+```
+
+#### CFrag
+```rust
+pub struct CFrag {
+    id: CFragId,
+    secret_id: SecretId,
+    kfrag_id: KFragId,
+    cfrag_data: Vec<u8>,
+    holder_process_id: String,
+}
+```
+
+## 4. API設計
+
+### 4.1 UseCase層 API
+
+```rust
+// usecase/keygen.rs
+pub fn generate_key_pair() -> Result<KeyPair, DtpresError>;
+
+// usecase/share.rs
+pub fn share(
+    secret: &[u8],
+    owner_secret_key: &SecretKey,
+    requester_public_key: &PublicKey,
+    threshold: u8,
+    total_shares: u8,
+) -> Result<ShareResult, DtpresError>;
+
+// usecase/recover.rs
+pub fn recover(
+    secret_id: &SecretId,
+    requester_secret_key: &SecretKey,
+) -> Result<Vec<u8>, DtpresError>;
+```
+
+### 4.2 dtpres-sdk からの呼び出し
+
+```typescript
+// dtpres-sdk/src/dtpres.ts
+class DTPRES {
+  async generateKeyPair(): Promise<KeyPair> {
+    return await this.wasmModule.generate_key_pair();
+  }
+
+  async share(options: ShareOptions): Promise<ShareResult> {
+    return await this.wasmModule.share(
+      options.secret,
+      options.ownerSecretKey,
+      options.requesterPublicKey,
+      options.threshold,
+      options.totalShares
+    );
+  }
+
+  async recover(options: RecoverOptions): Promise<Uint8Array> {
+    return await this.wasmModule.recover(
+      options.secretId,
+      options.requesterSecretKey
+    );
+  }
+}
+```
+
+## 5. 技術スタック
+
+| カテゴリ | 技術 |
+|---------|-----|
+| **言語** | Rust |
+| **ターゲット** | WebAssembly (wasm32-unknown-unknown) |
+| **暗号ライブラリ** | umbral-pre, sssa, aes-gcm |
+| **シリアライズ** | serde, borsh |
+| **WASM バインディング** | wasm-bindgen |
+| **永続化** | Arweave |
+
+## 6. ビルド設定
+
+### 6.1 Cargo.toml
+
 ```toml
+[package]
+name = "dtpres-client"
+version = "0.1.0"
+edition = "2024"
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-# AO Network向け
-# ... 既存の依存関係
-
-# WebAssembly向け追加
-wasm-bindgen = "0.2"
-js-sys = "0.3"
-web-sys = "0.3"
 umbral-pre = { version = "0.13", features = ["wasm"] }
+serde = { version = "1.0", features = ["derive"] }
+wasm-bindgen = "0.2"
 getrandom = { version = "0.2", features = ["js"] }
 
-[dependencies.shamir-secret-sharing]
-version = "0.1"
-features = ["wasm"]
+[profile.release]
+opt-level = "s"
+lto = true
 ```
 
-#### wasm-pack 設定
+### 6.2 ビルドコマンド
+
 ```bash
-# ブラウザ向けWASMビルド
-wasm-pack build --target web --out-dir wasm --features wasm
+# WASMビルド
+make wasm
+
+# テスト
+make test
+
+# リント
+make lint
 ```
-
-### 4.3 ブラウザ側設定
-
-#### package.json (browser/)
-```json
-{
-  "name": "@dtpres/browser",
-  "private": true,
-  "workspaces": [
-    "packages/*"
-  ],
-  "scripts": {
-    "dev": "vite serve packages/o-browser",
-    "build": "vite build packages/o-browser && vite build packages/a-browser",
-    "test": "vitest",
-    "test:e2e": "playwright test"
-  },
-  "devDependencies": {
-    "vite": "^5.0.0",
-    "typescript": "^5.0.0",
-    "vitest": "^1.0.0",
-    "@playwright/test": "^1.40.0"
-  }
-}
-```
-
-#### TypeScript設定
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["ES2022", "DOM", "WebWorker"],
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "strict": true,
-    "noEmit": true
-  },
-  "include": ["packages/**/*"],
-  "references": [
-    { "path": "./packages/core" },
-    { "path": "./packages/o-browser" },
-    { "path": "./packages/a-browser" }
-  ]
-}
-```
-
-## 5. 共通コンポーネント設計
-
-### 5.1 暗号化ライブラリ統合
-
-#### browser/packages/core/crypto/umbral.ts
-```typescript
-import * as wasm from '../../../wasm/umbral_wasm.js';
-
-export class UmbralCrypto {
-  static async init() {
-    await wasm.default();
-  }
-  
-  static generateKeyPair(): { publicKey: Uint8Array, secretKey: Uint8Array } {
-    // WebAssembly バインディング
-  }
-  
-  static encrypt(publicKey: Uint8Array, message: Uint8Array): Capsule {
-    // PRE暗号化
-  }
-  
-  static generateReencryptionKey(
-    secretKey: Uint8Array, 
-    targetPublicKey: Uint8Array
-  ): ReencryptionKey {
-    // 再暗号化鍵生成
-  }
-}
-```
-
-### 5.2 AO通信ライブラリ
-
-#### browser/packages/core/ao/client.ts
-```typescript
-export class AOClient {
-  async spawnProcess(module: string, init: ProcessInit): Promise<string> {
-    // AO Process spawn
-  }
-  
-  async sendMessage(processId: string, data: MessageData): Promise<void> {
-    // メッセージ送信
-  }
-  
-  async getResults(processId: string): Promise<MessageResult[]> {
-    // 結果取得
-  }
-}
-```
-
-### 5.3 共通型定義
-
-#### browser/packages/core/types/crypto.ts
-```typescript
-export interface Capsule {
-  point_e: Uint8Array;
-  point_v: Uint8Array;
-  signature: Uint8Array;
-}
-
-export interface KeyFragment {
-  id: number;
-  key: Uint8Array;
-  precursor: Uint8Array;
-}
-
-export interface CipherFragment {
-  fragment_id: number;
-  ciphertext: Uint8Array;
-  proof: Uint8Array;
-}
-```
-
-## 6. セキュリティ設計
-
-### 6.1 ブラウザ側セキュリティ
-
-#### 秘密鍵管理
-- **生成**: WebCrypto API（ハードウェア支援）
-- **保存**: IndexedDB + AES-GCM暗号化
-- **使用**: メモリ上でのみ、使用後即座にzeroize
-- **転送**: 秘密鍵は一切ネットワーク送信しない
-
-#### Content Security Policy
-```html
-<meta http-equiv="Content-Security-Policy" 
-      content="default-src 'self'; 
-               script-src 'self' 'wasm-unsafe-eval';
-               connect-src 'self' https://arweave.net https://ao-cu-url.net;
-               style-src 'self' 'unsafe-inline';">
-```
-
-### 6.2 AO Process セキュリティ
-
-#### 秘密情報の扱い
-- kFrag は一時的にメモリ保持、処理後即座にクリア
-- ProofPkg 検証によるアクセス制御
-- メッセージ署名による認証
-
-## 7. テスト戦略
-
-### 7.1 単体テスト
-
-#### Rust (AO Layer)
-```bash
-cargo test
-```
-
-#### TypeScript (Browser Layer)
-```bash
-cd browser && npm test
-```
-
-### 7.2 統合テスト
-
-#### E2E フロー
-1. O-Browser ライブラリでの秘密分散・暗号化・アップロード
-2. R-Browser ライブラリでの復号・秘密復元
-3. AO Process間の連携確認（Owner→Holder→Requester）
-
-#### テストシナリオ
-- 正常系: k-of-n 閾値での秘密復元
-- 異常系: 閾値未満での復元失敗
-- セキュリティ: 不正アクセスの拒否
-
-### 7.3 パフォーマンステスト
-
-- WebAssembly 読み込み・初期化時間
-- 暗号化・復号処理時間
-- ネットワーク通信レイテンシ
-
-## 8. 運用・デプロイ
-
-### 8.1 PoC デプロイ戦略
-
-#### 開発環境
-- ローカル AO Network（ao-dev-cli）
-- 外部アクセス制御システムのモックサーバー
-- 静的ホスティング（npm パッケージ配布準備）
-
-#### テスト環境
-- AO Testnet
-- 外部アクセス制御システムとの統合テスト
-- Vercel/Netlify デプロイ
-
-### 8.2 PoC後の展開
-
-- セキュリティ監査の実施
-- パフォーマンス最適化
-- ユーザビリティ改善
-- 本格運用環境への移行
 
 ---
 
-## 次のステップ
-
-1. **PoC Phase 1**: umbral-pre WebAssembly統合
-2. **PoC Phase 2**: AO Process実装
-3. **PoC Phase 3**: E2E統合テスト
-
-このアーキテクチャ設計に基づいて、段階的にPoCを実装し、D-TPRESの技術的実現可能性を検証します。
+**Document Status**: Architecture Overview
+**Version**: 2.0
+**Last Updated**: 2025-01
