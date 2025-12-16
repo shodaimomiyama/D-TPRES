@@ -5,7 +5,7 @@
 ### ディレクトリ構成
 
 ```
-/deploy/contracts/src/
+/ao/contracts/src/
 ├── lib.rs              # CosmWasm エントリーポイント
 ├── contract.rs         # メインコントラクト実装（簡素化）
 ├── handlers.rs         # 統一メッセージハンドラ

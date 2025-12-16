@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 - `client/`: Rust AO/WASM contract wrapper. `src/domain` holds core types, `src/service` orchestrates processes, `di.rs` wires dependencies, `lib.rs` exports entrypoints.
 - `docs/` and `discuss/`: architecture notes and design discussions—sync guideline updates with these.
-- `deploy/`: scripts and manifests for shipping the contract; treat as source of truth for environment settings.
+- `ao/`: scripts and manifests for shipping the contract; treat as source of truth for environment settings.
 - `mcp/`: auxiliary Model Context Protocol servers (Context7); see `mcp/context7/Makefile`.
 - `test/`: integration fixtures; use for scenario harnesses instead of mixing into library modules.
 - `images/` hosts diagrams referenced from docs; keep binary assets out of `client/`.
@@ -29,11 +29,11 @@
 
 ## Commit & Pull Request Guidelines
 - Use descriptive, present-tense subjects (e.g., "Add AO message handler for kFrag intake"); add multi-line bodies for rationale or doc references. English or Japanese is acceptable—stay consistent within a commit.
-- One logical change per commit; update docs and `deploy/` artefacts alongside code.
+- One logical change per commit; update docs and `ao/` artefacts alongside code.
 - PRs must include: summary of behavior changes, linked issues/tasks, steps to reproduce/test evidence, and screenshots or logs for observable flows.
 - Request review only after `make check fmt clippy test` succeed; mention any skipped checks explicitly.
 
 ## Security & Configuration Tips
-- Never commit secrets; reference them via environment variables documented in `deploy/`.
+- Never commit secrets; reference them via environment variables documented in `ao/`.
 - Pin toolchains with `rust-toolchain.toml`; run `rustup update` cautiously and document version bumps.
 - Prefer deterministic randomness sources and mark unsafe code with clear justification and tests.
