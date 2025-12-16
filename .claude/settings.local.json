@@ -34,14 +34,15 @@
       "Bash(cargo --version)",
       "Bash(rustup target list:*)",
       "Bash(cargo wasm:*)",
-      "Bash(npm ls:*)"
+      "Bash(npm ls:*)",
+      "Bash(cat:*)"
     ],
     "deny": []
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "context7",
     "serena",
     "spec-workflow"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }
