@@ -18,7 +18,7 @@ DDDの原則に従い：
 
 このfeatureは以下のプロダクト目標をサポートする：
 
-1. **分散性優先**: Secret、Share、KFrag、CFragエンティティがk-of-n閾値暗号の基盤を提供
+1. **分散性優先**: Secret、ShareCollection、KFrag、CFragエンティティがk-of-n閾値暗号の基盤を提供
 2. **設計によるセキュリティ**: Zeroizeトレイトによるメモリ安全性を保証
 3. **検証可能性**: Capsuleエンティティが暗号カプセルのArweave永続化を抽象化
 4. **開発者フレンドリー**: 明確なドメインモデルがSDK統合の基盤を提供
@@ -37,30 +37,37 @@ Secret Entityはメタデータのみを保持。秘密の実データ `f(0)=sec
 
 1. WHEN Secret::new()が呼ばれた THEN システム SHALL SecretIdを生成し、InitializedステートのSecretを返す
 2. WHEN 無効なthreshold（k > n または k = 0）が指定された THEN システム SHALL DomainErrorを返す
-3. WHEN Secret.split()が呼ばれた THEN システム SHALL ステートをSplitに遷移し、関連するShare IDsを記録する
+3. WHEN Secret.split()が呼ばれた THEN システム SHALL ステートをSplitに遷移し、関連するShareCollectionIdを記録する
 4. WHEN Secret.capsule_id()が呼ばれた THEN システム SHALL 関連するCapsuleのID（Option）を返す
 
-### Requirement 2: Share Entity（暗号化シェア）
+### Requirement 2: ShareCollection Entity（暗号化シェアコレクション）
 
-**User Story:** As a 開発者, I want Shareエンティティで暗号化されたシャミアシェアを表現したい, so that Arweaveに永続化されるシェアを管理できる
+**User Story:** As a 開発者, I want ShareCollectionエンティティでn個の暗号化シャミアシェアを一括管理したい, so that Arweaveに効率的に永続化し、アトミックな整合性を保証できる
 
 #### Design Note
 
 PRDのライフサイクルに基づく責務分離：
-- **Share Entity (Domain層)**: 暗号化シェア `Cᵢ = AES_GCM(kₒ, f(i))` を表現。Arweaveに永続化。
+- **ShareCollection Entity (Domain層)**: n個の暗号化シェア `C₁...Cₙ = AES_GCM(kₒ, f(1)...f(n))` を1つのEntityとして管理。1つのArweave txで永続化。
 - **PlaintextShare (Service層)**: 平文シェア `f(i)` を一時的に処理。Zeroize必須、永続化しない。
 
 ```
-Phase 1: f(i) → [AES暗号化] → Cᵢ → [Arweave保存] → Share Entity
-Phase 3: Share Entity → [Arweave取得] → Cᵢ → [AES復号] → f(i) → [シャミア補間]
+Phase 1: f(1)...f(n) → [AES暗号化] → C₁...Cₙ → [Arweave保存: 1tx] → ShareCollection Entity
+Phase 3: ShareCollection Entity → [Arweave取得: 1tx] → C₁...Cₙ → [AES復号] → f(i) → [シャミア補間]
 ```
+
+**設計選択（Option B）の理由:**
+- **アトミック性**: n個のシェアは論理的に不可分、部分的な保存失敗のリスク排除
+- **効率性**: Arweave txコスト削減、フェッチ回数削減（n回→1回）
+- **整合性**: 1 tx内でもArweaveノードに分散保存される
 
 #### Acceptance Criteria
 
-1. WHEN Share::new()が呼ばれた THEN システム SHALL ShareId、SecretId参照、インデックス、暗号化データ（Cᵢ）を持つShareを返す
-2. WHEN シェアインデックスが閾値パラメータの範囲外（0またはn超過）THEN システム SHALL DomainErrorを返す
-3. WHEN Share.encrypted_data()が呼ばれた THEN システム SHALL 暗号化されたシェアデータ（Cᵢ）への参照を返す
-4. WHEN Share.set_arweave_tx_id()が呼ばれた THEN システム SHALL ArweaveトランザクションIDを記録する
+1. WHEN ShareCollection::new()が呼ばれた THEN システム SHALL ShareCollectionId、SecretId参照、閾値パラメータ、n個のEncryptedShareDataを持つShareCollectionを返す
+2. WHEN シェア数がn（threshold_n）と一致しない THEN システム SHALL DomainErrorを返す
+3. WHEN いずれかのシェアインデックスが範囲外（0またはn超過）THEN システム SHALL DomainErrorを返す
+4. WHEN collection.get_share(index)が呼ばれた THEN システム SHALL 指定インデックスの暗号化シェアデータへの参照（Option）を返す
+5. WHEN collection.get_shares_by_indices(indices)が呼ばれた THEN システム SHALL 指定された複数インデックスの暗号化シェアデータを返す
+6. WHEN collection.set_arweave_tx_id()が呼ばれた THEN システム SHALL ArweaveトランザクションIDを記録する
 
 ### Requirement 3: Capsule Entity（PREカプセル）
 
@@ -129,10 +136,10 @@ PRDにおけるCFrag:
 
 1. WHEN SecretId::new()が呼ばれた THEN システム SHALL 一意のIDを生成して返す
 2. WHEN 同じ文字列値を持つSecretIdを比較した THEN システム SHALL 等価と判断する
-3. WHEN SecretIdをShareIdが期待される場所で使用した THEN システム SHALL コンパイルエラーを発生させる
+3. WHEN SecretIdをShareCollectionIdが期待される場所で使用した THEN システム SHALL コンパイルエラーを発生させる
 4. 以下のID Value Objectsを定義する:
    - `SecretId` - Secret Entity用
-   - `ShareId` - Share Entity用
+   - `ShareCollectionId` - ShareCollection Entity用
    - `CapsuleId` - Capsule Entity用
    - `KFragId` - KFrag Entity用
    - `CFragId` - CFrag Entity用
@@ -192,13 +199,14 @@ PRD Phase 1-1の `kₒ` に対応。Capsule生成時に使用され、暗号化�
 - **Dependency Management**: serde等のシリアライズ注釈はInfrastructure層で追加（Domain層では純粋）
 - **Clear Interfaces**: new()/generate()コンストラクタとgetter/setterで明確なインターフェースを提供
 - **Layer Separation**:
-  - Domain層: Entity（Secret, Share, Capsule, KFrag, CFrag）+ Value Objects
+  - Domain層: Entity（Secret, ShareCollection, Capsule, KFrag, CFrag）+ Value Objects
   - Service層: 処理中間状態（PlaintextShare等）はZeroize付きの内部構造体として定義
 
 ### Performance
 
 - **メモリ効率**: 不必要なClone実装を避け、参照ベースのAPIを提供
 - **アロケーション最小化**: WASMターゲットを考慮し、ヒープ割り当てを最小限に
+- **Arweaveトランザクション効率**: ShareCollectionによる一括保存でtx数を削減
 
 ### Security
 
@@ -211,6 +219,7 @@ PRD Phase 1-1の `kₒ` に対応。Capsule生成時に使用され、暗号化�
 
 - **型安全性**: 強い型付け（newtypeパターン）によりコンパイル時にエラーを検出
 - **Result型**: 失敗可能な操作はすべてResult<T, DomainError>を返す
+- **アトミック整合性**: ShareCollectionによりn個のシェアの部分的な保存失敗を防止
 
 ### Usability
 
