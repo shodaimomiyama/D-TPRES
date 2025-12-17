@@ -2,322 +2,172 @@
 
 ## Overview
 
-承認済みのRequirements/Designに基づき、`client/src/domain/entities/` および `client/src/domain/value_objects/` の実装タスクを定義する。
+承認済みのRequirements/Designに基づき、`client/src/domain/entities/` および `client/src/domain/value_objects/` の実装タスク。
 
-## Task Groups
+## Group 1: Foundation (Value Objects & Errors)
 
-### Group 1: Foundation (Value Objects & Errors)
+- [x] 1. ID Value Objects
+  - File: client/src/domain/value_objects/ids.rs
+  - Description: 型安全なID Value Objectsを実装 (SecretId, ShareCollectionId, CapsuleId, KFragId, CFragId)
+  - Implementation: newtype pattern, Derive Debug/Clone/PartialEq/Eq/Hash, Methods: new(), generate(), as_str()
+  - _Leverage: zeroize crate_
+  - _Requirements: REQ-1.1_
+  - _Prompt: Role: Rust Developer specializing in DDD and type systems | Task: Create type-safe ID value objects using newtype pattern with UUID generation for WASM environment | Restrictions: No external UUID crates for WASM compatibility, implement custom UUID generator with timestamp+counter | Success: All ID types are distinct at compile time, generate() produces unique IDs, tests pass_
 
-#### Task 1.1: ID Value Objects
-- **File**: `client/src/domain/value_objects/ids.rs`
-- **Status**: [ ]
-- **Description**: 型安全なID Value Objectsを実装
-- **Implementation**:
-  - `SecretId`, `ShareCollectionId`, `CapsuleId`, `KFragId`, `CFragId`
-  - newtype pattern: `pub struct XxxId(String)`
-  - Derive: `Debug, Clone, PartialEq, Eq, Hash`
-  - Methods: `::new(id: String)`, `::generate()`, `as_str() -> &str`
-- **Acceptance Criteria**:
-  - 各ID型が型安全に区別される
-  - `generate()`でUUID v4形式のIDを生成
+- [x] 2. SecretData Value Object
+  - File: client/src/domain/value_objects/secret_data.rs
+  - Description: 秘密データ f(0)=secret を表現するValue Object with Zeroize
+  - Implementation: Derive Zeroize/ZeroizeOnDrop, Methods: new(), as_bytes(), len(), is_empty(), No Clone
+  - _Leverage: zeroize crate_
+  - _Requirements: REQ-1.2_
+  - _Prompt: Role: Rust Security Developer | Task: Create SecretData value object with secure memory handling using Zeroize | Restrictions: Do NOT implement Clone, must clear memory on drop | Success: Empty data returns DomainError, Zeroize executes on drop, debug output is redacted_
 
-#### Task 1.2: SecretData Value Object
-- **File**: `client/src/domain/value_objects/secret_data.rs`
-- **Status**: [ ]
-- **Description**: 秘密データ f(0)=secret を表現するValue Object
-- **Implementation**:
-  - `#[derive(Zeroize, ZeroizeOnDrop)]`
-  - フィールド: `data: Vec<u8>`
-  - Methods: `::new(data: Vec<u8>) -> Result<Self, DomainError>`, `as_bytes() -> &[u8]`
-  - Clone禁止
-- **Acceptance Criteria**:
-  - 空データでDomainError返却
-  - Drop時にZeroize実行
+- [x] 3. KeyPair Value Object
+  - File: client/src/domain/value_objects/key_pair.rs
+  - Description: PRE鍵ペア（skₒ, pkₒ）を表現するValue Object with Zeroize on secret_key
+  - Implementation: Zeroize only secret_key, Methods: generate(), public_key(), secret_key(), No Clone
+  - _Leverage: zeroize crate, umbral-pre crate_
+  - _Requirements: REQ-1.3_
+  - _Prompt: Role: Cryptography Developer | Task: Create KeyPair value object for PRE keys with selective Zeroize on secret_key only | Restrictions: No Clone trait, only secret_key gets zeroized | Success: Key generation works, secret_key zeroized on drop, public_key accessible_
 
-#### Task 1.3: KeyPair Value Object
-- **File**: `client/src/domain/value_objects/key_pair.rs`
-- **Status**: [ ]
-- **Description**: PRE鍵ペア（skₒ, pkₒ）を表現するValue Object
-- **Implementation**:
-  - `#[derive(Zeroize, ZeroizeOnDrop)]` (secret_keyのみ)
-  - フィールド: `secret_key: Vec<u8>`, `public_key: Vec<u8>`
-  - Methods: `::generate() -> Self`, `public_key() -> &[u8]`, `secret_key() -> &[u8]`
-  - Clone禁止
-- **Acceptance Criteria**:
-  - umbral-preで鍵ペア生成
-  - Drop時にsecret_keyのみZeroize
+- [x] 4. SymmetricKey Value Object
+  - File: client/src/domain/value_objects/symmetric_key.rs
+  - Description: AES-256共通鍵 kₒ を表現するValue Object with Zeroize
+  - Implementation: 32-byte key array, Derive Zeroize/ZeroizeOnDrop, Methods: generate(), as_bytes(), No Clone
+  - _Leverage: zeroize crate_
+  - _Requirements: REQ-1.4_
+  - _Prompt: Role: Cryptography Developer | Task: Create SymmetricKey value object for AES-256 with Zeroize | Restrictions: Fixed 32-byte size, no Clone | Success: 256-bit key generation, Zeroize on drop, tests pass_
 
-#### Task 1.4: SymmetricKey Value Object
-- **File**: `client/src/domain/value_objects/symmetric_key.rs`
-- **Status**: [ ]
-- **Description**: AES-256共通鍵 kₒ を表現するValue Object
-- **Implementation**:
-  - `#[derive(Zeroize, ZeroizeOnDrop)]`
-  - フィールド: `key: [u8; 32]`
-  - Methods: `::generate() -> Self`, `as_bytes() -> &[u8; 32]`
-  - Clone禁止
-- **Acceptance Criteria**:
-  - 256-bit鍵生成
-  - Drop時にZeroize実行
+- [x] 5. DomainError Extension
+  - File: client/src/domain/errors.rs
+  - Description: Domain層エラー型を拡張
+  - Implementation: thiserror::Error, variants: InvalidThreshold, InvalidIndex, EmptyData, InvalidStateTransition, NotFound, ShareCountMismatch, EntityValidation
+  - _Leverage: thiserror crate_
+  - _Requirements: REQ-1.5_
+  - _Prompt: Role: Rust Developer | Task: Extend DomainError enum with all required variants using thiserror | Restrictions: Must use thiserror for error implementation | Success: All error variants defined with proper messages_
 
-#### Task 1.5: DomainError拡張
-- **File**: `client/src/domain/errors.rs`
-- **Status**: [ ]
-- **Description**: Domain層エラー型を拡張
-- **Implementation**:
-  ```rust
-  #[derive(Debug, thiserror::Error)]
-  pub enum DomainError {
-      #[error("Invalid threshold: k={k} must be <= n={n} and k > 0")]
-      InvalidThreshold { k: u8, n: u8 },
-      #[error("Invalid index: {index} must be in range 1..={max}")]
-      InvalidIndex { index: u8, max: u8 },
-      #[error("Empty data not allowed for {field}")]
-      EmptyData { field: String },
-      #[error("Invalid state transition from {from:?} to {to:?}")]
-      InvalidStateTransition { from: String, to: String },
-      #[error("Entity not found: {entity_type} with id {id}")]
-      NotFound { entity_type: String, id: String },
-      #[error("Share count mismatch: expected {expected}, got {actual}")]
-      ShareCountMismatch { expected: u8, actual: usize },
-  }
-  ```
-- **Acceptance Criteria**:
-  - 全エラーバリアントが定義されている
-  - thiserror::Errorを使用
+## Group 2: Entities
 
-### Group 2: Entities
+- [x] 6. Secret Entity (Aggregate Root)
+  - File: client/src/domain/entities/secret.rs
+  - Description: 秘密のメタデータと状態を管理する集約ルート with state machine
+  - Implementation: SecretState enum (Initialized→Split→Distributed→Recovered), Methods: new(), split(), distribute(), getters
+  - Dependencies: Task 1, Task 5
+  - _Leverage: client/src/domain/value_objects/ids.rs, client/src/domain/errors.rs_
+  - _Requirements: REQ-2.1_
+  - _Prompt: Role: DDD Developer | Task: Create Secret aggregate root with state machine pattern for lifecycle management | Restrictions: Private fields with getter methods, validate threshold k<=n | Success: Invalid threshold returns DomainError, state transitions work correctly_
 
-#### Task 2.1: Secret Entity (Aggregate Root)
-- **File**: `client/src/domain/entities/secret.rs`
-- **Status**: [ ]
-- **Dependencies**: Task 1.1, Task 1.5
-- **Description**: 秘密のメタデータと状態を管理する集約ルート
-- **Implementation**:
-  ```rust
-  pub struct Secret {
-      id: SecretId,
-      threshold_k: u8,
-      threshold_n: u8,
-      state: SecretState,
-      capsule_id: Option<CapsuleId>,
-      share_collection_id: Option<ShareCollectionId>,
-      kfrag_ids: Vec<KFragId>,
-      owner_public_key: Vec<u8>,
-      requester_public_key: Option<Vec<u8>>,
-      created_at: u64,
-  }
+- [x] 7. ShareCollection Entity
+  - File: client/src/domain/entities/share.rs
+  - Description: n個の暗号化シェアを一括管理するEntity
+  - Implementation: ShareCollection + EncryptedShareData structs, Methods: new(), get_share(), get_shares_by_indices(), shares_count(), set_arweave_tx_id()
+  - Dependencies: Task 1, Task 5
+  - _Leverage: client/src/domain/value_objects/ids.rs, client/src/domain/errors.rs_
+  - _Requirements: REQ-2.2_
+  - _Prompt: Role: DDD Developer | Task: Create ShareCollection entity managing n encrypted Shamir shares | Restrictions: Validate share count matches n, private fields | Success: Share count mismatch returns DomainError, index-based retrieval works_
 
-  pub enum SecretState {
-      Initialized,
-      Split,
-      Distributed,
-      Recovered,
-  }
-  ```
-  - Methods: `::new(k, n, owner_pk)`, `split()`, `distribute()`, getters
-- **Acceptance Criteria**:
-  - 無効なthresholdでDomainError
-  - 状態遷移が正しく機能
+- [x] 8. Capsule Entity
+  - File: client/src/domain/entities/capsule.rs
+  - Description: Umbral PREカプセルを表現するEntity
+  - Implementation: Private fields, Methods: new(), getters, set_arweave_tx_id()
+  - Dependencies: Task 1, Task 5
+  - _Leverage: client/src/domain/value_objects/ids.rs, client/src/domain/errors.rs_
+  - _Requirements: REQ-2.3_
+  - _Prompt: Role: DDD Developer | Task: Create Capsule entity for Umbral PRE capsule data | Restrictions: Empty capsule_data returns DomainError, private fields | Success: Empty data validation works, getters return correct values_
 
-#### Task 2.2: ShareCollection Entity
-- **File**: `client/src/domain/entities/share_collection.rs`
-- **Status**: [ ]
-- **Dependencies**: Task 1.1, Task 1.5
-- **Description**: n個の暗号化シェアを一括管理するEntity
-- **Implementation**:
-  ```rust
-  pub struct ShareCollection {
-      id: ShareCollectionId,
-      secret_id: SecretId,
-      threshold_k: u8,
-      threshold_n: u8,
-      shares: Vec<EncryptedShareData>,
-      arweave_tx_id: Option<String>,
-      created_at: u64,
-  }
+- [x] 9. KFrag Entity
+  - File: client/src/domain/entities/kfrag.rs
+  - Description: 再暗号化鍵フラグメントを表現するEntity with Zeroize
+  - Implementation: Derive Zeroize/ZeroizeOnDrop, Methods: new(), getters, set_holder_process_id()
+  - Dependencies: Task 1, Task 5
+  - _Leverage: client/src/domain/value_objects/ids.rs, client/src/domain/errors.rs, zeroize crate_
+  - _Requirements: REQ-2.4_
+  - _Prompt: Role: Cryptography DDD Developer | Task: Create KFrag entity with Zeroize for secure memory handling | Restrictions: kfrag_data must be zeroized on drop, invalid holder_index returns error | Success: Zeroize on drop, validation works_
 
-  pub struct EncryptedShareData {
-      index: u8,
-      encrypted_data: Vec<u8>,
-  }
-  ```
-  - Methods: `::new()`, `get_share()`, `get_shares_by_indices()`, `shares_count()`, `set_arweave_tx_id()`
-- **Acceptance Criteria**:
-  - シェア数がnと一致しない場合DomainError
-  - インデックス指定でシェア取得可能
+- [x] 10. CFrag Entity
+  - File: client/src/domain/entities/cfrag.rs
+  - Description: 再暗号化フラグメントを表現するEntity with Zeroize
+  - Implementation: Derive Zeroize/ZeroizeOnDrop, Methods: new(), getters, verify()
+  - Dependencies: Task 1, Task 5
+  - _Leverage: client/src/domain/value_objects/ids.rs, client/src/domain/errors.rs, zeroize crate_
+  - _Requirements: REQ-2.5_
+  - _Prompt: Role: Cryptography DDD Developer | Task: Create CFrag entity with Zeroize for re-encrypted fragments | Restrictions: cfrag_data must be zeroized on drop | Success: Zeroize on drop, all getters work correctly_
 
-#### Task 2.3: Capsule Entity
-- **File**: `client/src/domain/entities/capsule.rs`
-- **Status**: [ ]
-- **Dependencies**: Task 1.1, Task 1.5
-- **Description**: Umbral PREカプセルを表現するEntity
-- **Implementation**:
-  ```rust
-  pub struct Capsule {
-      id: CapsuleId,
-      secret_id: SecretId,
-      capsule_data: Vec<u8>,
-      arweave_tx_id: Option<String>,
-      created_at: u64,
-  }
-  ```
-  - Methods: `::new()`, getters, `set_arweave_tx_id()`
-- **Acceptance Criteria**:
-  - 空のcapsule_dataでDomainError
+## Group 3: Module Integration
 
-#### Task 2.4: KFrag Entity
-- **File**: `client/src/domain/entities/kfrag.rs`
-- **Status**: [ ]
-- **Dependencies**: Task 1.1, Task 1.5
-- **Description**: 再暗号化鍵フラグメントを表現するEntity
-- **Implementation**:
-  ```rust
-  #[derive(Zeroize, ZeroizeOnDrop)]
-  pub struct KFrag {
-      id: KFragId,
-      secret_id: SecretId,
-      holder_index: u8,
-      #[zeroize(skip)]
-      holder_process_id: Option<String>,
-      kfrag_data: Vec<u8>,
-      created_at: u64,
-  }
-  ```
-  - Methods: `::new()`, getters, `set_holder_process_id()`
-- **Acceptance Criteria**:
-  - Drop時にkfrag_dataがZeroize
-  - 無効なholder_indexでDomainError
+- [x] 11. Value Objects Module Export
+  - File: client/src/domain/value_objects/mod.rs
+  - Description: Value Objectsのre-export
+  - Dependencies: Tasks 1-4
+  - _Leverage: Rust module system_
+  - _Requirements: REQ-3.1_
+  - _Prompt: Role: Rust Developer | Task: Configure module exports for all value objects | Restrictions: Follow Rust re-export conventions | Success: All value objects accessible from domain::value_objects_
 
-#### Task 2.5: CFrag Entity
-- **File**: `client/src/domain/entities/cfrag.rs`
-- **Status**: [ ]
-- **Dependencies**: Task 1.1, Task 1.5
-- **Description**: 再暗号化フラグメントを表現するEntity
-- **Implementation**:
-  ```rust
-  #[derive(Zeroize, ZeroizeOnDrop)]
-  pub struct CFrag {
-      id: CFragId,
-      secret_id: SecretId,
-      kfrag_id: KFragId,
-      holder_index: u8,
-      cfrag_data: Vec<u8>,
-      created_at: u64,
-  }
-  ```
-  - Methods: `::new()`, getters, `verify()`
-- **Acceptance Criteria**:
-  - Drop時にcfrag_dataがZeroize
+- [x] 12. Entities Module Export
+  - File: client/src/domain/entities/mod.rs
+  - Description: Entitiesのre-export
+  - Dependencies: Tasks 6-10
+  - _Leverage: Rust module system_
+  - _Requirements: REQ-3.2_
+  - _Prompt: Role: Rust Developer | Task: Configure module exports for all entities | Restrictions: Follow Rust re-export conventions | Success: All entities accessible from domain::entities_
 
-### Group 3: Module Integration
+- [x] 13. Domain Module Export
+  - File: client/src/domain/mod.rs
+  - Description: Domain層全体のre-export
+  - Dependencies: Tasks 5, 11, 12
+  - _Leverage: Rust module system_
+  - _Requirements: REQ-3.3_
+  - _Prompt: Role: Rust Developer | Task: Configure domain module exports for public API | Restrictions: Re-export commonly used types at domain level | Success: Public API is clean and accessible_
 
-#### Task 3.1: Value Objects Module Export
-- **File**: `client/src/domain/value_objects/mod.rs`
-- **Status**: [ ]
-- **Dependencies**: Task 1.1-1.4
-- **Description**: Value Objectsのre-export
-- **Implementation**:
-  ```rust
-  mod ids;
-  mod secret_data;
-  mod key_pair;
-  mod symmetric_key;
+## Group 4: Testing
 
-  pub use ids::*;
-  pub use secret_data::SecretData;
-  pub use key_pair::KeyPair;
-  pub use symmetric_key::SymmetricKey;
-  ```
+- [x] 14. Value Objects Unit Tests
+  - File: client/src/domain/value_objects/ (inline tests)
+  - Description: Value Objectsのユニットテスト
+  - Test Cases: ID generation/comparison, SecretData validation, KeyPair generation, SymmetricKey generation
+  - Dependencies: Group 1 complete
+  - _Leverage: Rust #[cfg(test)] inline tests_
+  - _Requirements: REQ-4.1_
+  - _Prompt: Role: Rust Test Developer | Task: Write comprehensive unit tests for all value objects | Restrictions: Inline tests using #[cfg(test)], test both valid and invalid inputs | Success: All tests pass, edge cases covered_
 
-#### Task 3.2: Entities Module Export
-- **File**: `client/src/domain/entities/mod.rs`
-- **Status**: [ ]
-- **Dependencies**: Task 2.1-2.5
-- **Description**: Entitiesのre-export
-- **Implementation**:
-  ```rust
-  mod secret;
-  mod share_collection;
-  mod capsule;
-  mod kfrag;
-  mod cfrag;
-
-  pub use secret::{Secret, SecretState};
-  pub use share_collection::{ShareCollection, EncryptedShareData};
-  pub use capsule::Capsule;
-  pub use kfrag::KFrag;
-  pub use cfrag::CFrag;
-  ```
-
-#### Task 3.3: Domain Module Export
-- **File**: `client/src/domain/mod.rs`
-- **Status**: [ ]
-- **Dependencies**: Task 1.5, Task 3.1, Task 3.2
-- **Description**: Domain層全体のre-export
-- **Implementation**:
-  ```rust
-  pub mod entities;
-  pub mod value_objects;
-  pub mod errors;
-
-  pub use errors::DomainError;
-  ```
-
-### Group 4: Testing
-
-#### Task 4.1: Value Objects Unit Tests
-- **File**: `client/src/domain/value_objects/` (各ファイル内 or tests/)
-- **Status**: [ ]
-- **Dependencies**: Group 1完了
-- **Description**: Value Objectsのユニットテスト
-- **Test Cases**:
-  - ID生成・比較テスト
-  - SecretData: 有効/無効入力テスト
-  - KeyPair: 生成・アクセステスト
-  - SymmetricKey: 生成・アクセステスト
-
-#### Task 4.2: Entities Unit Tests
-- **File**: `client/src/domain/entities/` (各ファイル内 or tests/)
-- **Status**: [ ]
-- **Dependencies**: Group 2完了
-- **Description**: Entitiesのユニットテスト
-- **Test Cases**:
-  - Secret: 状態遷移テスト、無効threshold拒否
-  - ShareCollection: シェア取得、カウント不一致エラー
-  - Capsule: 空データ拒否
-  - KFrag/CFrag: Zeroize確認
+- [x] 15. Entities Unit Tests
+  - File: client/src/domain/entities/ (inline tests)
+  - Description: Entitiesのユニットテスト
+  - Test Cases: Secret state transitions, ShareCollection retrieval, Capsule validation, KFrag/CFrag Zeroize
+  - Dependencies: Group 2 complete
+  - _Leverage: Rust #[cfg(test)] inline tests_
+  - _Requirements: REQ-4.2_
+  - _Prompt: Role: Rust Test Developer | Task: Write comprehensive unit tests for all entities | Restrictions: Test state machines, validation, Zeroize behavior | Success: All 49 tests pass, state transitions verified_
 
 ## Task Execution Order
 
 ```
 Phase 1: Foundation
-├── Task 1.1 (IDs)
-├── Task 1.2 (SecretData)
-├── Task 1.3 (KeyPair)
-├── Task 1.4 (SymmetricKey)
-└── Task 1.5 (DomainError)
+├── Task 1 (IDs)
+├── Task 2 (SecretData)
+├── Task 3 (KeyPair)
+├── Task 4 (SymmetricKey)
+└── Task 5 (DomainError)
 
-Phase 2: Entities (Task 1.1 + 1.5 完了後)
-├── Task 2.1 (Secret)
-├── Task 2.2 (ShareCollection)
-├── Task 2.3 (Capsule)
-├── Task 2.4 (KFrag)
-└── Task 2.5 (CFrag)
+Phase 2: Entities (Tasks 1 + 5 完了後)
+├── Task 6 (Secret)
+├── Task 7 (ShareCollection)
+├── Task 8 (Capsule)
+├── Task 9 (KFrag)
+└── Task 10 (CFrag)
 
 Phase 3: Integration (Group 1 + 2 完了後)
-├── Task 3.1 (value_objects/mod.rs)
-├── Task 3.2 (entities/mod.rs)
-└── Task 3.3 (domain/mod.rs)
+├── Task 11 (value_objects/mod.rs)
+├── Task 12 (entities/mod.rs)
+└── Task 13 (domain/mod.rs)
 
 Phase 4: Testing (Group 3 完了後)
-├── Task 4.1 (Value Objects Tests)
-└── Task 4.2 (Entities Tests)
+├── Task 14 (Value Objects Tests)
+└── Task 15 (Entities Tests)
 ```
 
 ## Completion Checklist
 
-全タスク完了後、以下を確認:
-- `make check` 成功
-- `make lint` 成功
-- `make test` 成功
+- [x] `make check` 成功
+- [x] `make lint` 成功
+- [x] `make test` 成功 (49 tests passed)
