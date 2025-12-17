@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/client-domain-entities/requirements.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2025-12-16T08:08:19.472Z",
+      "trigger": "initial",
+      "approvalId": "approval_1765872499462_1t4tqbp0b",
+      "approvalTitle": "Requirements: Client Domain Entities"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2025-12-17T02:45:48.225Z",
+      "trigger": "approved",
+      "approvalId": "approval_1765939102629_r2ym8ei9l",
+      "approvalTitle": "Requirements: Client Domain Entities (with Value Objects)"
+    }
+  ]
+}
