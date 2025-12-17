@@ -11,7 +11,6 @@ pub mod process;
 pub mod reencryption;
 pub mod rekey_fragment;
 pub mod secret_details;
-pub mod share;
 
 pub use access_request::AccessRequestEntityRepository;
 pub use capsule::CapsuleEntityRepository;
@@ -19,7 +18,6 @@ pub use process::ProcessEntityRepository;
 pub use reencryption::ReencryptionEntityRepository;
 pub use rekey_fragment::RekeyFragmentEntityRepository;
 pub use secret_details::SecretDetailsEntityRepository;
-pub use share::ShareEntityRepository;
 
 /// エンティティCRUD操作の汎用Repositoryインターフェース
 /// AO環境では同期実行が必須
