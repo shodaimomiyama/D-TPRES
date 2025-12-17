@@ -3,8 +3,10 @@
   "title": "D-TPRES 技術スタックドキュメント（修正版）",
   "filePath": ".spec-workflow/steering/tech.md",
   "type": "document",
-  "status": "pending",
+  "status": "rejected",
   "createdAt": "2025-12-15T16:49:00.648Z",
   "category": "steering",
-  "categoryName": "steering"
+  "categoryName": "steering",
+  "response": "改善ずみ",
+  "respondedAt": "2025-12-16T08:09:04.241Z"
 }
