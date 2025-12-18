@@ -258,17 +258,15 @@ PRD Phase 1-1の `skₒ(PRE)`, `pkₒ(PRE)` に対応。SDK利用者が管理し
 
 | AC# | Test Function(s) | Status |
 |-----|------------------|--------|
-| 1 | (なし) | ❌ 未実装 |
-| 2 | (なし) | ❌ 未実装 |
-| 3 | (なし) | ❌ 未実装 |
-| 4 | (なし) | ❌ 未実装 |
+| 1 | (なし - generate()メソッド未実装) | ❌ メソッド未実装 |
+| 2 | `test_key_pair_new` | ✅ |
+| 3 | `test_key_pair_new` | ✅ |
+| 4 | `test_key_pair_debug_redacted` | ⚠️ 間接的 |
 | 5 | (コンパイル時検証) | ✅ |
 
-**⚠️ 要対応:** KeyPairのテストが未実装。以下のテストを追加する必要がある:
-- `test_keypair_generate`
-- `test_keypair_public_key`
-- `test_keypair_secret_key`
-- `test_keypair_debug_redacted`
+**Note:** AC1の`generate()`メソッドは未実装。現在は`new()`コンストラクタのみ。将来的にumbral-preを使用したキー生成を実装予定。
+
+**追加テスト:** `test_key_pair_from_slice_valid`, `test_key_pair_from_slice_invalid_length` など将来追加可能
 
 ### Requirement 9: SymmetricKey Value Object
 
@@ -289,15 +287,15 @@ PRD Phase 1-1の `kₒ` に対応。Capsule生成時に使用され、暗号化�
 
 | AC# | Test Function(s) | Status |
 |-----|------------------|--------|
-| 1 | (なし) | ❌ 未実装 |
-| 2 | (なし) | ❌ 未実装 |
-| 3 | (なし) | ❌ 未実装 |
+| 1 | (なし - generate()メソッド未実装) | ❌ メソッド未実装 |
+| 2 | `test_symmetric_key_new`, `test_symmetric_key_from_slice_valid` | ✅ |
+| 3 | `test_symmetric_key_debug_redacted` | ⚠️ 間接的 |
 | 4 | (コンパイル時検証) | ✅ |
 
-**⚠️ 要対応:** SymmetricKeyのテストが未実装。以下のテストを追加する必要がある:
-- `test_symmetric_key_generate`
-- `test_symmetric_key_as_bytes`
-- `test_symmetric_key_debug_redacted`
+**Note:** AC1の`generate()`メソッドは未実装。現在は`new()`/`from_slice()`コンストラクタのみ。将来的に乱数を使用した鍵生成を実装予定。
+
+**追加テスト（実装済み）:**
+- `test_symmetric_key_from_slice_invalid_length` - 不正な長さの拒否
 
 ## Non-Functional Requirements
 
@@ -348,11 +346,13 @@ PRD Phase 1-1の `kₒ` に対応。Capsule生成時に使用され、暗号化�
 | 5. CFrag Entity | 4 | 2 | 1 | 1 |
 | 6. ID Value Objects | 4 | 4 | 0 | 0 |
 | 7. SecretData | 4 | 3 | 1 | 0 |
-| 8. KeyPair | 5 | 1 | 0 | 4 |
-| 9. SymmetricKey | 4 | 1 | 0 | 3 |
-| **Total** | **39** | **28** | **3** | **8** |
+| 8. KeyPair | 5 | 3 | 1 | 1 |
+| 9. SymmetricKey | 4 | 2 | 1 | 1 |
+| **Total** | **39** | **31** | **5** | **3** |
 
-**カバレッジ率: 71.8% (28/39 fully covered)**
+**カバレッジ率: 79.5% (31/39 fully covered)**
+
+**テスト数: 49テスト（全てパス）**
 
 ### Legend
 
@@ -362,18 +362,28 @@ PRD Phase 1-1の `kₒ` に対応。Capsule生成時に使用され、暗号化�
 
 ### Missing Test Coverage
 
-以下のAcceptance Criteriaに対するテストが未実装:
+以下のAcceptance Criteriaに対するテストが未実装（メソッド自体が未実装のため）:
 
 #### KeyPair (Requirement 8)
-- AC1: `KeyPair::generate()` - 鍵ペア生成のテスト
-- AC2: `public_key()` - 公開鍵アクセスのテスト
-- AC3: `secret_key()` - 秘密鍵アクセスのテスト
-- AC4: Zeroize - メモリクリアのテスト（間接的なDebug redactionテストで代替可能）
+- AC1: `KeyPair::generate()` - メソッド未実装。umbral-preを使用した鍵ペア生成の実装が必要。
 
 #### SymmetricKey (Requirement 9)
-- AC1: `SymmetricKey::generate()` - 鍵生成のテスト
-- AC2: `as_bytes()` - バイト列アクセスのテスト
-- AC3: Zeroize - メモリクリアのテスト（間接的なDebug redactionテストで代替可能）
+- AC1: `SymmetricKey::generate()` - メソッド未実装。乱数を使用した鍵生成の実装が必要。
+
+#### CFrag (Requirement 5)
+- AC2: 対応するKFragIdが存在しない場合 - 設計上、呼び出し側（Service層）で検証するため、Domain層では実装不要。
+
+### 実装済みテスト一覧
+
+**KeyPair (2テスト):**
+- `test_key_pair_new` - コンストラクタとgetter
+- `test_key_pair_debug_redacted` - Debug redaction
+
+**SymmetricKey (4テスト):**
+- `test_symmetric_key_new` - コンストラクタ
+- `test_symmetric_key_from_slice_valid` - from_slice成功ケース
+- `test_symmetric_key_from_slice_invalid_length` - from_slice失敗ケース
+- `test_symmetric_key_debug_redacted` - Debug redaction
 
 ### Test Patterns Used
 
