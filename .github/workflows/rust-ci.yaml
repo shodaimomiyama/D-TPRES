@@ -13,8 +13,11 @@ env:
 
 jobs:
   check:
-    name: Check
+    name: Check (${{ matrix.project }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: [client, ao/contracts]
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rs/toolchain@v1
@@ -26,10 +29,14 @@ jobs:
         with:
           command: check
           args: --all-targets
+        working-directory: ${{ matrix.project }}
 
   fmt:
-    name: Rustfmt
+    name: Rustfmt (${{ matrix.project }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: [client, ao/contracts]
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rs/toolchain@v1
@@ -42,10 +49,14 @@ jobs:
         with:
           command: fmt
           args: --all -- --check
+        working-directory: ${{ matrix.project }}
 
   clippy:
-    name: Clippy
+    name: Clippy (${{ matrix.project }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: [client, ao/contracts]
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rs/toolchain@v1
@@ -58,10 +69,14 @@ jobs:
         with:
           command: clippy
           args: --all-targets -- -D warnings -A clippy::module_inception
+        working-directory: ${{ matrix.project }}
 
   security-audit:
-    name: Security Audit
+    name: Security Audit (${{ matrix.project }})
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: [client, ao/contracts]
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rs/toolchain@v1
@@ -69,15 +84,19 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: audit
-          args: --deny warnings
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+      - name: Run cargo audit
+        run: cargo audit --deny warnings
+        working-directory: ${{ matrix.project }}
 
   test:
-    name: Test
+    name: Test (${{ matrix.project }})
     runs-on: ubuntu-latest
     needs: [check, fmt, clippy, security-audit]
+    strategy:
+      matrix:
+        project: [client, ao/contracts]
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rs/toolchain@v1
@@ -86,13 +105,11 @@ jobs:
           toolchain: stable
           override: true
       - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --workspace --all-targets --verbose -- --nocapture
+        run: cargo test --all-targets --verbose -- --nocapture
+        working-directory: ${{ matrix.project }}
 
   wasm-build:
-    name: WASM Build
+    name: WASM Build (client)
     runs-on: ubuntu-latest
     needs: [test]
     steps:
@@ -102,8 +119,9 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-          components: wasm32-unknown-unknown
+          target: wasm32-unknown-unknown
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - name: Build WASM
         run: wasm-pack build --target web
+        working-directory: client
