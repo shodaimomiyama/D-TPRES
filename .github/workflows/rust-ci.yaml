@@ -25,10 +25,8 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --all-targets
+      - name: Run cargo check
+        run: cargo check --all-targets
         working-directory: ${{ matrix.project }}
 
   fmt:
@@ -45,10 +43,8 @@ jobs:
           toolchain: stable
           override: true
           components: rustfmt
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+      - name: Run cargo fmt
+        run: cargo fmt --all -- --check
         working-directory: ${{ matrix.project }}
 
   clippy:
@@ -65,10 +61,8 @@ jobs:
           toolchain: stable
           override: true
           components: clippy
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets -- -D warnings -A clippy::module_inception
+      - name: Run cargo clippy
+        run: cargo clippy --all-targets -- -D warnings -A clippy::module_inception
         working-directory: ${{ matrix.project }}
 
   security-audit:
