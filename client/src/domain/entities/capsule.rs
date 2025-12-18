@@ -1,38 +1,187 @@
-//! CapsuleEntity - PRE capsule representation
+//! Capsule Entity
 //!
-//! Capsule information for Proxy Re-Encryption (Phase 1).
-//! Used in Phase 4 for re-encryption operations.
+//! Represents an Umbral PRE capsule produced during encryption.
+//! Capsuleₒ = PRE_Enc(pkₒ, kₒ) - used for re-encryption to requester's key.
 
-use serde::{Deserialize, Serialize};
+use crate::domain::errors::DomainError;
+use crate::domain::value_objects::{CapsuleId, SecretId};
 
-/// Capsule entity - PRE encryption capsule
+/// Capsule entity
 ///
-/// Generated in Phase 1, used in Phase 4 re-encryption
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
-pub struct CapsuleEntity {
-    pub capsule_id: String,
+/// Holds a serialized Umbral Capsule generated during PRE encryption.
+/// The capsule enables proxy re-encryption from owner to requester.
+///
+/// # Note
+/// Capsule data is public cryptographic material (not sensitive).
+#[derive(Debug, Clone)]
+pub struct Capsule {
+    id: CapsuleId,
+    secret_id: SecretId,
+    capsule_data: Vec<u8>,
+    owner_public_key: Vec<u8>,
+    arweave_tx_id: Option<String>,
+    created_at: u64,
+}
 
-    pub data_id: String,
+impl Capsule {
+    /// Create a new Capsule
+    ///
+    /// # Arguments
+    /// * `secret_id` - ID of the parent Secret
+    /// * `capsule_data` - Serialized Umbral Capsule bytes
+    /// * `owner_public_key` - Owner's PRE public key
+    ///
+    /// # Errors
+    /// Returns error if capsule_data or owner_public_key is empty
+    pub fn new(
+        secret_id: SecretId,
+        capsule_data: Vec<u8>,
+        owner_public_key: Vec<u8>,
+    ) -> Result<Self, DomainError> {
+        if capsule_data.is_empty() {
+            return Err(DomainError::EntityValidation {
+                entity_type: "Capsule".to_string(),
+                field: "capsule_data".to_string(),
+                message: "Capsule data cannot be empty".to_string(),
+            });
+        }
 
-    pub secret_id: String,
+        if owner_public_key.is_empty() {
+            return Err(DomainError::EntityValidation {
+                entity_type: "Capsule".to_string(),
+                field: "owner_public_key".to_string(),
+                message: "Owner public key cannot be empty".to_string(),
+            });
+        }
 
-    // ShareEntityのthreshold_indexと対応させることで、再暗号化時に正しいカプセルとシェアのペアを特定
-    pub capsule_index: u8,
+        Ok(Self {
+            id: CapsuleId::generate(),
+            secret_id,
+            capsule_data,
+            owner_public_key,
+            arweave_tx_id: None,
+            created_at: current_timestamp(),
+        })
+    }
 
-    // PRE_Enc(pkO, Ki)で生成したカプセル、pkOからpkAへの変換情報を含むが、秘密情報は含まない
-    pub capsule_data: Vec<u8>,
+    /// Reconstruct from stored data (for repository use)
+    pub fn from_stored(
+        id: CapsuleId,
+        secret_id: SecretId,
+        capsule_data: Vec<u8>,
+        owner_public_key: Vec<u8>,
+        arweave_tx_id: Option<String>,
+        created_at: u64,
+    ) -> Self {
+        Self {
+            id,
+            secret_id,
+            capsule_data,
+            owner_public_key,
+            arweave_tx_id,
+            created_at,
+        }
+    }
 
-    // カプセルとシェアの1対1対応を明示的に管理、再暗号化時の整合性チェックに使用
-    pub corresponding_ciphertext_id: String,
+    /// Get the capsule ID
+    pub fn id(&self) -> &CapsuleId {
+        &self.id
+    }
 
-    pub owner_public_key: Vec<u8>,
+    /// Get the parent secret ID
+    pub fn secret_id(&self) -> &SecretId {
+        &self.secret_id
+    }
 
-    // カプセル生成時のランダム性を保存することで、必要時に再暗号化鍵の生成過程を検証可能にする
-    pub encrypted_random_key: Vec<u8>,
+    /// Get the serialized capsule data
+    pub fn capsule_data(&self) -> &[u8] {
+        &self.capsule_data
+    }
 
-    pub created_at: u64,
+    /// Get the owner's public key
+    pub fn owner_public_key(&self) -> &[u8] {
+        &self.owner_public_key
+    }
 
-    // AOのステートレス環境で同時更新を検出するための楽観的ロック
-    pub version: u64,
+    /// Get Arweave transaction ID if stored
+    pub fn arweave_tx_id(&self) -> Option<&str> {
+        self.arweave_tx_id.as_deref()
+    }
+
+    /// Set Arweave transaction ID after storage
+    pub fn set_arweave_tx_id(&mut self, tx_id: String) {
+        self.arweave_tx_id = Some(tx_id);
+    }
+
+    /// Get creation timestamp
+    pub fn created_at(&self) -> u64 {
+        self.created_at
+    }
+}
+
+/// Get current timestamp in seconds
+fn current_timestamp() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_capsule_new_valid() {
+        let secret_id = SecretId::generate();
+        let capsule_data = vec![1u8; 100];
+        let owner_pk = vec![2u8; 33];
+
+        let capsule =
+            Capsule::new(secret_id.clone(), capsule_data.clone(), owner_pk.clone()).unwrap();
+
+        assert_eq!(capsule.secret_id(), &secret_id);
+        assert_eq!(capsule.capsule_data(), capsule_data.as_slice());
+        assert_eq!(capsule.owner_public_key(), owner_pk.as_slice());
+        assert!(capsule.arweave_tx_id().is_none());
+    }
+
+    #[test]
+    fn test_capsule_empty_data_error() {
+        let secret_id = SecretId::generate();
+        let result = Capsule::new(secret_id, vec![], vec![1u8; 33]);
+
+        assert!(result.is_err());
+        if let Err(DomainError::EntityValidation { field, .. }) = result {
+            assert_eq!(field, "capsule_data");
+        } else {
+            panic!("Expected EntityValidation error");
+        }
+    }
+
+    #[test]
+    fn test_capsule_empty_public_key_error() {
+        let secret_id = SecretId::generate();
+        let result = Capsule::new(secret_id, vec![1u8; 100], vec![]);
+
+        assert!(result.is_err());
+        if let Err(DomainError::EntityValidation { field, .. }) = result {
+            assert_eq!(field, "owner_public_key");
+        } else {
+            panic!("Expected EntityValidation error");
+        }
+    }
+
+    #[test]
+    fn test_capsule_set_arweave_tx_id() {
+        let secret_id = SecretId::generate();
+        let mut capsule = Capsule::new(secret_id, vec![1u8; 100], vec![2u8; 33]).unwrap();
+
+        assert!(capsule.arweave_tx_id().is_none());
+
+        capsule.set_arweave_tx_id("tx-456".to_string());
+
+        assert_eq!(capsule.arweave_tx_id(), Some("tx-456"));
+    }
 }

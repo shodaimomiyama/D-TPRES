@@ -6,27 +6,17 @@
 
 pub mod entities;
 pub mod errors;
-pub mod repositories;
+pub mod value_objects;
 
-// Re-export commonly used types
+// Re-export entities
 pub use entities::{
-    AccessRecord, CFragData, EntityReferences, EvmVerificationData, HolderData, HolderFragmentInfo,
-    OwnerData, PerformanceMetrics, ProcessEntity as Process, ProofPkgData, RequesterData,
-    SecretIndex,
-};
-pub use entities::{
-    AccessRequestEntity, CapsuleEntity, ProcessEntity, ReencryptionEntity, RekeyFragmentEntity,
-    SecretDetailsEntity, ShareEntity,
-};
-pub use entities::{
-    AccessRequestStatus, AccessResult, CryptoOperation, CryptoPhase, ProcessRole,
-    ReencryptionStatus, RekeyFragmentStatus, SecretStatus,
+    CFrag, Capsule, EncryptedShareData, KFrag, Secret, SecretState, ShareCollection,
 };
 
-pub use repositories::{
-    AccessRequestEntityRepository, CapsuleEntityRepository, ProcessEntityRepository,
-    ReencryptionEntityRepository, RekeyFragmentEntityRepository, SecretDetailsEntityRepository,
-    ShareEntityRepository,
+// Re-export value objects
+pub use value_objects::{
+    CFragId, CapsuleId, KFragId, KeyPair, SecretData, SecretId, ShareCollectionId, SymmetricKey,
+    SYMMETRIC_KEY_SIZE,
 };
 
 pub use errors::{DomainError, DomainResult};

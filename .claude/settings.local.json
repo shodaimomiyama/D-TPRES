@@ -35,7 +35,8 @@
       "Bash(rustup target list:*)",
       "Bash(cargo wasm:*)",
       "Bash(npm ls:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "mcp__spec-workflow__log-implementation"
     ],
     "deny": []
   },
