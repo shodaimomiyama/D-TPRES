@@ -40,6 +40,17 @@ Secret Entityはメタデータのみを保持。秘密の実データ `f(0)=sec
 3. WHEN Secret.split()が呼ばれた THEN システム SHALL ステートをSplitに遷移し、関連するShareCollectionIdを記録する
 4. WHEN Secret.capsule_id()が呼ばれた THEN システム SHALL 関連するCapsuleのID（Option）を返す
 
+#### Test Coverage
+
+| AC# | Test Function(s) | Status |
+|-----|------------------|--------|
+| 1 | `test_secret_new_valid` | ✅ |
+| 2 | `test_secret_new_invalid_threshold_zero`, `test_secret_new_invalid_threshold_k_greater_than_n` | ✅ |
+| 3 | `test_secret_split_transition`, `test_secret_invalid_split_from_wrong_state` | ✅ |
+| 4 | `test_secret_new_valid`, `test_secret_split_transition` | ✅ |
+
+**追加テスト（要件外）:** `test_secret_new_empty_public_key`, `test_secret_distribute_transition`, `test_secret_distribute_wrong_kfrag_count`
+
 ### Requirement 2: ShareCollection Entity（暗号化シェアコレクション）
 
 **User Story:** As a 開発者, I want ShareCollectionエンティティでn個の暗号化シャミアシェアを一括管理したい, so that Arweaveに効率的に永続化し、アトミックな整合性を保証できる
@@ -69,6 +80,19 @@ Phase 3: ShareCollection Entity → [Arweave取得: 1tx] → C₁...Cₙ → [AE
 5. WHEN collection.get_shares_by_indices(indices)が呼ばれた THEN システム SHALL 指定された複数インデックスの暗号化シェアデータを返す
 6. WHEN collection.set_arweave_tx_id()が呼ばれた THEN システム SHALL ArweaveトランザクションIDを記録する
 
+#### Test Coverage
+
+| AC# | Test Function(s) | Status |
+|-----|------------------|--------|
+| 1 | `test_share_collection_new_valid` | ✅ |
+| 2 | `test_share_collection_wrong_share_count` | ✅ |
+| 3 | `test_share_collection_invalid_index_zero`, `test_share_collection_invalid_index_too_high` | ✅ |
+| 4 | `test_share_collection_get_share` | ✅ |
+| 5 | `test_share_collection_get_shares_by_indices` | ✅ |
+| 6 | `test_share_collection_set_arweave_tx_id` | ✅ |
+
+**追加テスト（要件外）:** `test_share_collection_duplicate_index`, `test_share_collection_empty_data`
+
 ### Requirement 3: Capsule Entity（PREカプセル）
 
 **User Story:** As a 開発者, I want CapsuleエンティティでUmbralカプセルを表現したい, so that プロキシ再暗号化に必要なカプセルを管理できる
@@ -85,6 +109,17 @@ PRDにおけるCapsule:
 2. WHEN 無効なカプセルデータ（空または不正フォーマット）が渡された THEN システム SHALL DomainErrorを返す
 3. WHEN Capsule.arweave_tx_id()が呼ばれた THEN システム SHALL Arweaveトランザクションへの参照（Option）を返す
 4. WHEN Capsule.set_arweave_tx_id()が呼ばれた THEN システム SHALL ArweaveトランザクションIDを記録する
+
+#### Test Coverage
+
+| AC# | Test Function(s) | Status |
+|-----|------------------|--------|
+| 1 | `test_capsule_new_valid` | ✅ |
+| 2 | `test_capsule_empty_data_error` | ✅ |
+| 3 | `test_capsule_set_arweave_tx_id` | ✅ |
+| 4 | `test_capsule_set_arweave_tx_id` | ✅ |
+
+**追加テスト（要件外）:** `test_capsule_empty_public_key_error`
 
 ### Requirement 4: KFrag Entity（鍵フラグメント）
 
@@ -104,6 +139,19 @@ PRDにおけるKFrag:
 3. IF KFragがDropされた THEN システム SHALL ZeroizeトレイトによりkFragデータをメモリからクリアする
 4. WHEN KFrag.holder_process_id()が呼ばれた THEN システム SHALL 割り当てられたHolder-ProcessのID（Option）を返す
 
+#### Test Coverage
+
+| AC# | Test Function(s) | Status |
+|-----|------------------|--------|
+| 1 | `test_kfrag_new_valid` | ✅ |
+| 2 | `test_kfrag_invalid_index_zero`, `test_kfrag_invalid_index_too_high` | ✅ |
+| 3 | `test_kfrag_debug_redacted` | ⚠️ 間接的 |
+| 4 | `test_kfrag_set_holder_process_id` | ✅ |
+
+**Note:** AC3のZeroizeテストはDebug出力のredactionで間接的に確認。直接的なメモリクリアテストは実装困難。
+
+**追加テスト（要件外）:** `test_kfrag_empty_data_error`
+
 ### Requirement 5: CFrag Entity（再暗号化フラグメント）
 
 **User Story:** As a 開発者, I want CFragエンティティで再暗号化されたフラグメントを表現したい, so that Holder-ProcessからRequesterへの再暗号化結果を管理できる
@@ -121,6 +169,19 @@ PRDにおけるCFrag:
 2. WHEN 対応するKFragIdが存在しない THEN システム SHALL DomainErrorを返す
 3. IF CFragがDropされた THEN システム SHALL ZeroizeトレイトによりcFragデータをメモリからクリアする
 4. WHEN CFrag.verify()が呼ばれた THEN システム SHALL カプセルとの整合性を検証しResult<bool>を返す
+
+#### Test Coverage
+
+| AC# | Test Function(s) | Status |
+|-----|------------------|--------|
+| 1 | `test_cfrag_new_valid` | ✅ |
+| 2 | (なし - 設計上、呼び出し側で検証) | ⚠️ N/A |
+| 3 | `test_cfrag_debug_redacted` | ⚠️ 間接的 |
+| 4 | `test_cfrag_verify_valid`, `test_cfrag_verify_empty_capsule_error` | ✅ |
+
+**Note:** AC2はCFrag::newがKFragIdを受け取る設計のため、存在確認は呼び出し側（Service層）で行う。AC3はDebug出力のredactionで間接的に確認。
+
+**追加テスト（要件外）:** `test_cfrag_empty_data_error`
 
 ## Requirements: Value Objects
 
@@ -144,6 +205,15 @@ PRDにおけるCFrag:
    - `KFragId` - KFrag Entity用
    - `CFragId` - CFrag Entity用
 
+#### Test Coverage
+
+| AC# | Test Function(s) | Status |
+|-----|------------------|--------|
+| 1 | `test_secret_id_new_and_as_str`, `test_secret_id_generate` | ✅ |
+| 2 | `test_secret_id_equality` | ✅ |
+| 3 | `test_type_safety_compile_time` | ✅ |
+| 4 | `test_share_collection_id`, `test_capsule_id`, `test_kfrag_id`, `test_cfrag_id` | ✅ |
+
 ### Requirement 7: SecretData Value Object
 
 **User Story:** As a 開発者, I want SecretData Value Objectで秘密の実データを扱いたい, so that 秘密を安全に一時処理できる
@@ -158,6 +228,15 @@ PRD Phase 1-1の `f(0)=secret` に対応。SDK利用者から受け取り、シ�
 2. WHEN 空のバイト列が渡された THEN システム SHALL DomainErrorを返す
 3. IF SecretDataがDropされた THEN システム SHALL Zeroizeによりメモリをクリアする
 4. SecretData SHALL Cloneトレイトを実装しない（偶発的コピー防止）
+
+#### Test Coverage
+
+| AC# | Test Function(s) | Status |
+|-----|------------------|--------|
+| 1 | `test_secret_data_new_valid` | ✅ |
+| 2 | `test_secret_data_new_empty_error` | ✅ |
+| 3 | `test_secret_data_debug_redacted` | ⚠️ 間接的 |
+| 4 | (コンパイル時検証) | ✅ |
 
 ### Requirement 8: KeyPair Value Object
 
@@ -175,6 +254,22 @@ PRD Phase 1-1の `skₒ(PRE)`, `pkₒ(PRE)` に対応。SDK利用者が管理し
 4. IF KeyPairがDropされた THEN システム SHALL Zeroizeにより秘密鍵をメモリからクリアする
 5. KeyPair SHALL Cloneトレイトを実装しない（秘密鍵の偶発的コピー防止）
 
+#### Test Coverage
+
+| AC# | Test Function(s) | Status |
+|-----|------------------|--------|
+| 1 | (なし) | ❌ 未実装 |
+| 2 | (なし) | ❌ 未実装 |
+| 3 | (なし) | ❌ 未実装 |
+| 4 | (なし) | ❌ 未実装 |
+| 5 | (コンパイル時検証) | ✅ |
+
+**⚠️ 要対応:** KeyPairのテストが未実装。以下のテストを追加する必要がある:
+- `test_keypair_generate`
+- `test_keypair_public_key`
+- `test_keypair_secret_key`
+- `test_keypair_debug_redacted`
+
 ### Requirement 9: SymmetricKey Value Object
 
 **User Story:** As a 開発者, I want SymmetricKey Value ObjectでAES共通鍵を扱いたい, so that シェア暗号化用の鍵を安全に管理できる
@@ -189,6 +284,20 @@ PRD Phase 1-1の `kₒ` に対応。Capsule生成時に使用され、暗号化�
 2. WHEN SymmetricKey.as_bytes()が呼ばれた THEN システム SHALL 鍵バイト列への参照を返す
 3. IF SymmetricKeyがDropされた THEN システム SHALL Zeroizeによりメモリをクリアする
 4. SymmetricKey SHALL Cloneトレイトを実装しない（偶発的コピー防止）
+
+#### Test Coverage
+
+| AC# | Test Function(s) | Status |
+|-----|------------------|--------|
+| 1 | (なし) | ❌ 未実装 |
+| 2 | (なし) | ❌ 未実装 |
+| 3 | (なし) | ❌ 未実装 |
+| 4 | (コンパイル時検証) | ✅ |
+
+**⚠️ 要対応:** SymmetricKeyのテストが未実装。以下のテストを追加する必要がある:
+- `test_symmetric_key_generate`
+- `test_symmetric_key_as_bytes`
+- `test_symmetric_key_debug_redacted`
 
 ## Non-Functional Requirements
 
@@ -225,3 +334,54 @@ PRD Phase 1-1の `kₒ` に対応。Capsule生成時に使用され、暗号化�
 
 - **ドキュメント**: 各公開APIにrustdocコメントを追加
 - **Debug実装**: デバッグ用にDebugトレイトを実装（秘密データは隠蔽）
+
+## Test Coverage Summary
+
+### Overall Statistics
+
+| Requirement | Total AC | Covered | Partial | Missing |
+|-------------|----------|---------|---------|---------|
+| 1. Secret Entity | 4 | 4 | 0 | 0 |
+| 2. ShareCollection Entity | 6 | 6 | 0 | 0 |
+| 3. Capsule Entity | 4 | 4 | 0 | 0 |
+| 4. KFrag Entity | 4 | 3 | 1 | 0 |
+| 5. CFrag Entity | 4 | 2 | 1 | 1 |
+| 6. ID Value Objects | 4 | 4 | 0 | 0 |
+| 7. SecretData | 4 | 3 | 1 | 0 |
+| 8. KeyPair | 5 | 1 | 0 | 4 |
+| 9. SymmetricKey | 4 | 1 | 0 | 3 |
+| **Total** | **39** | **28** | **3** | **8** |
+
+**カバレッジ率: 71.8% (28/39 fully covered)**
+
+### Legend
+
+- ✅ **Covered**: テストが実装され、ACを完全にカバー
+- ⚠️ **Partial**: 間接的なテスト（例: Debug redactionでZeroizeを確認）またはN/A
+- ❌ **Missing**: テストが未実装
+
+### Missing Test Coverage
+
+以下のAcceptance Criteriaに対するテストが未実装:
+
+#### KeyPair (Requirement 8)
+- AC1: `KeyPair::generate()` - 鍵ペア生成のテスト
+- AC2: `public_key()` - 公開鍵アクセスのテスト
+- AC3: `secret_key()` - 秘密鍵アクセスのテスト
+- AC4: Zeroize - メモリクリアのテスト（間接的なDebug redactionテストで代替可能）
+
+#### SymmetricKey (Requirement 9)
+- AC1: `SymmetricKey::generate()` - 鍵生成のテスト
+- AC2: `as_bytes()` - バイト列アクセスのテスト
+- AC3: Zeroize - メモリクリアのテスト（間接的なDebug redactionテストで代替可能）
+
+### Test Patterns Used
+
+1. **Success Pattern**: 有効入力での生成と全getterの検証
+2. **Validation Pattern**: 無効入力（空データ、境界外、重複等）でのエラー確認
+3. **State Machine Pattern**: 有効/無効な状態遷移の検証
+4. **Mutation Pattern**: setter操作と永続性の確認
+5. **Query Pattern**: 単一/複数アイテムの取得操作
+6. **Security Pattern**: Debug出力での秘密データ redaction
+7. **Type Safety Pattern**: コンパイル時型安全性の文書化
+8. **Crypto Pattern**: 暗号操作の正当性検証
