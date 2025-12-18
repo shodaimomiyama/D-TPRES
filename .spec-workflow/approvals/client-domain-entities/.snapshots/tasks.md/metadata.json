@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/client-domain-entities/tasks.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2025-12-17T04:39:40.566Z",
+      "trigger": "initial",
+      "approvalId": "approval_1765946380555_2l8an1b2u",
+      "approvalTitle": "Tasks Document - Client Domain Entities"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2025-12-17T04:40:38.498Z",
+      "trigger": "approved",
+      "approvalId": "approval_1765946380555_2l8an1b2u",
+      "approvalTitle": "Tasks Document - Client Domain Entities"
+    }
+  ]
+}
