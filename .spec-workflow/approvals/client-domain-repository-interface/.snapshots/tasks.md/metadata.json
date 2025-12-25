@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/client-domain-repository-interface/tasks.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2025-12-24T23:45:41.099Z",
+      "trigger": "initial",
+      "approvalId": "approval_1766619941036_hlq4hzo9r",
+      "approvalTitle": "Tasks Document - Repository Interface Implementation Tasks"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2025-12-25T03:12:33.587Z",
+      "trigger": "approved",
+      "approvalId": "approval_1766619941036_hlq4hzo9r",
+      "approvalTitle": "Tasks Document - Repository Interface Implementation Tasks"
+    }
+  ]
+}

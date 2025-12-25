@@ -16,7 +16,7 @@ D-TPRES/
 │   │   ├── lib.rs                  # ライブラリエントリーポイント
 │   │   ├── di.rs                   # 依存性注入コンテナ
 │   │   │
-│   │   ├── usecase/                # UseCase層（Facade）
+│   │   ├── actions/                # Actions層（Facade） ※旧: usecase/
 │   │   │   ├── mod.rs
 │   │   │   ├── share.rs            # share() API
 │   │   │   ├── recover.rs          # recover() API
@@ -25,15 +25,13 @@ D-TPRES/
 │   │   ├── controller/             # Controller層
 │   │   │   ├── mod.rs
 │   │   │   ├── validator.rs        # 入力の妥当性検証
-│   │   │   └── extractor.rs        # Service層向けDTO変換
+│   │   │   └── extractor.rs        # UseCase層向けDTO変換
 │   │   │
-│   │   ├── service/                # Service層
+│   │   ├── usecase/                # UseCase層 ※旧: service/
 │   │   │   ├── mod.rs
-│   │   │   ├── error.rs            # Service層エラー定義
-│   │   │   ├── workflow/           # WorkflowService
-│   │   │   │   ├── mod.rs
-│   │   │   │   ├── secret_sharing.rs  # Phase 1処理
-│   │   │   │   └── secret_recovery.rs # Phase 3処理
+│   │   │   ├── error.rs            # UseCase層エラー定義
+│   │   │   ├── secret_sharing_service.rs  # Phase 1処理
+│   │   │   ├── secret_recovery_service.rs # Phase 3処理
 │   │   │   └── core/               # CoreService
 │   │   │       ├── mod.rs
 │   │   │       ├── crypto.rs       # CryptoService（TPRE・Shamir）
@@ -45,25 +43,29 @@ D-TPRES/
 │   │   │   ├── entities/           # エンティティ定義（5つ）
 │   │   │   │   ├── mod.rs
 │   │   │   │   ├── secret.rs       # Secret（集約ルート）
-│   │   │   │   ├── share.rs        # Share（Shamirシェア）
+│   │   │   │   ├── share.rs        # ShareCollection（Shamirシェアコレクション）
 │   │   │   │   ├── capsule.rs      # Capsule（PREカプセル）
 │   │   │   │   ├── kfrag.rs        # KFrag（鍵フラグメント）
 │   │   │   │   └── cfrag.rs        # CFrag（再暗号化フラグメント）
-│   │   │   └── repositories/       # Repository Interface（5トレイト）
+│   │   │   └── value_objects/      # Value Objects
 │   │   │       ├── mod.rs
-│   │   │       ├── secret.rs       # SecretRepository trait
-│   │   │       ├── share.rs        # ShareRepository trait
-│   │   │       ├── capsule.rs      # CapsuleRepository trait
-│   │   │       ├── kfrag.rs        # KFragRepository trait
-│   │   │       └── cfrag.rs        # CFragRepository trait
+│   │   │       └── ids.rs          # SecretId, CapsuleId, etc.
 │   │   │
-│   │   └── infrastructure/         # Infrastructure層
+│   │   ├── repositories/           # Repository層（Repository Interface）
+│   │   │   ├── mod.rs              # 基本Repository trait + モジュールエクスポート
+│   │   │   ├── secret_interface.rs # SecretRepository trait
+│   │   │   ├── share_interface.rs  # ShareCollectionRepository trait
+│   │   │   ├── capsule_interface.rs # CapsuleRepository trait
+│   │   │   ├── kfrag_interface.rs  # KFragRepository trait
+│   │   │   └── cfrag_interface.rs  # CFragRepository trait
+│   │   │
+│   │   └── adapter/                # Adapter層（Repository Interfaceを実装）
 │   │       ├── mod.rs
-│   │       ├── errors.rs           # Infrastructure層エラー定義
-│   │       ├── repositories/       # Repository実装（Arweave永続化）
+│   │       ├── errors.rs           # Adapter層エラー定義
+│   │       ├── repository_impl/    # Repository実装（Arweave永続化）
 │   │       │   ├── mod.rs
 │   │       │   ├── secret_impl.rs  # ArweaveSecretRepository
-│   │       │   ├── share_impl.rs   # ArweaveShareRepository
+│   │       │   ├── share_impl.rs   # ArweaveShareCollectionRepository
 │   │       │   ├── capsule_impl.rs # ArweaveCapsuleRepository
 │   │       │   ├── kfrag_impl.rs   # ArweaveKFragRepository
 │   │       │   └── cfrag_impl.rs   # ArweaveCFragRepository
@@ -134,32 +136,37 @@ D-TPRES/
 
 **責務**: Phase 1（秘密分割）とPhase 3（秘密復元）のローカル暗号処理
 
-**5層レイヤードアーキテクチャ**:
+**Clean Architecture（6層構成）**:
 
 | レイヤー | ディレクトリ | 役割 |
 |---------|------------|------|
-| UseCase | `usecase/` | 開発者向けエンドポイント（Facade） |
+| Actions | `actions/` | 開発者向けエンドポイント（Facade） |
 | Controller | `controller/` | 入力検証、DTO変換 |
-| Service | `service/workflow/` | Phase 1/3オーケストレーション |
-| Service | `service/core/` | CoreService（暗号・ストレージ操作） |
-| Domain | `domain/entities/` | エンティティ定義（Secret, Share, Capsule, KFrag, CFrag） |
-| Domain | `domain/repositories/` | Repository Interface（DIP） |
-| Infrastructure | `infrastructure/repositories/` | Arweave永続化実装 |
-| Infrastructure | `infrastructure/external/` | 外部システムアダプター |
+| UseCase | `usecase/` | Phase 1/3オーケストレーション |
+| UseCase | `usecase/core/` | CoreService（暗号・ストレージ操作） |
+| Domain | `domain/entities/` | エンティティ定義（Secret, ShareCollection, Capsule, KFrag, CFrag） |
+| Domain | `domain/value_objects/` | Value Objects（ID型など） |
+| Repository | `repositories/` | Repository Interface（DIP） |
+| Adapter | `adapter/repository_impl/` | Arweave永続化実装（Repository Interfaceを実装） |
+| Adapter | `adapter/external/` | 外部システムアダプター |
 
 **エンティティ（5つ）**:
 | エンティティ | 説明 |
 |------------|------|
 | `Secret` | 秘密メタデータ（集約ルート） |
-| `Share` | Shamirシェア |
+| `ShareCollection` | Shamirシェアコレクション |
 | `Capsule` | PREカプセル |
 | `KFrag` | 鍵フラグメント（Owner→Holder） |
 | `CFrag` | 再暗号化フラグメント（Holder→Requester） |
 
-**依存関係フロー**:
+**依存関係フロー（Clean Architecture）**:
 ```
-UseCase → Controller → Service(Workflow) → Service(Core) → Domain → Infrastructure
+Actions → Controller → UseCase → Domain
+                           ↓
+                      Repository ← Adapter (implements)
 ```
+
+**Note**: Adapter層はRepository層のRepository Interfaceを実装する。Domain層とRepository層はAdapter層に依存しない（依存性逆転原則）。
 
 ### ao/ - AOコントラクト
 

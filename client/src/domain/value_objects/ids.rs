@@ -165,7 +165,8 @@ fn generate_uuid() -> String {
         ((random_part >> 32) & 0xFFFF) as u16,
         ((random_part >> 48) & 0x0FFF) as u16,
         (((random_part >> 60) & 0x3F) | 0x80) as u16 | ((random_part & 0xFF) << 8) as u16,
-        ((random_part ^ (random_part >> 16)) & 0xFFFF_FFFF_FFFF) ^ ((counter as u128) & 0xFFFF_FFFF_FFFF)
+        ((random_part ^ (random_part >> 16)) & 0xFFFF_FFFF_FFFF)
+            ^ ((counter as u128) & 0xFFFF_FFFF_FFFF)
     )
 }
 

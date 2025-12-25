@@ -1,6 +1,6 @@
 # D-TPRES クライアントライブラリ アーキテクチャ概要
 
-> **目的**: client/ ライブラリの5層レイヤードアーキテクチャ設計
+> **目的**: client/ ライブラリのClean Architecture（6層構成）設計
 
 ---
 
@@ -79,27 +79,29 @@ Phase 3: 秘密復元 (R-Browser)
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## 2. 5層レイヤードアーキテクチャ
+## 2. Clean Architecture（6層構成）
 
 ### 2.1 アーキテクチャ構造
 
+依存性逆転原則（DIP）により、Domain層とRepository層が中心となり、Adapter層がRepository Interfaceを実装する。
+
 ```mermaid
 graph TB
-    subgraph "UseCase層"
-        UC1[share.rs<br/>share API]
-        UC2[recover.rs<br/>recover API]
-        UC3[keygen.rs<br/>generateKeyPair API]
+    subgraph "Actions層"
+        AC1[share.rs<br/>share API]
+        AC2[recover.rs<br/>recover API]
+        AC3[keygen.rs<br/>generateKeyPair API]
     end
 
     subgraph "Controller層"
         V[validator.rs<br/>入力検証]
-        E[extractor.rs<br/>DTO変換]
+        EX[extractor.rs<br/>DTO変換]
     end
 
-    subgraph "Service層"
-        subgraph "WorkflowService"
-            WS1[secret_sharing.rs<br/>Phase 1]
-            WS2[secret_recovery.rs<br/>Phase 3]
+    subgraph "UseCase層"
+        subgraph "UseCaseService"
+            US1[secret_sharing_service.rs<br/>Phase 1]
+            US2[secret_recovery_service.rs<br/>Phase 3]
         end
         subgraph "CoreService"
             CS1[crypto.rs<br/>TPRE・Shamir]
@@ -110,44 +112,47 @@ graph TB
     subgraph "Domain層"
         subgraph "Entities"
             E1[Secret<br/>集約ルート]
-            E2[Share]
+            E2[ShareCollection]
             E3[Capsule]
             E4[KFrag]
             E5[CFrag]
         end
-        subgraph "Repository Interfaces"
-            R1[SecretRepository]
-            R2[ShareRepository]
-            R3[CapsuleRepository]
-            R4[KFragRepository]
-            R5[CFragRepository]
-        end
+        VO[Value Objects]
+        ERR[DomainError]
     end
 
-    subgraph "Infrastructure層"
-        subgraph "Repository実装"
+    subgraph "Repository層"
+        R1[SecretRepository]
+        R2[ShareCollectionRepository]
+        R3[CapsuleRepository]
+        R4[KFragRepository]
+        R5[CFragRepository]
+    end
+
+    subgraph "Adapter層"
+        subgraph "RepositoryImpl"
             RI1[ArweaveSecretRepository]
-            RI2[ArweaveShareRepository]
+            RI2[ArweaveShareCollectionRepository]
             RI3[ArweaveCapsuleRepository]
             RI4[ArweaveKFragRepository]
             RI5[ArweaveCFragRepository]
         end
         subgraph "External"
-            AC[ArweaveClient]
+            ARC[ArweaveClient]
             AOC[AOClient]
         end
     end
 
-    UC1 --> V
-    UC2 --> V
-    UC3 --> V
-    V --> E
-    E --> WS1
-    E --> WS2
-    WS1 --> CS1
-    WS1 --> CS2
-    WS2 --> CS1
-    WS2 --> CS2
+    AC1 --> V
+    AC2 --> V
+    AC3 --> V
+    V --> EX
+    EX --> US1
+    EX --> US2
+    US1 --> CS1
+    US1 --> CS2
+    US2 --> CS1
+    US2 --> CS2
     CS1 --> E1
     CS1 --> E2
     CS1 --> E3
@@ -158,16 +163,21 @@ graph TB
     CS2 --> R3
     CS2 --> R4
     CS2 --> R5
-    R1 -.-> RI1
-    R2 -.-> RI2
-    R3 -.-> RI3
-    R4 -.-> RI4
-    R5 -.-> RI5
-    RI1 --> AC
-    RI2 --> AC
-    RI3 --> AC
-    RI4 --> AC
-    RI5 --> AC
+    R1 --> E1
+    R2 --> E2
+    R3 --> E3
+    R4 --> E4
+    R5 --> E5
+    R1 -.->|implements| RI1
+    R2 -.->|implements| RI2
+    R3 -.->|implements| RI3
+    R4 -.->|implements| RI4
+    R5 -.->|implements| RI5
+    RI1 --> ARC
+    RI2 --> ARC
+    RI3 --> ARC
+    RI4 --> ARC
+    RI5 --> ARC
     RI5 --> AOC
 
     style R1 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray:5,5
@@ -175,7 +185,14 @@ graph TB
     style R3 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray:5,5
     style R4 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray:5,5
     style R5 fill:#f9f,stroke:#333,stroke-width:2px,stroke-dasharray:5,5
+    style E1 fill:#e6f3ff,stroke:#0066cc
+    style E2 fill:#e6f3ff,stroke:#0066cc
+    style E3 fill:#e6f3ff,stroke:#0066cc
+    style E4 fill:#e6f3ff,stroke:#0066cc
+    style E5 fill:#e6f3ff,stroke:#0066cc
 ```
+
+**Note**: 点線矢印（-.->）はDIPによる実装関係を示す。Adapter層がRepository層のRepository Interfaceを実装する。
 
 ### 2.2 ディレクトリ構造
 
@@ -184,7 +201,7 @@ client/src/
 ├── lib.rs                      # ライブラリエントリーポイント
 ├── di.rs                       # 依存性注入コンテナ
 │
-├── usecase/                    # UseCase層（Facade）
+├── actions/                    # Actions層（Facade）
 │   ├── mod.rs
 │   ├── share.rs               # share() API
 │   ├── recover.rs             # recover() API
@@ -193,15 +210,13 @@ client/src/
 ├── controller/                 # Controller層
 │   ├── mod.rs
 │   ├── validator.rs           # 入力の妥当性検証
-│   └── extractor.rs           # Service層向けDTO変換
+│   └── extractor.rs           # UseCase層向けDTO変換
 │
-├── service/                    # Service層
+├── usecase/                    # UseCase層
 │   ├── mod.rs
-│   ├── error.rs               # Service層エラー定義
-│   ├── workflow/              # WorkflowService
-│   │   ├── mod.rs
-│   │   ├── secret_sharing.rs  # Phase 1処理
-│   │   └── secret_recovery.rs # Phase 3処理
+│   ├── error.rs               # UseCase層エラー定義
+│   ├── secret_sharing_service.rs  # Phase 1処理
+│   ├── secret_recovery_service.rs # Phase 3処理
 │   └── core/                  # CoreService
 │       ├── mod.rs
 │       ├── crypto.rs          # CryptoService（TPRE・Shamir）
@@ -213,25 +228,29 @@ client/src/
 │   ├── entities/              # エンティティ（5つ）
 │   │   ├── mod.rs
 │   │   ├── secret.rs          # Secret（集約ルート）
-│   │   ├── share.rs           # Share（Shamirシェア）
+│   │   ├── share.rs           # ShareCollection（Shamirシェアコレクション）
 │   │   ├── capsule.rs         # Capsule（PREカプセル）
 │   │   ├── kfrag.rs           # KFrag（鍵フラグメント）
 │   │   └── cfrag.rs           # CFrag（再暗号化フラグメント）
-│   └── repositories/          # Repository Interface（5トレイト）
+│   └── value_objects/         # Value Objects
 │       ├── mod.rs
-│       ├── secret.rs          # SecretRepository trait
-│       ├── share.rs           # ShareRepository trait
-│       ├── capsule.rs         # CapsuleRepository trait
-│       ├── kfrag.rs           # KFragRepository trait
-│       └── cfrag.rs           # CFragRepository trait
+│       └── ids.rs             # SecretId, CapsuleId, etc.
 │
-└── infrastructure/             # Infrastructure層
+├── repositories/               # Repository層（Repository Interface）
+│   ├── mod.rs                 # 基本Repository trait + モジュールエクスポート
+│   ├── secret_interface.rs    # SecretRepository trait
+│   ├── share_interface.rs     # ShareCollectionRepository trait
+│   ├── capsule_interface.rs   # CapsuleRepository trait
+│   ├── kfrag_interface.rs     # KFragRepository trait
+│   └── cfrag_interface.rs     # CFragRepository trait
+│
+└── adapter/                    # Adapter層（Repository Interfaceを実装）
     ├── mod.rs
-    ├── errors.rs              # Infrastructure層エラー定義
-    ├── repositories/          # Repository実装（Arweave永続化）
+    ├── errors.rs              # Adapter層エラー定義
+    ├── repository_impl/       # Repository実装（Arweave永続化）
     │   ├── mod.rs
     │   ├── secret_impl.rs     # ArweaveSecretRepository
-    │   ├── share_impl.rs      # ArweaveShareRepository
+    │   ├── share_impl.rs      # ArweaveShareCollectionRepository
     │   ├── capsule_impl.rs    # ArweaveCapsuleRepository
     │   ├── kfrag_impl.rs      # ArweaveKFragRepository
     │   └── cfrag_impl.rs      # ArweaveCFragRepository
@@ -245,38 +264,48 @@ client/src/
 
 | 層 | 責務 | 依存先 |
 |---|------|-------|
-| **UseCase** | 開発者向けAPIエンドポイント（Facade） | Controller |
-| **Controller** | 入力検証、Service層向けDTO変換 | Service |
-| **Service** | ビジネスロジック（暗号処理オーケストレーション） | Domain |
-| **Domain** | エンティティ定義、Repository Interface | なし |
-| **Infrastructure** | 技術的実装（Arweave永続化、外部通信） | Domain Interface |
+| **Actions** | 開発者向けAPIエンドポイント（Facade） | Controller |
+| **Controller** | 入力検証、UseCase層向けDTO変換 | UseCase |
+| **UseCase** | ビジネスロジック（暗号処理オーケストレーション） | Domain, Repository |
+| **Domain** | エンティティ定義、Value Objects | なし |
+| **Repository** | Repository Interface（永続化抽象） | Domain（エンティティ参照） |
+| **Adapter** | 技術的実装（Arweave永続化、外部通信） | Repository Interface（実装） |
 
 ### 2.4 依存関係フロー
 
 ```
-UseCase層 (share, recover, keygen)
+Actions層 (share, recover, keygen)
     │
     ↓ 呼び出し
 Controller層 (Validator, Extractor)
     │
     ↓ 検証済みDTO
-Service層
-    ├── WorkflowService (オーケストレーション)
+UseCase層
+    ├── UseCaseService (オーケストレーション)
+    │   ├── secret_sharing_service.rs
+    │   └── secret_recovery_service.rs
     │       │
     │       ↓ 使用
     └── CoreService (CryptoService, StorageService)
             │
             ↓ 使用
 Domain層
-    ├── Entities (Secret, Share, Capsule, KFrag, CFrag)
-    └── Repository Interface (traits)
+    └── Entities (Secret, ShareCollection, Capsule, KFrag, CFrag)
             │
-            ↓ 実装 (DIP)
-Infrastructure層
-    ├── Repository実装 (Arweave永続化)
+            ↓ 参照
+Repository層
+    └── Repository Interface (traits)
+            ↑
+            │ 実装 (DIP: 依存性逆転)
+            │
+Adapter層
+    ├── RepositoryImpl (Arweave永続化)
     │       │
     │       ↓ 使用
     └── External (ArweaveClient, AOClient)
+
+※ Domain層とRepository層はAdapter層に依存しない（DIP）
+※ Adapter層がRepository層のRepository Interfaceを実装する
 ```
 
 ## 3. エンティティ設計
@@ -352,13 +381,13 @@ pub struct CFrag {
 
 ## 4. API設計
 
-### 4.1 UseCase層 API
+### 4.1 Actions層 API
 
 ```rust
-// usecase/keygen.rs
+// actions/keygen.rs
 pub fn generate_key_pair() -> Result<KeyPair, DtpresError>;
 
-// usecase/share.rs
+// actions/share.rs
 pub fn share(
     secret: &[u8],
     owner_secret_key: &SecretKey,
@@ -367,7 +396,7 @@ pub fn share(
     total_shares: u8,
 ) -> Result<ShareResult, DtpresError>;
 
-// usecase/recover.rs
+// actions/recover.rs
 pub fn recover(
     secret_id: &SecretId,
     requester_secret_key: &SecretKey,
