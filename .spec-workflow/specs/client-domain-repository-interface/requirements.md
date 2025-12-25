@@ -70,7 +70,7 @@ SecretはD-TPRESの集約ルートであり、他のエンティティ（ShareCo
 
 1. WHEN `save`が呼ばれる THEN system SHALL SecretエンティティをストレージにSerialize保存する（async）
 2. WHEN `find_by_id`が存在するIDで呼ばれる THEN system SHALL デシリアライズしたSecretを返す（async）
-3. WHEN `find_by_id`が存在しないIDで呼ばれる THEN system SHALL `DomainError::NotFound`を返す
+3. WHEN `find_by_id`が存在しないIDで呼ばれる THEN system SHALL `Ok(None)`を返す
 4. WHEN `delete`が呼ばれる THEN system SHALL 指定されたSecretをストレージから削除する（async）
 5. IF Secretが既に存在するIDで`save`が呼ばれる THEN system SHALL 既存のSecretを上書き更新する
 6. WHEN `exists`が呼ばれる THEN system SHALL 指定されたIDのSecretが存在するかboolで返す（async）
@@ -82,7 +82,7 @@ SecretはD-TPRESの集約ルートであり、他のエンティティ（ShareCo
 |-----|------------------|---------|---------|
 | 1 | `test_secret_repository_save` | Secretの保存が成功することを確認 | Success |
 | 2 | `test_secret_repository_find_by_id_exists` | 存在するSecretの取得を確認 | Query |
-| 3 | `test_secret_repository_find_by_id_not_found` | 存在しないIDでNotFoundエラーを確認 | Validation |
+| 3 | `test_secret_repository_find_by_id_not_found` | 存在しないIDでOk(None)を返すことを確認 | Query |
 | 4 | `test_secret_repository_delete` | Secretの削除が成功することを確認 | Success |
 | 5 | `test_secret_repository_save_update` | 既存Secretの上書き更新を確認 | Mutation |
 | 6 | `test_secret_repository_exists` | exists操作の正確性を確認 | Query |
@@ -100,7 +100,7 @@ ShareCollectionは暗号化されたShamirシェアのコレクションを管�
 
 1. WHEN `save`が呼ばれる THEN system SHALL ShareCollectionエンティティをストレージにSerialize保存する（async）
 2. WHEN `find_by_id`が存在するIDで呼ばれる THEN system SHALL デシリアライズしたShareCollectionを返す（async）
-3. WHEN `find_by_id`が存在しないIDで呼ばれる THEN system SHALL `DomainError::NotFound`を返す
+3. WHEN `find_by_id`が存在しないIDで呼ばれる THEN system SHALL `Ok(None)`を返す
 4. WHEN `find_by_secret_id`が呼ばれる THEN system SHALL 指定されたSecretIdに関連するShareCollectionを返す（async）
 5. WHEN `delete`が呼ばれる THEN system SHALL 指定されたShareCollectionをストレージから削除する（async）
 6. WHEN `exists`が呼ばれる THEN system SHALL 指定されたIDのShareCollectionが存在するかboolで返す（async）
@@ -112,7 +112,7 @@ ShareCollectionは暗号化されたShamirシェアのコレクションを管�
 |-----|------------------|---------|---------|
 | 1 | `test_share_collection_repository_save` | ShareCollectionの保存が成功することを確認 | Success |
 | 2 | `test_share_collection_repository_find_by_id_exists` | 存在するShareCollectionの取得を確認 | Query |
-| 3 | `test_share_collection_repository_find_by_id_not_found` | 存在しないIDでNotFoundエラーを確認 | Validation |
+| 3 | `test_share_collection_repository_find_by_id_not_found` | 存在しないIDでOk(None)を返すことを確認 | Query |
 | 4 | `test_share_collection_repository_find_by_secret_id` | SecretIdによる検索を確認 | Query |
 | 5 | `test_share_collection_repository_delete` | ShareCollectionの削除が成功することを確認 | Success |
 | 6 | `test_share_collection_repository_exists` | exists操作の正確性を確認 | Query |
@@ -130,7 +130,7 @@ Capsuleは暗号化時に生成されるUmbral PREカプセルを保持する。
 
 1. WHEN `save`が呼ばれる THEN system SHALL CapsuleエンティティをストレージにSerialize保存する（async）
 2. WHEN `find_by_id`が存在するIDで呼ばれる THEN system SHALL デシリアライズしたCapsuleを返す（async）
-3. WHEN `find_by_id`が存在しないIDで呼ばれる THEN system SHALL `DomainError::NotFound`を返す
+3. WHEN `find_by_id`が存在しないIDで呼ばれる THEN system SHALL `Ok(None)`を返す
 4. WHEN `find_by_secret_id`が呼ばれる THEN system SHALL 指定されたSecretIdに関連するCapsuleを返す（async）
 5. WHEN `delete`が呼ばれる THEN system SHALL 指定されたCapsuleをストレージから削除する（async）
 6. WHEN `exists`が呼ばれる THEN system SHALL 指定されたIDのCapsuleが存在するかboolで返す（async）
@@ -142,7 +142,7 @@ Capsuleは暗号化時に生成されるUmbral PREカプセルを保持する。
 |-----|------------------|---------|---------|
 | 1 | `test_capsule_repository_save` | Capsuleの保存が成功することを確認 | Success |
 | 2 | `test_capsule_repository_find_by_id_exists` | 存在するCapsuleの取得を確認 | Query |
-| 3 | `test_capsule_repository_find_by_id_not_found` | 存在しないIDでNotFoundエラーを確認 | Validation |
+| 3 | `test_capsule_repository_find_by_id_not_found` | 存在しないIDでOk(None)を返すことを確認 | Query |
 | 4 | `test_capsule_repository_find_by_secret_id` | SecretIdによる検索を確認 | Query |
 | 5 | `test_capsule_repository_delete` | Capsuleの削除が成功することを確認 | Success |
 | 6 | `test_capsule_repository_exists` | exists操作の正確性を確認 | Query |
@@ -160,7 +160,7 @@ KFragはZeroize + ZeroizeOnDropを実装しており、機密データを含む�
 
 1. WHEN `save`が呼ばれる THEN system SHALL KFragエンティティをストレージにSerialize保存する（async）
 2. WHEN `find_by_id`が存在するIDで呼ばれる THEN system SHALL デシリアライズしたKFragを返す（async）
-3. WHEN `find_by_id`が存在しないIDで呼ばれる THEN system SHALL `DomainError::NotFound`を返す
+3. WHEN `find_by_id`が存在しないIDで呼ばれる THEN system SHALL `Ok(None)`を返す
 4. WHEN `find_by_secret_id`が呼ばれる THEN system SHALL 指定されたSecretIdに関連するすべてのKFragをVecで返す（async）
 5. WHEN `find_by_holder_index`が呼ばれる THEN system SHALL 指定されたSecretIdとholder_indexに一致するKFragを返す（async）
 6. WHEN `delete`が呼ばれる THEN system SHALL 指定されたKFragをストレージから削除する（async）
@@ -174,7 +174,7 @@ KFragはZeroize + ZeroizeOnDropを実装しており、機密データを含む�
 |-----|------------------|---------|---------|
 | 1 | `test_kfrag_repository_save` | KFragの保存が成功することを確認 | Success |
 | 2 | `test_kfrag_repository_find_by_id_exists` | 存在するKFragの取得を確認 | Query |
-| 3 | `test_kfrag_repository_find_by_id_not_found` | 存在しないIDでNotFoundエラーを確認 | Validation |
+| 3 | `test_kfrag_repository_find_by_id_not_found` | 存在しないIDでOk(None)を返すことを確認 | Query |
 | 4 | `test_kfrag_repository_find_by_secret_id` | SecretIdによる複数KFrag検索を確認 | Query |
 | 5 | `test_kfrag_repository_find_by_holder_index` | holder_indexによる検索を確認 | Query |
 | 6 | `test_kfrag_repository_delete` | KFragの削除が成功することを確認 | Success |
@@ -194,7 +194,7 @@ CFragはZeroize + ZeroizeOnDropを実装しており、機密データを含む�
 
 1. WHEN `save`が呼ばれる THEN system SHALL CFragエンティティをストレージにSerialize保存する（async）
 2. WHEN `find_by_id`が存在するIDで呼ばれる THEN system SHALL デシリアライズしたCFragを返す（async）
-3. WHEN `find_by_id`が存在しないIDで呼ばれる THEN system SHALL `DomainError::NotFound`を返す
+3. WHEN `find_by_id`が存在しないIDで呼ばれる THEN system SHALL `Ok(None)`を返す
 4. WHEN `find_by_secret_id`が呼ばれる THEN system SHALL 指定されたSecretIdに関連するすべてのCFragをVecで返す（async）
 5. WHEN `find_by_kfrag_id`が呼ばれる THEN system SHALL 指定されたKFragIdに関連するCFragを返す（async）
 6. WHEN `delete`が呼ばれる THEN system SHALL 指定されたCFragをストレージから削除する（async）
@@ -209,7 +209,7 @@ CFragはZeroize + ZeroizeOnDropを実装しており、機密データを含む�
 |-----|------------------|---------|---------|
 | 1 | `test_cfrag_repository_save` | CFragの保存が成功することを確認 | Success |
 | 2 | `test_cfrag_repository_find_by_id_exists` | 存在するCFragの取得を確認 | Query |
-| 3 | `test_cfrag_repository_find_by_id_not_found` | 存在しないIDでNotFoundエラーを確認 | Validation |
+| 3 | `test_cfrag_repository_find_by_id_not_found` | 存在しないIDでOk(None)を返すことを確認 | Query |
 | 4 | `test_cfrag_repository_find_by_secret_id` | SecretIdによる複数CFrag検索を確認 | Query |
 | 5 | `test_cfrag_repository_find_by_kfrag_id` | KFragIdによる検索を確認 | Query |
 | 6 | `test_cfrag_repository_delete` | CFragの削除が成功することを確認 | Success |
