@@ -19,6 +19,8 @@ pub trait ShareCollectionRepository: Repository<ShareCollection, ShareCollection
     /// Find ShareCollection by its parent Secret ID
     ///
     /// Returns the ShareCollection associated with the given SecretId, if it exists.
-    async fn find_by_secret_id(&self, secret_id: &SecretId)
-        -> DomainResult<Option<ShareCollection>>;
+    async fn find_by_secret_id(
+        &self,
+        secret_id: &SecretId,
+    ) -> DomainResult<Option<ShareCollection>>;
 }

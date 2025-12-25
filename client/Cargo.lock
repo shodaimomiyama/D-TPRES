@@ -3,26 +3,6 @@
 version = 4
 
 [[package]]
-name = "D-TPRES"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "bincode",
- "cosmwasm-std",
- "cw-multi-test",
- "cw-storage-plus",
- "generic-array",
- "rand",
- "secrecy",
- "serde",
- "shamirsecretsharing",
- "subtle",
- "thiserror",
- "umbral-pre",
- "zeroize",
-]
-
-[[package]]
 name = "aead"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -353,6 +333,26 @@ dependencies = [
  "schemars",
  "serde",
  "thiserror",
+]
+
+[[package]]
+name = "d-tpres"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "bincode",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "generic-array",
+ "rand",
+ "secrecy",
+ "serde",
+ "shamirsecretsharing",
+ "subtle",
+ "thiserror",
+ "umbral-pre",
+ "zeroize",
 ]
 
 [[package]]
