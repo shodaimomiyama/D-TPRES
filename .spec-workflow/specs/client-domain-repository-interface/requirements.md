@@ -268,21 +268,80 @@ CFragはZeroize + ZeroizeOnDropを実装しており、機密データを含む�
 
 | Requirement | Total AC | Test Functions | Coverage |
 |-------------|----------|----------------|----------|
-| 0. 基本Repository | 4 | 2 + 2 (Type Safety) | 100% |
-| 1. SecretRepository | 7 | 7 | 100% |
-| 2. ShareCollectionRepository | 7 | 7 | 100% |
-| 3. CapsuleRepository | 7 | 7 | 100% |
-| 4. KFragRepository | 9 | 9 | 100% |
-| 5. CFragRepository | 10 | 10 | 100% |
-| **Total** | **44** | **42 + 4 (Type Safety)** | **100%** |
+| 0. 基本Repository | 4 | 9 | 100% |
+| 1. SecretRepository | 7 | 4 | 100% |
+| 2. ShareCollectionRepository | 7 | 5 | 100% |
+| 3. CapsuleRepository | 7 | 5 | 100% |
+| 4. KFragRepository | 9 | 7 | 100% |
+| 5. CFragRepository | 10 | 9 | 100% |
+| **Total** | **44** | **39** | **100%** |
+
+### Implemented Test Functions
+
+#### Base Repository (mod.rs) - 9 tests
+- `mock_repository_is_send_sync` - Send + Sync制約のコンパイル時検証
+- `test_find_by_id_not_found` - NotFoundシナリオ
+- `test_save_and_find_by_id` - 保存と取得
+- `test_exists` - 存在確認
+- `test_delete` - 削除
+- `test_delete_nonexistent_succeeds` - 存在しないエンティティの削除
+- `test_find_by_ids_batch_retrieval` - バッチ取得
+- `test_find_by_ids_with_missing_ids` - 一部欠損IDでのバッチ取得
+- `test_find_by_ids_empty_input` - 空配列でのバッチ取得
+
+#### SecretRepository (secret_interface.rs) - 4 tests
+- `secret_repository_is_send_sync` - Send + Sync検証
+- `test_secret_not_found` - NotFoundシナリオ
+- `test_save_and_find_secret` - 保存と取得
+- `test_batch_find_secrets` - バッチ取得
+
+#### ShareCollectionRepository (share_interface.rs) - 5 tests
+- `share_collection_repository_is_send_sync` - Send + Sync検証
+- `test_share_collection_not_found` - NotFoundシナリオ
+- `test_find_by_secret_id` - SecretIdによる検索
+- `test_find_by_secret_id_not_found` - SecretId検索NotFound
+- `test_batch_find_share_collections` - バッチ取得
+
+#### CapsuleRepository (capsule_interface.rs) - 5 tests
+- `capsule_repository_is_send_sync` - Send + Sync検証
+- `test_capsule_not_found` - NotFoundシナリオ
+- `test_find_capsule_by_secret_id` - SecretIdによる検索
+- `test_find_capsule_by_secret_id_not_found` - SecretId検索NotFound
+- `test_batch_find_capsules` - バッチ取得
+
+#### KFragRepository (kfrag_interface.rs) - 7 tests
+- `kfrag_repository_is_send_sync` - Send + Sync検証
+- `test_kfrag_not_found` - NotFoundシナリオ
+- `test_find_kfrags_by_secret_id` - SecretIdによる複数検索
+- `test_find_kfrag_by_holder_index` - holder_indexによる検索
+- `test_find_kfrag_by_holder_index_not_found` - holder_index検索NotFound
+- `test_delete_kfrags_by_secret_id` - SecretIdによる一括削除
+- `test_batch_find_kfrags` - バッチ取得
+
+#### CFragRepository (cfrag_interface.rs) - 9 tests
+- `cfrag_repository_is_send_sync` - Send + Sync検証
+- `test_cfrag_not_found` - NotFoundシナリオ
+- `test_find_cfrags_by_secret_id` - SecretIdによる複数検索
+- `test_find_cfrag_by_kfrag_id` - KFragIdによる検索
+- `test_find_cfrag_by_kfrag_id_not_found` - KFragId検索NotFound
+- `test_delete_cfrags_by_secret_id` - SecretIdによる一括削除
+- `test_count_cfrags_by_secret_id` - カウント操作
+- `test_batch_find_cfrags` - バッチ取得
 
 ### Test Patterns Used
 
 1. **Success Pattern**: Valid save/delete operations
 2. **Validation Pattern**: NotFound error verification for non-existent IDs
-3. **Mutation Pattern**: Update (save with existing ID) operations
-4. **Query Pattern**: find_by_id, find_by_secret_id, find_by_ids, exists, count operations
-5. **Type Safety Pattern**: Compile-time verification for async_trait, Send + Sync
+3. **Query Pattern**: find_by_id, find_by_secret_id, find_by_ids, exists, count operations
+4. **Type Safety Pattern**: Compile-time verification for async_trait, Send + Sync
+5. **Mock Implementation Pattern**: In-memory HashMap based mock repositories
+
+### Dev Dependencies Added
+
+```toml
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
+```
 
 ### Legend
 
