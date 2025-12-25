@@ -10,7 +10,7 @@
 
 | コンポーネント | ディレクトリ | 実行環境 | 状態 |
 |--------------|------------|---------|------|
-| **クライアントライブラリ** | `client/` | ローカル（Rust WASM） | 5層レイヤードアーキテクチャで実装中 |
+| **クライアントライブラリ** | `client/` | ローカル（Rust WASM） | Clean Architecture（5層構成）で実装中 |
 | **AOコントラクト** | `ao/` | AO Network | 実装完了 |
 | **統合SDK** | `dtpres-sdk/` | JavaScript/TypeScript | 設計中 |
 
@@ -54,45 +54,52 @@ Requester-Process → cFrag収集 → R-Browser → Capsule結合 → 復号 →
 
 ## クライアントライブラリ アーキテクチャ（`client/`）
 
-### 5層レイヤードアーキテクチャ
+### Clean Architecture（6層構成）
 
-このライブラリを利用する開発者向けに、クリーンアーキテクチャに基づく5層構造を採用。
+このライブラリを利用する開発者向けに、Clean Architectureに基づく6層構造を採用。依存性逆転原則（DIP）により、Domain層とRepository層が中心となり、Adapter層がRepository Interfaceを実装する。
 
 ```
 ┌─────────────────────────────────┐
-│ UseCase層（Facade）              │  開発者向けエンドポイント関数
+│ Actions層（Facade）              │  開発者向けエンドポイント関数
 ├─────────────────────────────────┤
-│ Controller層                     │  バリデーション、Service層への適切なデータ変換
+│ Controller層                     │  バリデーション、UseCase層への適切なデータ変換
 ├─────────────────────────────────┤
-│ Service層                        │
-│   ├── WorkflowService           │  ユースケース毎のオーケストレーション
+│ UseCase層                        │
+│   ├── UseCaseService            │  ユースケース毎のオーケストレーション
 │   └── CoreService               │  複数UseCaseから呼び出される共通業務ロジック
 ├─────────────────────────────────┤
-│ Domain層                         │  DDDベースのEntity定義、Repository Interface
+│ Domain層                         │  DDDベースのEntity定義
 ├─────────────────────────────────┤
-│ Infrastructure層                 │  ArweaveへのGET/POST操作
+│ Repository層                     │  Repository Interface（永続化抽象）
+├─────────────────────────────────┤
+│ Adapter層                        │  Repository実装（Repository Interfaceを実装）
 └─────────────────────────────────┘
+
+依存関係フロー:
+  Actions → Controller → UseCase → Domain
+                              ↓
+                         Repository ← Adapter (implements)
 ```
 
 ### 各層の役割
 
-#### UseCase層（`usecase/`）
+#### Actions層（`actions/`）
 - **目的**: 開発者向けエンドポイント関数の提供（Facadeパターン）
-- **責務**: ライブラリ利用者が呼び出すAPI関数を定義し、Controller層経由でWorkflowServiceを呼び出す
+- **責務**: ライブラリ利用者が呼び出すAPI関数を定義し、Controller層経由でUseCaseを呼び出す
 - **設計原則**: 外部エンドポイントとして、内部実装の複雑さを隠蔽
 
 #### Controller層（`controller/`）
-- **目的**: 入力の検証とService層への適切なデータ変換
+- **目的**: 入力の検証とUseCase層への適切なデータ変換
 - **コンポーネント**:
   - Validator: 入力の妥当性検証
-  - ContextExtractor: Service層向けDTO変換
+  - ContextExtractor: UseCase層向けDTO変換
 
-#### Service層（`service/`）
-- **WorkflowService**: ユースケース毎のService（オーケストレーション）
-  - SecretSharingWorkflow: Phase 1処理（CoreServiceを組み合わせて実行）
-  - SecretRecoveryWorkflow: Phase 3処理
+#### UseCase層（`usecase/`）
+- **UseCaseService**: ユースケース毎のService（オーケストレーション）
+  - SecretSharingService: Phase 1処理（CoreServiceを組み合わせて実行）
+  - SecretRecoveryService: Phase 3処理
   - 責務: 各CoreServiceを適切な順序で呼び出し、ユースケースを実現
-- **CoreService**: 複数UseCaseから呼び出される共通業務ロジック
+- **CoreService（`usecase/core/`）**: 複数UseCaseから呼び出される共通業務ロジック
   - CryptoService: TPRE・Shamir操作（純粋な暗号ロジック）
   - StorageService: Arweave操作
   - 設計原則: 責務の境界で分離し、再利用可能な単位として構成
@@ -120,15 +127,26 @@ Requester ← GetCFrag ← Holder
 **Holder選出**: 現在は固定値、将来的にRandAOで自動選出予定
 
 #### Domain層（`domain/`）
-- **目的**: DDDベースのEntity定義とRepository Interface
+- **目的**: DDDベースのEntity定義
 - **Entities**: 純粋なデータ構造（コンストラクタで不変条件を検証）
-  - ProcessEntity, ShareEntity, CapsuleEntity, AccessRequestEntity, RekeyFragmentEntity
-- **Repository Interface**: Infrastructure層の実装を抽象化（依存性逆転原則）
+  - Secret（集約ルート）, ShareCollection, Capsule, KFrag, CFrag
+- **Value Objects**: SecretId, ShareCollectionId, CapsuleId, KFragId, CFragId
+- **Errors**: DomainError, DomainResult
 
-#### Infrastructure層（`infrastructure/`）
-- **目的**: 外部システムとの通信
-- **責務**: ArweaveへのGET/POST操作
-- **実装**: ArweaveClient, 各EntityのRepositoryImpl
+#### Repository層（`repositories/`）
+- **目的**: 永続化操作を抽象化したtrait（依存性逆転原則）
+- **配置**: `domain/`と同じレベル（`src/repositories/`）
+- **Repository Interface**:
+  - SecretRepository, ShareCollectionRepository, CapsuleRepository, KFragRepository, CFragRepository
+- **依存方向**: UseCase → Repository ← Adapter（実装）
+
+#### Adapter層（`adapter/`）
+- **目的**: Repository層のRepository Interfaceを実装（DIP）
+- **責務**: ArweaveへのGET/POST操作、永続化の詳細を隠蔽
+- **構造**:
+  - `repository_impl/`: Repository Interface実装
+  - `external/`: 外部システムアダプター（ArweaveClient, AOClient）
+- **依存方向**: Adapter → Repository（Repository層のInterfaceを実装）
 
 ### データストレージ
 
@@ -312,9 +330,10 @@ wasm-pack build --target web --out-dir wasm
    - 根拠: メモリ安全性、ゼロコスト抽象化、WASM高性能
    - 用途: クライアントライブラリとAOコントラクト両方で利用
 
-2. **5層レイヤードアーキテクチャ**:
-   - 根拠: テスタビリティ、依存性逆転、開発者向けAPI設計
+2. **Clean Architecture（6層構成）**:
+   - 根拠: テスタビリティ、依存性逆転原則（DIP）、開発者向けAPI設計
    - 対象: クライアントライブラリ（`client/`）のみ
+   - 依存方向: Actions → Controller → UseCase → Domain/Repository ← Adapter
 
 3. **umbral-pre採用**:
    - 根拠: 実績のあるProxy Re-Encryption実装、Rustネイティブ
