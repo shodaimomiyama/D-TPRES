@@ -5,12 +5,8 @@
 //! データ永続化はRepository層に委譲します。
 
 pub mod crypto;
-pub mod messaging;
-pub mod process;
 pub mod storage;
 
 // Re-export service traits and implementations
 pub use crypto::{CryptoService, CryptoServiceImpl};
-pub use messaging::{MessageRoutingService, MessageRoutingServiceImpl};
-pub use process::{ProcessManagementService, ProcessManagementServiceImpl};
 pub use storage::{ArweaveStorageService, ArweaveStorageServiceImpl};
