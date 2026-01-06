@@ -289,7 +289,7 @@
       2. After implementation, use log-implementation tool to record details
       3. Mark task as complete by changing [-] to [x]_
 
-- [ ] 9. Add unit tests for all Repository implementations
+- [x] 9. Add unit tests for all Repository implementations
   - Files: Tests within each `*_impl.rs` file
   - Add #[cfg(test)] mod tests for each repository
   - Test all CRUD operations, edge cases, and error scenarios
@@ -323,7 +323,7 @@
       2. After implementation, use log-implementation tool to record details
       3. Mark task as complete by changing [-] to [x]_
 
-- [ ] 10. Update module exports and run final verification
+- [x] 10. Update module exports and run final verification
   - Files: `client/src/adapter/mod.rs`, `client/src/lib.rs`
   - Export all repository implementations from adapter module
   - Update lib.rs to include adapter module
