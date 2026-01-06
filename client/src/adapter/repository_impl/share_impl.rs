@@ -198,6 +198,7 @@ impl<C: ArweaveClient> Repository<ShareCollection, ShareCollectionId>
             tag_helpers::app_tag(),
             tag_helpers::entity_type_tag(tag_values::ENTITY_SHARE_COLLECTION),
             tag_helpers::entity_id_tag(id.as_str()),
+            tag_helpers::secret_id_tag(&stored.secret_id),
             tag_helpers::deleted_tag(true),
         ];
 
