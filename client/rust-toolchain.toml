@@ -1,5 +1,5 @@
 [toolchain]
 channel = "1.86.0"
-components = ["rustc", "cargo"]
+components = ["rustc", "cargo", "rustfmt", "clippy"]
 profile = "minimal"
 targets = []
