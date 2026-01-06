@@ -3,6 +3,9 @@
 //! Arweaveへのデータ永続化、トランザクション管理、データ取得を担当します。
 //! AO環境に最適化された実装を提供します。
 
+// Allow unwrap for RwLock operations - internal locks won't be poisoned
+#![allow(clippy::unwrap_used)]
+
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
@@ -12,6 +15,7 @@ use crate::service::error::{ServiceError, ServiceResult};
 
 /// Arweaveトランザクション
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ArweaveTransaction {
     pub id: String,
     pub data: Vec<u8>,
@@ -21,6 +25,7 @@ pub struct ArweaveTransaction {
 
 /// Arweaveタグ
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Tag {
     pub name: String,
     pub value: String,
@@ -28,6 +33,7 @@ pub struct Tag {
 
 /// トランザクションステータス
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum TransactionStatus {
     Pending,
     Confirmed,
@@ -36,6 +42,7 @@ pub enum TransactionStatus {
 
 /// ストレージ設定
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct StorageConfig {
     /// 最大トランザクションサイズ（バイト）
     pub max_transaction_size: usize,
@@ -60,6 +67,7 @@ impl Default for StorageConfig {
 
 /// クエリパラメータ
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct QueryParams {
     pub tags: Vec<Tag>,
     pub limit: Option<usize>,
@@ -68,6 +76,7 @@ pub struct QueryParams {
 
 /// ソート順
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum SortBy {
     Timestamp(SortOrder),
     Id(SortOrder),
@@ -75,6 +84,7 @@ pub enum SortBy {
 
 /// ソート順序
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum SortOrder {
     Ascending,
     Descending,
@@ -82,6 +92,7 @@ pub enum SortOrder {
 
 /// バッチ操作結果
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct BatchResult {
     pub successful: Vec<String>,
     pub failed: Vec<(String, String)>, // (id, error_message)
@@ -132,9 +143,12 @@ impl ArweaveStorageServiceImpl {
 
     /// トランザクションIDを生成
     fn generate_transaction_id(&self) -> String {
-        let mut counter = self.transaction_counter.write().unwrap();
-        *counter += 1;
-        format!("tx_{:016x}", *counter)
+        let counter_value = {
+            let mut counter = self.transaction_counter.write().unwrap();
+            *counter += 1;
+            *counter
+        };
+        format!("tx_{counter_value:016x}")
     }
 
     /// データサイズを検証
@@ -362,11 +376,13 @@ mod tests {
 
         // テストデータの準備
         let data = b"test data";
-        let data_hex: Vec<String> = data.iter().map(|b| format!("{:02x}", b)).collect();
+        let data_hex: Vec<String> = data.iter().map(|b| format!("{b:02x}")).collect();
+        let data_text = std::str::from_utf8(data).unwrap();
+        let data_len = data.len();
         println!("\n1. 保存するデータを準備:");
-        println!("   - テキスト: \"{}\"", std::str::from_utf8(data).unwrap());
+        println!("   - テキスト: \"{data_text}\"");
         println!("   - バイナリ: [{}]", data_hex.join(" "));
-        println!("   - サイズ: {} bytes", data.len());
+        println!("   - サイズ: {data_len} bytes");
 
         let tags = vec![
             Tag {
@@ -385,9 +401,9 @@ mod tests {
 
         // データの保存
         println!("\n3. Arweaveにデータを保存...");
-        let tx_id = service.store_data(data, tags.clone()).unwrap();
+        let tx_id = service.store_data(data, tags).unwrap();
         println!("   ✓ 保存成功!");
-        println!("   トランザクションID: {}", tx_id);
+        println!("   トランザクションID: {tx_id}");
         assert!(!tx_id.is_empty());
 
         // データの取得
@@ -425,7 +441,7 @@ mod tests {
 
         // 複数のトランザクションを作成
         for i in 0..3 {
-            let data = format!("data {}", i).into_bytes();
+            let data = format!("data {i}").into_bytes();
             let tags = vec![
                 Tag {
                     name: "Type".to_string(),
