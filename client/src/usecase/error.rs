@@ -12,6 +12,7 @@ pub type ServiceResult<T> = Result<T, ServiceError>;
 
 /// Service layer error hierarchy
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ServiceError {
     /// Business exceptions - recoverable errors related to business logic
     #[error("Business error: {0}")]
@@ -24,6 +25,7 @@ pub enum ServiceError {
 
 /// Business exceptions - errors that can be recovered from
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum BusinessException {
     /// Validation errors
     #[error("Validation error: {0}")]
@@ -60,6 +62,7 @@ pub enum BusinessException {
 
 /// System exceptions - errors that cannot be recovered from
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum SystemException {
     /// Cryptographic operation errors
     #[error("Crypto error: {0}")]
@@ -168,17 +171,17 @@ impl From<DomainError> for ServiceError {
 /// Helper methods for ServiceError
 impl ServiceError {
     /// Check if this error is recoverable (business errors are recoverable)
-    pub fn is_recoverable(&self) -> bool {
+    pub const fn is_recoverable(&self) -> bool {
         matches!(self, ServiceError::Business(_))
     }
 
     /// Check if this is a business error
-    pub fn is_business_error(&self) -> bool {
+    pub const fn is_business_error(&self) -> bool {
         matches!(self, ServiceError::Business(_))
     }
 
     /// Check if this is a system error
-    pub fn is_system_error(&self) -> bool {
+    pub const fn is_system_error(&self) -> bool {
         matches!(self, ServiceError::System(_))
     }
 

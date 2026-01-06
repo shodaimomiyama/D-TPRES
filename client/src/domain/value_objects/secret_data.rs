@@ -38,16 +38,19 @@ impl SecretData {
     }
 
     /// Get reference to the secret bytes
+    #[allow(clippy::missing_const_for_fn)]
     pub fn as_bytes(&self) -> &[u8] {
         &self.secret_bytes
     }
 
     /// Get the length of the secret data
+    #[allow(clippy::missing_const_for_fn)]
     pub fn len(&self) -> usize {
         self.secret_bytes.len()
     }
 
     /// Check if the secret data is empty
+    #[allow(clippy::missing_const_for_fn)]
     pub fn is_empty(&self) -> bool {
         self.secret_bytes.is_empty()
     }
