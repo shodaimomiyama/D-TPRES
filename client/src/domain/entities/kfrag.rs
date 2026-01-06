@@ -55,8 +55,7 @@ impl KFrag {
                 entity_type: "KFrag".to_string(),
                 field: "holder_index".to_string(),
                 message: format!(
-                    "Invalid holder index {}: must be in range 1..={}",
-                    holder_index, threshold_n
+                    "Invalid holder index {holder_index}: must be in range 1..={threshold_n}"
                 ),
             });
         }
@@ -80,7 +79,7 @@ impl KFrag {
     }
 
     /// Reconstruct from stored data (for repository use)
-    pub fn from_stored(
+    pub const fn from_stored(
         id: KFragId,
         secret_id: SecretId,
         holder_index: u8,
@@ -99,17 +98,17 @@ impl KFrag {
     }
 
     /// Get the KFrag ID
-    pub fn id(&self) -> &KFragId {
+    pub const fn id(&self) -> &KFragId {
         &self.id
     }
 
     /// Get the parent secret ID
-    pub fn secret_id(&self) -> &SecretId {
+    pub const fn secret_id(&self) -> &SecretId {
         &self.secret_id
     }
 
     /// Get the holder index
-    pub fn holder_index(&self) -> u8 {
+    pub const fn holder_index(&self) -> u8 {
         self.holder_index
     }
 
@@ -119,12 +118,13 @@ impl KFrag {
     }
 
     /// Get the serialized KFrag data
+    #[allow(clippy::missing_const_for_fn)]
     pub fn kfrag_data(&self) -> &[u8] {
         &self.kfrag_data
     }
 
     /// Get creation timestamp
-    pub fn created_at(&self) -> u64 {
+    pub const fn created_at(&self) -> u64 {
         self.created_at
     }
 

@@ -30,7 +30,7 @@ impl KeyPair {
     ///
     /// # Returns
     /// New KeyPair instance
-    pub fn new(secret_key: Vec<u8>, public_key: Vec<u8>) -> Self {
+    pub const fn new(secret_key: Vec<u8>, public_key: Vec<u8>) -> Self {
         Self {
             secret_key,
             public_key,
@@ -41,11 +41,13 @@ impl KeyPair {
     ///
     /// # Security
     /// Handle returned bytes carefully - they contain sensitive material
+    #[allow(clippy::missing_const_for_fn)]
     pub fn secret_key(&self) -> &[u8] {
         &self.secret_key
     }
 
     /// Get the public key bytes
+    #[allow(clippy::missing_const_for_fn)]
     pub fn public_key(&self) -> &[u8] {
         &self.public_key
     }

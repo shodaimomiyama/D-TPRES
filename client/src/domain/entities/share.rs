@@ -17,7 +17,7 @@ pub struct EncryptedShareData {
 
 impl EncryptedShareData {
     /// Create a new EncryptedShareData
-    pub fn new(index: u8, encrypted_data: Vec<u8>) -> Self {
+    pub const fn new(index: u8, encrypted_data: Vec<u8>) -> Self {
         Self {
             index,
             encrypted_data,
@@ -25,11 +25,12 @@ impl EncryptedShareData {
     }
 
     /// Get the share index
-    pub fn index(&self) -> u8 {
+    pub const fn index(&self) -> u8 {
         self.index
     }
 
     /// Get the encrypted data
+    #[allow(clippy::missing_const_for_fn)]
     pub fn encrypted_data(&self) -> &[u8] {
         &self.encrypted_data
     }
@@ -76,8 +77,7 @@ impl ShareCollection {
                 entity_type: "ShareCollection".to_string(),
                 field: "shares".to_string(),
                 message: format!(
-                    "Share count mismatch: expected {}, got {}",
-                    threshold_n,
+                    "Share count mismatch: expected {threshold_n}, got {}",
                     shares.len()
                 ),
             });
@@ -91,8 +91,8 @@ impl ShareCollection {
                     entity_type: "ShareCollection".to_string(),
                     field: "share.index".to_string(),
                     message: format!(
-                        "Invalid share index {}: must be in range 1..={}",
-                        share.index, threshold_n
+                        "Invalid share index {}: must be in range 1..={threshold_n}",
+                        share.index
                     ),
                 });
             }
@@ -127,7 +127,7 @@ impl ShareCollection {
 
     /// Reconstruct from stored data (for repository use)
     #[allow(clippy::too_many_arguments)]
-    pub fn from_stored(
+    pub const fn from_stored(
         id: ShareCollectionId,
         secret_id: SecretId,
         threshold_k: u8,
@@ -148,26 +148,27 @@ impl ShareCollection {
     }
 
     /// Get the collection ID
-    pub fn id(&self) -> &ShareCollectionId {
+    pub const fn id(&self) -> &ShareCollectionId {
         &self.id
     }
 
     /// Get the parent secret ID
-    pub fn secret_id(&self) -> &SecretId {
+    pub const fn secret_id(&self) -> &SecretId {
         &self.secret_id
     }
 
     /// Get threshold k
-    pub fn threshold_k(&self) -> u8 {
+    pub const fn threshold_k(&self) -> u8 {
         self.threshold_k
     }
 
     /// Get threshold n
-    pub fn threshold_n(&self) -> u8 {
+    pub const fn threshold_n(&self) -> u8 {
         self.threshold_n
     }
 
     /// Get all shares
+    #[allow(clippy::missing_const_for_fn)]
     pub fn shares(&self) -> &[EncryptedShareData] {
         &self.shares
     }
@@ -201,7 +202,7 @@ impl ShareCollection {
     }
 
     /// Get creation timestamp
-    pub fn created_at(&self) -> u64 {
+    pub const fn created_at(&self) -> u64 {
         self.created_at
     }
 }

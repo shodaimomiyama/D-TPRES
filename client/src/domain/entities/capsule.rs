@@ -65,7 +65,7 @@ impl Capsule {
     }
 
     /// Reconstruct from stored data (for repository use)
-    pub fn from_stored(
+    pub const fn from_stored(
         id: CapsuleId,
         secret_id: SecretId,
         capsule_data: Vec<u8>,
@@ -84,21 +84,23 @@ impl Capsule {
     }
 
     /// Get the capsule ID
-    pub fn id(&self) -> &CapsuleId {
+    pub const fn id(&self) -> &CapsuleId {
         &self.id
     }
 
     /// Get the parent secret ID
-    pub fn secret_id(&self) -> &SecretId {
+    pub const fn secret_id(&self) -> &SecretId {
         &self.secret_id
     }
 
     /// Get the serialized capsule data
+    #[allow(clippy::missing_const_for_fn)]
     pub fn capsule_data(&self) -> &[u8] {
         &self.capsule_data
     }
 
     /// Get the owner's public key
+    #[allow(clippy::missing_const_for_fn)]
     pub fn owner_public_key(&self) -> &[u8] {
         &self.owner_public_key
     }
@@ -114,7 +116,7 @@ impl Capsule {
     }
 
     /// Get creation timestamp
-    pub fn created_at(&self) -> u64 {
+    pub const fn created_at(&self) -> u64 {
         self.created_at
     }
 }
