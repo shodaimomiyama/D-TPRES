@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/client-usecase-coreservice/tasks.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2025-12-26T05:11:42.327Z",
+      "trigger": "initial",
+      "approvalId": "approval_1766725902319_oellqldfq",
+      "approvalTitle": "Tasks Document - Client UseCase CoreService"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2025-12-26T05:12:21.757Z",
+      "trigger": "approved",
+      "approvalId": "approval_1766725902319_oellqldfq",
+      "approvalTitle": "Tasks Document - Client UseCase CoreService"
+    }
+  ]
+}
