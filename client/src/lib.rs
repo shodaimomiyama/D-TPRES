@@ -5,3 +5,6 @@
 
 pub mod domain;
 pub mod repositories;
+pub mod usecase;
+
+pub use usecase as service;

@@ -47,7 +47,11 @@ pub enum BusinessException {
 
     /// Threshold not met errors
     #[error("Threshold not met: required {required}, got {actual}")]
-    ThresholdNotMet { required: usize, actual: usize },
+    ThresholdNotMet { required: u8, actual: u8 },
+
+    /// Invalid operation errors
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
 
     /// Role conflict errors
     #[error("Role conflict: {0}")]
@@ -126,8 +130,8 @@ impl From<DomainError> for ServiceError {
                 available_shares,
                 operation: _,
             } => ServiceError::Business(BusinessException::ThresholdNotMet {
-                required: required_threshold as usize,
-                actual: available_shares as usize,
+                required: required_threshold,
+                actual: available_shares,
             }),
             DomainError::NotFound { entity_type, id } => {
                 ServiceError::Business(BusinessException::ResourceNotFound(format!(
@@ -163,6 +167,11 @@ impl From<DomainError> for ServiceError {
 
 /// Helper methods for ServiceError
 impl ServiceError {
+    /// Check if this error is recoverable (business errors are recoverable)
+    pub fn is_recoverable(&self) -> bool {
+        matches!(self, ServiceError::Business(_))
+    }
+
     /// Check if this is a business error
     pub fn is_business_error(&self) -> bool {
         matches!(self, ServiceError::Business(_))
