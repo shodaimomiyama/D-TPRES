@@ -10,7 +10,7 @@ use subtle::ConstantTimeEq;
 use umbral_pre::{self, DefaultDeserialize, DefaultSerialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use crate::service::error::{ServiceError, ServiceResult};
+use crate::service::error::{BusinessException, ServiceError, ServiceResult};
 
 /// 検証用データ構造体
 /// kFragの検証に必要な公開鍵情報を保持
@@ -317,11 +317,11 @@ impl CryptoService for CryptoServiceImpl {
         shares: &[ShamirShare],
         threshold: u8,
     ) -> ServiceResult<Vec<u8>> {
-        // 入力検証
         if shares.len() < threshold as usize {
-            return Err(ServiceError::validation_error(
-                "Insufficient shares for reconstruction",
-            ));
+            return Err(ServiceError::Business(BusinessException::ThresholdNotMet {
+                required: threshold,
+                actual: shares.len() as u8,
+            }));
         }
 
         // ShamirShare型からVec<u8>へ変換（shamirsecretsharing::ShareはVec<u8>型）
