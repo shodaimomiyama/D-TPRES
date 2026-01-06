@@ -12,6 +12,7 @@ pub type ServiceResult<T> = Result<T, ServiceError>;
 
 /// Service layer error hierarchy
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ServiceError {
     /// Business exceptions - recoverable errors related to business logic
     #[error("Business error: {0}")]
@@ -24,6 +25,7 @@ pub enum ServiceError {
 
 /// Business exceptions - errors that can be recovered from
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum BusinessException {
     /// Validation errors
     #[error("Validation error: {0}")]
@@ -47,7 +49,11 @@ pub enum BusinessException {
 
     /// Threshold not met errors
     #[error("Threshold not met: required {required}, got {actual}")]
-    ThresholdNotMet { required: usize, actual: usize },
+    ThresholdNotMet { required: u8, actual: u8 },
+
+    /// Invalid operation errors
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
 
     /// Role conflict errors
     #[error("Role conflict: {0}")]
@@ -56,6 +62,7 @@ pub enum BusinessException {
 
 /// System exceptions - errors that cannot be recovered from
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum SystemException {
     /// Cryptographic operation errors
     #[error("Crypto error: {0}")]
@@ -126,8 +133,8 @@ impl From<DomainError> for ServiceError {
                 available_shares,
                 operation: _,
             } => ServiceError::Business(BusinessException::ThresholdNotMet {
-                required: required_threshold as usize,
-                actual: available_shares as usize,
+                required: required_threshold,
+                actual: available_shares,
             }),
             DomainError::NotFound { entity_type, id } => {
                 ServiceError::Business(BusinessException::ResourceNotFound(format!(
@@ -163,13 +170,18 @@ impl From<DomainError> for ServiceError {
 
 /// Helper methods for ServiceError
 impl ServiceError {
+    /// Check if this error is recoverable (business errors are recoverable)
+    pub const fn is_recoverable(&self) -> bool {
+        matches!(self, ServiceError::Business(_))
+    }
+
     /// Check if this is a business error
-    pub fn is_business_error(&self) -> bool {
+    pub const fn is_business_error(&self) -> bool {
         matches!(self, ServiceError::Business(_))
     }
 
     /// Check if this is a system error
-    pub fn is_system_error(&self) -> bool {
+    pub const fn is_system_error(&self) -> bool {
         matches!(self, ServiceError::System(_))
     }
 

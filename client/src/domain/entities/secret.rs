@@ -8,6 +8,7 @@ use crate::domain::value_objects::{CapsuleId, KFragId, SecretId, ShareCollection
 
 /// Secret state machine states
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SecretState {
     /// Initial state after creation
     Initialized,
@@ -76,7 +77,7 @@ impl Secret {
             return Err(DomainError::EntityValidation {
                 entity_type: "Secret".to_string(),
                 field: "threshold".to_string(),
-                message: format!("Threshold k={} must be <= n={}", threshold_k, threshold_n),
+                message: format!("Threshold k={threshold_k} must be <= n={threshold_n}"),
             });
         }
 
@@ -104,7 +105,7 @@ impl Secret {
 
     /// Reconstruct a Secret from stored data (for repository use)
     #[allow(clippy::too_many_arguments)]
-    pub fn from_stored(
+    pub const fn from_stored(
         id: SecretId,
         threshold_k: u8,
         threshold_n: u8,
@@ -131,41 +132,43 @@ impl Secret {
     }
 
     /// Get the secret ID
-    pub fn id(&self) -> &SecretId {
+    pub const fn id(&self) -> &SecretId {
         &self.id
     }
 
     /// Get threshold k (minimum shares required)
-    pub fn threshold_k(&self) -> u8 {
+    pub const fn threshold_k(&self) -> u8 {
         self.threshold_k
     }
 
     /// Get threshold n (total shares)
-    pub fn threshold_n(&self) -> u8 {
+    pub const fn threshold_n(&self) -> u8 {
         self.threshold_n
     }
 
     /// Get current state
-    pub fn state(&self) -> SecretState {
+    pub const fn state(&self) -> SecretState {
         self.state
     }
 
     /// Get capsule ID if set
-    pub fn capsule_id(&self) -> Option<&CapsuleId> {
+    pub const fn capsule_id(&self) -> Option<&CapsuleId> {
         self.capsule_id.as_ref()
     }
 
     /// Get share collection ID if set
-    pub fn share_collection_id(&self) -> Option<&ShareCollectionId> {
+    pub const fn share_collection_id(&self) -> Option<&ShareCollectionId> {
         self.share_collection_id.as_ref()
     }
 
     /// Get KFrag IDs
+    #[allow(clippy::missing_const_for_fn)]
     pub fn kfrag_ids(&self) -> &[KFragId] {
         &self.kfrag_ids
     }
 
     /// Get owner's public key
+    #[allow(clippy::missing_const_for_fn)]
     pub fn owner_public_key(&self) -> &[u8] {
         &self.owner_public_key
     }
@@ -176,7 +179,7 @@ impl Secret {
     }
 
     /// Get creation timestamp
-    pub fn created_at(&self) -> u64 {
+    pub const fn created_at(&self) -> u64 {
         self.created_at
     }
 

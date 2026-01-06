@@ -66,7 +66,7 @@ impl CFrag {
     }
 
     /// Reconstruct from stored data (for repository use)
-    pub fn from_stored(
+    pub const fn from_stored(
         id: CFragId,
         secret_id: SecretId,
         kfrag_id: KFragId,
@@ -85,32 +85,33 @@ impl CFrag {
     }
 
     /// Get the CFrag ID
-    pub fn id(&self) -> &CFragId {
+    pub const fn id(&self) -> &CFragId {
         &self.id
     }
 
     /// Get the parent secret ID
-    pub fn secret_id(&self) -> &SecretId {
+    pub const fn secret_id(&self) -> &SecretId {
         &self.secret_id
     }
 
     /// Get the source KFrag ID
-    pub fn kfrag_id(&self) -> &KFragId {
+    pub const fn kfrag_id(&self) -> &KFragId {
         &self.kfrag_id
     }
 
     /// Get the holder index
-    pub fn holder_index(&self) -> u8 {
+    pub const fn holder_index(&self) -> u8 {
         self.holder_index
     }
 
     /// Get the serialized CFrag data
+    #[allow(clippy::missing_const_for_fn)]
     pub fn cfrag_data(&self) -> &[u8] {
         &self.cfrag_data
     }
 
     /// Get creation timestamp
-    pub fn created_at(&self) -> u64 {
+    pub const fn created_at(&self) -> u64 {
         self.created_at
     }
 

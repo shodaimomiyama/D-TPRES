@@ -30,7 +30,7 @@ impl SymmetricKey {
     ///
     /// # Returns
     /// New SymmetricKey instance
-    pub fn new(key: [u8; SYMMETRIC_KEY_SIZE]) -> Self {
+    pub const fn new(key: [u8; SYMMETRIC_KEY_SIZE]) -> Self {
         Self { key }
     }
 
@@ -54,7 +54,7 @@ impl SymmetricKey {
     ///
     /// # Security
     /// Handle returned bytes carefully - they contain key material
-    pub fn as_bytes(&self) -> &[u8; SYMMETRIC_KEY_SIZE] {
+    pub const fn as_bytes(&self) -> &[u8; SYMMETRIC_KEY_SIZE] {
         &self.key
     }
 }
