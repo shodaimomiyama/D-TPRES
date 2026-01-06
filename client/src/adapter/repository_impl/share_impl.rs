@@ -2,6 +2,11 @@
 //!
 //! Implements ShareCollectionRepository trait for Arweave-based persistence.
 
+#![allow(clippy::unused_self)]
+#![allow(clippy::missing_const_for_fn)]
+#![allow(clippy::manual_let_else)]
+#![allow(clippy::significant_drop_tightening)]
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
@@ -11,7 +16,7 @@ use crate::domain::errors::DomainResult;
 use crate::domain::value_objects::{SecretId, ShareCollectionId};
 use crate::repositories::{Repository, ShareCollectionRepository};
 
-use super::{tag_helpers, tag_names, tag_values, ArweaveClient, Tag};
+use super::{ArweaveClient, Tag, tag_helpers, tag_names, tag_values};
 
 /// Serializable representation of EncryptedShareData
 #[derive(Serialize, Deserialize)]
@@ -65,8 +70,11 @@ impl StoredShareCollection {
     }
 
     fn to_entity(&self) -> ShareCollection {
-        let shares: Vec<EncryptedShareData> =
-            self.shares.iter().map(StoredEncryptedShare::to_entity).collect();
+        let shares: Vec<EncryptedShareData> = self
+            .shares
+            .iter()
+            .map(StoredEncryptedShare::to_entity)
+            .collect();
 
         ShareCollection::from_stored(
             ShareCollectionId::new(self.id.clone()),
@@ -245,5 +253,102 @@ impl<C: ArweaveClient> ShareCollectionRepository for ArweaveShareCollectionRepos
         }
 
         Ok(Some(stored.to_entity()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::adapter::repository_impl::mock::MockArweaveClient;
+    use crate::domain::entities::share::EncryptedShareData;
+    use crate::repositories::Repository;
+
+    fn create_test_share_collection(secret_id: SecretId) -> ShareCollection {
+        let shares = vec![
+            EncryptedShareData::new(1, vec![1u8; 32]),
+            EncryptedShareData::new(2, vec![2u8; 32]),
+            EncryptedShareData::new(3, vec![3u8; 32]),
+        ];
+        ShareCollection::new(secret_id, 2, 3, shares).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_save_and_find_by_id() {
+        let client = MockArweaveClient::new();
+        let repo = ArweaveShareCollectionRepository::new(client);
+        let secret_id = SecretId::generate();
+        let collection = create_test_share_collection(secret_id);
+        let id = collection.id().clone();
+
+        repo.save(&collection).await.unwrap();
+        let found = repo.find_by_id(&id).await.unwrap();
+
+        assert!(found.is_some());
+        let found = found.unwrap();
+        assert_eq!(found.id(), &id);
+        assert_eq!(found.threshold_k(), 2);
+        assert_eq!(found.threshold_n(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_find_by_id_not_found() {
+        let client = MockArweaveClient::new();
+        let repo = ArweaveShareCollectionRepository::new(client);
+        let id = ShareCollectionId::generate();
+
+        let found = repo.find_by_id(&id).await.unwrap();
+        assert!(found.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_find_by_secret_id() {
+        let client = MockArweaveClient::new();
+        let repo = ArweaveShareCollectionRepository::new(client);
+        let secret_id = SecretId::generate();
+        let collection = create_test_share_collection(secret_id.clone());
+
+        repo.save(&collection).await.unwrap();
+        let found = repo.find_by_secret_id(&secret_id).await.unwrap();
+
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().secret_id(), &secret_id);
+    }
+
+    #[tokio::test]
+    async fn test_find_by_secret_id_not_found() {
+        let client = MockArweaveClient::new();
+        let repo = ArweaveShareCollectionRepository::new(client);
+        let secret_id = SecretId::generate();
+
+        let found = repo.find_by_secret_id(&secret_id).await.unwrap();
+        assert!(found.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_delete() {
+        let client = MockArweaveClient::new();
+        let repo = ArweaveShareCollectionRepository::new(client);
+        let secret_id = SecretId::generate();
+        let collection = create_test_share_collection(secret_id);
+        let id = collection.id().clone();
+
+        repo.save(&collection).await.unwrap();
+        assert!(repo.exists(&id).await.unwrap());
+
+        repo.delete(&id).await.unwrap();
+        assert!(!repo.exists(&id).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_exists() {
+        let client = MockArweaveClient::new();
+        let repo = ArweaveShareCollectionRepository::new(client);
+        let secret_id = SecretId::generate();
+        let collection = create_test_share_collection(secret_id);
+        let id = collection.id().clone();
+
+        assert!(!repo.exists(&id).await.unwrap());
+        repo.save(&collection).await.unwrap();
+        assert!(repo.exists(&id).await.unwrap());
     }
 }

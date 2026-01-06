@@ -3,6 +3,11 @@
 //! Implements KFragRepository trait for Arweave-based persistence.
 //! Handles sensitive cryptographic data with Zeroize for memory safety.
 
+#![allow(clippy::unused_self)]
+#![allow(clippy::missing_const_for_fn)]
+#![allow(clippy::manual_let_else)]
+#![allow(clippy::significant_drop_tightening)]
+
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
@@ -13,7 +18,7 @@ use crate::domain::errors::DomainResult;
 use crate::domain::value_objects::{KFragId, SecretId};
 use crate::repositories::{KFragRepository, Repository};
 
-use super::{tag_helpers, tag_names, tag_values, ArweaveClient, Tag};
+use super::{ArweaveClient, Tag, tag_helpers, tag_names, tag_values};
 
 /// Serializable representation of KFrag for Arweave storage
 #[derive(Serialize, Deserialize)]
@@ -174,10 +179,12 @@ impl<C: ArweaveClient> Repository<KFrag, KFragId> for ArweaveKFragRepository<C> 
             AdapterError::serialization_error("serialize", &format!("Failed to serialize: {e}"))
         })?;
 
+        // Include SECRET_ID tag for find_by_secret_id to work correctly with soft-delete
         let tags = vec![
             tag_helpers::app_tag(),
             tag_helpers::entity_type_tag(tag_values::ENTITY_KFRAG),
             tag_helpers::entity_id_tag(id.as_str()),
+            tag_helpers::secret_id_tag(&stored.secret_id),
             tag_helpers::deleted_tag(true),
         ];
 
@@ -208,10 +215,13 @@ impl<C: ArweaveClient> Repository<KFrag, KFragId> for ArweaveKFragRepository<C> 
 #[async_trait]
 impl<C: ArweaveClient> KFragRepository for ArweaveKFragRepository<C> {
     async fn find_by_secret_id(&self, secret_id: &SecretId) -> DomainResult<Vec<KFrag>> {
+        use std::collections::HashMap;
+
         let tags = self.create_secret_query_tags(secret_id);
         let tx_ids = self.client.query(tags).await?;
 
-        let mut results = Vec::with_capacity(tx_ids.len());
+        // Group entries by entity_id, keeping latest (last tx_id) for each
+        let mut latest_by_id: HashMap<String, (String, StoredKFrag)> = HashMap::new();
 
         for tx_id in tx_ids {
             let bytes = match self.client.get(&tx_id).await? {
@@ -224,12 +234,16 @@ impl<C: ArweaveClient> KFragRepository for ArweaveKFragRepository<C> {
                 Err(_) => continue,
             };
 
-            if stored.deleted {
-                continue;
-            }
-
-            results.push(stored.to_entity());
+            // Always overwrite - tx_ids are sorted so later entries are newer
+            latest_by_id.insert(stored.id.clone(), (tx_id, stored));
         }
+
+        // Filter out deleted entries and convert to entities
+        let results: Vec<KFrag> = latest_by_id
+            .into_values()
+            .filter(|(_, stored)| !stored.deleted)
+            .map(|(_, stored)| stored.to_entity())
+            .collect();
 
         Ok(results)
     }
@@ -271,5 +285,132 @@ impl<C: ArweaveClient> KFragRepository for ArweaveKFragRepository<C> {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::adapter::repository_impl::mock::MockArweaveClient;
+    use crate::repositories::Repository;
+
+    fn create_test_kfrag(secret_id: SecretId, holder_index: u8) -> KFrag {
+        KFrag::new(secret_id, holder_index, 5, vec![1u8; 100]).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_save_and_find_by_id() {
+        let client = MockArweaveClient::new();
+        let repo = ArweaveKFragRepository::new(client);
+        let secret_id = SecretId::generate();
+        let kfrag = create_test_kfrag(secret_id, 1);
+        let id = kfrag.id().clone();
+
+        repo.save(&kfrag).await.unwrap();
+        let found = repo.find_by_id(&id).await.unwrap();
+
+        assert!(found.is_some());
+        let found = found.unwrap();
+        assert_eq!(found.id(), &id);
+        assert_eq!(found.holder_index(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_find_by_id_not_found() {
+        let client = MockArweaveClient::new();
+        let repo = ArweaveKFragRepository::new(client);
+        let id = KFragId::generate();
+
+        let found = repo.find_by_id(&id).await.unwrap();
+        assert!(found.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_find_by_secret_id() {
+        let client = MockArweaveClient::new();
+        let repo = ArweaveKFragRepository::new(client);
+        let secret_id = SecretId::generate();
+
+        let kfrags: Vec<_> = (1..=3)
+            .map(|i| create_test_kfrag(secret_id.clone(), i))
+            .collect();
+
+        for kfrag in &kfrags {
+            repo.save(kfrag).await.unwrap();
+        }
+
+        let found = repo.find_by_secret_id(&secret_id).await.unwrap();
+        assert_eq!(found.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_find_by_holder_index() {
+        let client = MockArweaveClient::new();
+        let repo = ArweaveKFragRepository::new(client);
+        let secret_id = SecretId::generate();
+
+        let kfrag = create_test_kfrag(secret_id.clone(), 2);
+        repo.save(&kfrag).await.unwrap();
+
+        let found = repo.find_by_holder_index(&secret_id, 2).await.unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().holder_index(), 2);
+
+        let not_found = repo.find_by_holder_index(&secret_id, 99).await.unwrap();
+        assert!(not_found.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_delete() {
+        let client = MockArweaveClient::new();
+        let repo = ArweaveKFragRepository::new(client);
+        let secret_id = SecretId::generate();
+        let kfrag = create_test_kfrag(secret_id, 1);
+        let id = kfrag.id().clone();
+
+        repo.save(&kfrag).await.unwrap();
+        assert!(repo.exists(&id).await.unwrap());
+
+        repo.delete(&id).await.unwrap();
+        assert!(!repo.exists(&id).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_delete_by_secret_id() {
+        let client = MockArweaveClient::new();
+        let repo = ArweaveKFragRepository::new(client);
+        let secret_id = SecretId::generate();
+        let other_secret_id = SecretId::generate();
+
+        let kfrags: Vec<_> = (1..=3)
+            .map(|i| create_test_kfrag(secret_id.clone(), i))
+            .collect();
+        let other_kfrag = create_test_kfrag(other_secret_id.clone(), 1);
+
+        for kfrag in &kfrags {
+            repo.save(kfrag).await.unwrap();
+        }
+        repo.save(&other_kfrag).await.unwrap();
+
+        repo.delete_by_secret_id(&secret_id).await.unwrap();
+
+        let remaining = repo.find_by_secret_id(&secret_id).await.unwrap();
+        assert!(remaining.is_empty());
+
+        let other_remaining = repo.find_by_secret_id(&other_secret_id).await.unwrap();
+        assert_eq!(other_remaining.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_exists() {
+        let client = MockArweaveClient::new();
+        let repo = ArweaveKFragRepository::new(client);
+        let secret_id = SecretId::generate();
+        let kfrag = create_test_kfrag(secret_id, 1);
+        let id = kfrag.id().clone();
+
+        assert!(!repo.exists(&id).await.unwrap());
+        repo.save(&kfrag).await.unwrap();
+        assert!(repo.exists(&id).await.unwrap());
     }
 }
