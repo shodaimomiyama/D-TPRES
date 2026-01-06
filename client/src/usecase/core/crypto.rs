@@ -206,6 +206,7 @@ impl CryptoServiceImpl {
     ///
     /// # セキュリティ
     /// この関数はタイミング攻撃を防ぐため定数時間で実行されます
+    #[allow(dead_code)]
     #[inline]
     fn constant_time_compare(a: &[u8], b: &[u8]) -> bool {
         if a.len() != b.len() {
@@ -215,16 +216,14 @@ impl CryptoServiceImpl {
     }
 
     /// SecretKeyからumbral_pre::SecretKeyを復元
-    /// 
+    ///
     /// # セキュリティ
     /// - メモリ上の秘密鍵は使用後自動的にクリアされます
     /// - 一時的な秘密鍵は生成されますが、スコープ外で自動的にクリアされます
     fn deserialize_secret_key(&self, key: &SecretKey) -> ServiceResult<umbral_pre::SecretKey> {
         // key_dataをGenericArray<u8, U32>に変換
         if key.key_data.len() != constants::KEY_SIZE_BYTES {
-            return Err(ServiceError::crypto_error(
-                "Invalid secret key format"
-            ));
+            return Err(ServiceError::crypto_error("Invalid secret key format"));
         }
 
         // 一時的な秘密鍵を生成してバイト表現を取得
@@ -236,26 +235,23 @@ impl CryptoServiceImpl {
         secret_bytes.as_mut_secret().copy_from_slice(&key.key_data);
 
         // SecretKeyに変換
-        let result = umbral_pre::SecretKey::try_from_be_bytes(&secret_bytes).map_err(|_| {
-            ServiceError::crypto_error("Failed to deserialize secret key")
-        });
-        
+        let result = umbral_pre::SecretKey::try_from_be_bytes(&secret_bytes)
+            .map_err(|_| ServiceError::crypto_error("Failed to deserialize secret key"));
+
         // secret_bytesは自動的にZeroizeされる（SecretBoxのDrop実装により）
         result
     }
 
     /// PublicKeyからumbral_pre::PublicKeyを復元
     fn deserialize_public_key(&self, key: &PublicKey) -> ServiceResult<umbral_pre::PublicKey> {
-        bincode::deserialize(&key.key_data).map_err(|_| {
-            ServiceError::crypto_error("Failed to deserialize key")
-        })
+        bincode::deserialize(&key.key_data)
+            .map_err(|_| ServiceError::crypto_error("Failed to deserialize key"))
     }
 
     /// Capsuleからumbral_pre::Capsuleを復元
     fn deserialize_capsule(&self, capsule: &Capsule) -> ServiceResult<umbral_pre::Capsule> {
-        bincode::deserialize(&capsule.data).map_err(|_| {
-            ServiceError::crypto_error("Failed to deserialize capsule")
-        })
+        bincode::deserialize(&capsule.data)
+            .map_err(|_| ServiceError::crypto_error("Failed to deserialize capsule"))
     }
 }
 
@@ -296,7 +292,7 @@ impl CryptoService for CryptoServiceImpl {
             padded_secret[1..secret.len() + 1].copy_from_slice(secret);
         } else {
             return Err(ServiceError::validation_error(
-                "Secret data exceeds maximum size"
+                "Secret data exceeds maximum size",
             ));
         }
 
@@ -324,7 +320,7 @@ impl CryptoService for CryptoServiceImpl {
         // 入力検証
         if shares.len() < threshold as usize {
             return Err(ServiceError::validation_error(
-                "Insufficient shares for reconstruction"
+                "Insufficient shares for reconstruction",
             ));
         }
 
@@ -332,9 +328,8 @@ impl CryptoService for CryptoServiceImpl {
         let share_vecs: Vec<Vec<u8>> = shares.iter().map(|s| s.data.as_slice().to_vec()).collect();
 
         // ライブラリを使用してシェアを結合
-        let recovered = combine_shares(&share_vecs).map_err(|_| {
-            ServiceError::crypto_error("Failed to combine shares")
-        })?;
+        let recovered = combine_shares(&share_vecs)
+            .map_err(|_| ServiceError::crypto_error("Failed to combine shares"))?;
 
         // 復元されたデータを処理
         match recovered {
@@ -346,9 +341,7 @@ impl CryptoService for CryptoServiceImpl {
 
                 let original_len = data[0] as usize;
                 if original_len == 0 || original_len > DATA_SIZE - 1 {
-                    return Err(ServiceError::crypto_error(
-                        "Invalid recovered data format"
-                    ));
+                    return Err(ServiceError::crypto_error("Invalid recovered data format"));
                 }
 
                 // 元のデータを抽出
@@ -383,9 +376,8 @@ impl CryptoService for CryptoServiceImpl {
             .map_err(|_| ServiceError::crypto_error("Encryption failed"))?;
 
         // Capsuleをシリアライズして保存
-        let capsule_bytes: Vec<u8> = bincode::serialize(&umbral_capsule).map_err(|_| {
-            ServiceError::crypto_error("Failed to serialize capsule")
-        })?;
+        let capsule_bytes: Vec<u8> = bincode::serialize(&umbral_capsule)
+            .map_err(|_| ServiceError::crypto_error("Failed to serialize capsule"))?;
 
         let capsule: Capsule = Capsule {
             data: capsule_bytes,
@@ -481,32 +473,29 @@ impl CryptoService for CryptoServiceImpl {
 
         // 検証用データを作成
         let verification_data = VerificationData {
-            verifying_pk: bincode::serialize(&self.verifying_key).map_err(|_| {
-                ServiceError::crypto_error("Failed to serialize key")
-            })?,
-            delegating_pk: bincode::serialize(&umbral_delegating_pk).map_err(|_| {
-                ServiceError::crypto_error("Failed to serialize key")
-            })?,
+            verifying_pk: bincode::serialize(&self.verifying_key)
+                .map_err(|_| ServiceError::crypto_error("Failed to serialize key"))?,
+            delegating_pk: bincode::serialize(&umbral_delegating_pk)
+                .map_err(|_| ServiceError::crypto_error("Failed to serialize key"))?,
             receiving_pk: reencryption_key.receiving_pk_data.to_vec(),
         };
-        let verification_bytes = bincode::serialize(&verification_data).map_err(|_| {
-            ServiceError::crypto_error("Failed to serialize verification data")
-        })?;
+        let verification_bytes = bincode::serialize(&verification_data)
+            .map_err(|_| ServiceError::crypto_error("Failed to serialize verification data"))?;
 
         // VerifiedKeyFragをKeyFragmentに変換
         let mut kfrags = Vec::with_capacity(verified_kfrags.len());
         for (index, verified_kfrag) in verified_kfrags.iter().enumerate() {
             // VerifiedKeyFragをKeyFragに変換（unverify）してからシリアライズ
             let kfrag = verified_kfrag.clone().unverify();
-            let kfrag_bytes = kfrag.to_bytes().map_err(|_| {
-                ServiceError::crypto_error("Failed to serialize fragment")
-            })?;
+            let kfrag_bytes = kfrag
+                .to_bytes()
+                .map_err(|_| ServiceError::crypto_error("Failed to serialize fragment"))?;
 
             kfrags.push(KeyFragment {
                 id: index as u8,
                 key_data: kfrag_bytes.to_vec(),
                 verification_data: verification_bytes.to_vec(), // 検証用データを保存
-                precursor: vec![],                             // 現在は使用しない
+                precursor: vec![],                              // 現在は使用しない
             });
         }
 
@@ -535,24 +524,19 @@ impl CryptoService for CryptoServiceImpl {
         }
 
         let verification_data = bincode::deserialize::<VerificationData>(&kfrag.verification_data)
-            .map_err(|_| {
-                ServiceError::crypto_error("Failed to deserialize verification data")
-            })?;
+            .map_err(|_| ServiceError::crypto_error("Failed to deserialize verification data"))?;
 
         // KeyFragをデシリアライズ
-        let umbral_kfrag = umbral_pre::KeyFrag::from_bytes(&kfrag.key_data).map_err(|_| {
-            ServiceError::crypto_error("Failed to deserialize fragment")
-        })?;
+        let umbral_kfrag = umbral_pre::KeyFrag::from_bytes(&kfrag.key_data)
+            .map_err(|_| ServiceError::crypto_error("Failed to deserialize fragment"))?;
 
         // 常に署名検証を実行
         let verifying_pk: umbral_pre::PublicKey =
-            bincode::deserialize(&verification_data.verifying_pk).map_err(|_| {
-                ServiceError::crypto_error("Failed to deserialize key")
-            })?;
+            bincode::deserialize(&verification_data.verifying_pk)
+                .map_err(|_| ServiceError::crypto_error("Failed to deserialize key"))?;
         let delegating_pk: umbral_pre::PublicKey =
-            bincode::deserialize(&verification_data.delegating_pk).map_err(|_| {
-                ServiceError::crypto_error("Failed to deserialize key")
-            })?;
+            bincode::deserialize(&verification_data.delegating_pk)
+                .map_err(|_| ServiceError::crypto_error("Failed to deserialize key"))?;
         let receiving_pk = self.deserialize_public_key(&PublicKey {
             key_data: verification_data.receiving_pk.to_vec(),
         })?;
@@ -569,14 +553,14 @@ impl CryptoService for CryptoServiceImpl {
 
         // VerifiedCapsuleFragをunverifyしてからシリアライズ
         let cfrag = verified_cfrag.unverify();
-        let cfrag_bytes = cfrag.to_bytes().map_err(|_| {
-            ServiceError::crypto_error("Failed to serialize capsule fragment")
-        })?.to_vec();
+        let cfrag_bytes = cfrag
+            .to_bytes()
+            .map_err(|_| ServiceError::crypto_error("Failed to serialize capsule fragment"))?
+            .to_vec();
 
         // CapsuleFrag検証用データを準備（既存の検証データを再利用）
-        let cfrag_verification_bytes = bincode::serialize(&verification_data).map_err(|_| {
-            ServiceError::crypto_error("Failed to serialize verification data")
-        })?;
+        let cfrag_verification_bytes = bincode::serialize(&verification_data)
+            .map_err(|_| ServiceError::crypto_error("Failed to serialize verification data"))?;
 
         Ok(CipherFragment {
             fragment_id: kfrag.id,
@@ -637,19 +621,15 @@ impl CryptoService for CryptoServiceImpl {
         }
 
         let verification_data = bincode::deserialize::<VerificationData>(&cfrags[0].proof)
-            .map_err(|_| {
-                ServiceError::crypto_error("Failed to deserialize verification data")
-            })?;
+            .map_err(|_| ServiceError::crypto_error("Failed to deserialize verification data"))?;
 
         // 検証用の公開鍵をデシリアライズ
         let verifying_pk: umbral_pre::PublicKey =
-            bincode::deserialize(&verification_data.verifying_pk).map_err(|_| {
-                ServiceError::crypto_error("Failed to deserialize key")
-            })?;
+            bincode::deserialize(&verification_data.verifying_pk)
+                .map_err(|_| ServiceError::crypto_error("Failed to deserialize key"))?;
         let delegating_pk: umbral_pre::PublicKey =
-            bincode::deserialize(&verification_data.delegating_pk).map_err(|_| {
-                ServiceError::crypto_error("Failed to deserialize key")
-            })?;
+            bincode::deserialize(&verification_data.delegating_pk)
+                .map_err(|_| ServiceError::crypto_error("Failed to deserialize key"))?;
         let receiving_pk = self.deserialize_public_key(&PublicKey {
             key_data: verification_data.receiving_pk.to_vec(),
         })?;
@@ -657,9 +637,7 @@ impl CryptoService for CryptoServiceImpl {
         for cfrag in cfrags {
             // CapsuleFragをbytesからデシリアライズ
             let capsule_frag = umbral_pre::CapsuleFrag::from_bytes(&cfrag.capsule_fragment)
-                .map_err(|_| {
-                    ServiceError::crypto_error("Failed to deserialize fragment")
-                })?;
+                .map_err(|_| ServiceError::crypto_error("Failed to deserialize fragment"))?;
 
             // 常に署名検証を実行
             let verified_cfrag = capsule_frag
@@ -669,9 +647,7 @@ impl CryptoService for CryptoServiceImpl {
                     &delegating_pk,
                     &receiving_pk,
                 )
-                .map_err(|_| {
-                    ServiceError::crypto_error("Failed to verify fragment")
-                })?;
+                .map_err(|_| ServiceError::crypto_error("Failed to verify fragment"))?;
 
             verified_cfrags.push(verified_cfrag);
         }
@@ -698,10 +674,8 @@ impl CryptoService for CryptoServiceImpl {
         let sk_vec: Vec<u8> = Self::serialize_secret_key(&umbral_sk);
 
         // 公開鍵をシリアライズ
-        let pk_bytes: Vec<u8> =
-            bincode::serialize(&umbral_pk).map_err(|_| {
-                ServiceError::crypto_error("Failed to serialize key")
-            })?;
+        let pk_bytes: Vec<u8> = bincode::serialize(&umbral_pk)
+            .map_err(|_| ServiceError::crypto_error("Failed to serialize key"))?;
 
         // 既存の構造体に格納
         let secret_key: SecretKey = SecretKey { key_data: sk_vec };
@@ -731,10 +705,10 @@ mod tests {
         let service = CryptoServiceImpl::new();
 
         println!("\n1. 鍵ペアを生成中...");
-        let (owner_sk, owner_pk) = service
+        let (owner_sk, _owner_pk) = service
             .generate_keypair()
             .expect("Failed to generate owner keypair");
-        let (accessor_sk, accessor_pk) = service
+        let (_accessor_sk, accessor_pk) = service
             .generate_keypair()
             .expect("Failed to generate accessor keypair");
 
@@ -1030,18 +1004,22 @@ mod tests {
 
         // Step 6: Bobが再暗号化されたデータを復号
         println!("\n6. Bobが再暗号化されたデータを復号中...");
-        
+
         // combine_and_decryptを呼び出して復号
         let decrypted = service
             .combine_and_decrypt(&cfrags, &bob_sk, &capsule, &ciphertext)
             .expect("Failed to decrypt reencrypted data");
-        
+
         println!("   ✓ 復号成功");
-        println!("   復号データ: \"{}\"", std::str::from_utf8(&decrypted).unwrap());
-        
+        println!(
+            "   復号データ: \"{}\"",
+            std::str::from_utf8(&decrypted).unwrap()
+        );
+
         // 元の平文と一致することを確認
         assert_eq!(
-            plaintext, &decrypted[..],
+            plaintext,
+            &decrypted[..],
             "Decrypted data should match original plaintext"
         );
         println!("   ✓ 元の平文と完全に一致！");
@@ -1109,7 +1087,7 @@ mod tests {
 
         // テスト準備: 完全な再暗号化フローの設定
         println!("\n1. テスト環境の準備...");
-        
+
         // 鍵ペアの生成
         let (alice_sk, alice_pk) = service
             .generate_keypair()
@@ -1150,7 +1128,7 @@ mod tests {
         let decrypted = service
             .combine_and_decrypt(&cfrags, &bob_sk, &capsule, &ciphertext)
             .expect("Failed to decrypt");
-        
+
         assert_eq!(plaintext, &decrypted[..]);
         println!("   ✓ 復号成功: 元の平文と一致");
 
@@ -1164,7 +1142,7 @@ mod tests {
         // テスト3: 不正な秘密鍵でエラー
         println!("   3-2. 不正な秘密鍵:");
         let invalid_sk = SecretKey {
-            key_data: vec![0u8; 32],  // ダミーの秘密鍵
+            key_data: vec![0u8; 32], // ダミーの秘密鍵
         };
         let result = service.combine_and_decrypt(&cfrags, &invalid_sk, &capsule, &ciphertext);
         assert!(result.is_err());
@@ -1173,7 +1151,7 @@ mod tests {
         // テスト4: 不正なカプセルでエラー
         println!("   3-3. 不正なカプセル:");
         let invalid_capsule = Capsule {
-            data: vec![0u8; 100],  // ダミーのカプセル
+            data: vec![0u8; 100], // ダミーのカプセル
         };
         let result = service.combine_and_decrypt(&cfrags, &bob_sk, &invalid_capsule, &ciphertext);
         assert!(result.is_err());
@@ -1198,7 +1176,11 @@ mod tests {
             println!("      ⚠ 閾値未満でも処理が進行（復号結果の検証が必要）");
             // 復号結果が正しくないことを確認
             if let Ok(decrypted) = result {
-                assert_ne!(plaintext, &decrypted[..], "閾値未満では正しく復号できないはず");
+                assert_ne!(
+                    plaintext,
+                    &decrypted[..],
+                    "閾値未満では正しく復号できないはず"
+                );
                 println!("      ✓ 復号結果は不正（期待通り）");
             }
         }
@@ -1211,11 +1193,11 @@ mod tests {
             .proxy_reencrypt(&kfrags[2], &capsule)
             .expect("Failed to re-encrypt third kFrag");
         all_cfrags.push(third_cfrag);
-        
+
         let decrypted = service
             .combine_and_decrypt(&all_cfrags, &bob_sk, &capsule, &ciphertext)
             .expect("Failed to decrypt with all cFrags");
-        
+
         assert_eq!(plaintext, &decrypted[..]);
         println!("   ✓ 3個のcFragsでも正常に復号");
 
@@ -1237,7 +1219,7 @@ mod tests {
         // テスト1: 正常な暗号化
         println!("\n1. 正常な暗号化テスト:");
         println!("   鍵ペアを生成中...");
-        let (owner_sk, owner_pk) = service
+        let (_owner_sk, owner_pk) = service
             .generate_keypair()
             .expect("Failed to generate keypair");
 
