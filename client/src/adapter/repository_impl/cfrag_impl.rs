@@ -179,12 +179,13 @@ impl<C: ArweaveClient> Repository<CFrag, CFragId> for ArweaveCFragRepository<C> 
             AdapterError::serialization_error("serialize", &format!("Failed to serialize: {e}"))
         })?;
 
-        // Include SECRET_ID tag for find_by_secret_id to work correctly with soft-delete
         let tags = vec![
             tag_helpers::app_tag(),
             tag_helpers::entity_type_tag(tag_values::ENTITY_CFRAG),
             tag_helpers::entity_id_tag(id.as_str()),
             tag_helpers::secret_id_tag(&stored.secret_id),
+            tag_helpers::kfrag_id_tag(&stored.kfrag_id),
+            tag_helpers::holder_index_tag(stored.holder_index),
             tag_helpers::deleted_tag(true),
         ];
 
