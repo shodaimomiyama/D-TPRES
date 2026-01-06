@@ -51,7 +51,7 @@ impl StoredSecret {
                 .map(|id| id.as_str().to_string())
                 .collect(),
             owner_public_key: secret.owner_public_key().to_vec(),
-            requester_public_key: secret.requester_public_key().map(|pk| pk.to_vec()),
+            requester_public_key: secret.requester_public_key().map(<[u8]>::to_vec),
             created_at: secret.created_at(),
             deleted: false,
         }

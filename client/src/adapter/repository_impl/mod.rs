@@ -22,6 +22,7 @@ pub use share_impl::ArweaveShareCollectionRepository;
 
 /// Arweave tag structure for metadata
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Tag {
     pub name: String,
     pub value: String,
