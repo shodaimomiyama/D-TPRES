@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/client-adapter-repositoryimpl/tasks.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2025-12-26T04:19:03.515Z",
+      "trigger": "initial",
+      "approvalId": "approval_1766722743507_tvmb3tf4h",
+      "approvalTitle": "Tasks Document - Client Adapter Repository Implementation"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2025-12-26T04:42:10.201Z",
+      "trigger": "approved",
+      "approvalId": "approval_1766722743507_tvmb3tf4h",
+      "approvalTitle": "Tasks Document - Client Adapter Repository Implementation"
+    }
+  ]
+}
