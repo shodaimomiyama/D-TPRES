@@ -70,8 +70,8 @@
 
 ## Phase 2: SecretSharingWorkflowService
 
-- [-] 3. SecretSharingWorkflowService trait定義
-  - File: `client/src/usecase/secret_sharing_service.rs`
+- [x] 3. SecretSharingWorkflowService trait定義
+  - File: `client/src/usecase/workflow/secret_sharing_service.rs`
   - SecretSharingWorkflowService traitを定義
   - `execute_secret_sharing(&self, request: SecretSharingRequest) -> ServiceResult<SecretSharingResult>` メソッド
   - `get_secret_status(&self, secret_id: &SecretId) -> ServiceResult<SecretStatus>` メソッド
@@ -80,8 +80,8 @@
   - _Requirements: 1, 2_
   - _Prompt: Role: Rust Developer specializing in trait design | Task: Define SecretSharingWorkflowService trait with execute_secret_sharing and get_secret_status methods following requirements 1 and 2 | Restrictions: Trait must be Send + Sync, use ServiceResult for error handling, do not expose implementation details | Success: Trait is well-defined with clear method signatures, compatible with dependency injection_
 
-- [ ] 4. SecretSharingWorkflowServiceImpl - バリデーション実装
-  - File: `client/src/usecase/secret_sharing_service.rs`
+- [x] 4. SecretSharingWorkflowServiceImpl - バリデーション実装
+  - File: `client/src/usecase/workflow/secret_sharing_service.rs`
   - SecretSharingWorkflowServiceImpl構造体を作成
   - CryptoService, ArweaveStorageServiceを依存注入で受け取る
   - 入力パラメータのバリデーションを実装（threshold, total_shares, secret, keys）
@@ -90,8 +90,8 @@
   - _Requirements: 1.10, 1.11, 1.12, 1.13, 1.14_
   - _Prompt: Role: Rust Developer with expertise in validation | Task: Implement SecretSharingWorkflowServiceImpl with input validation following requirements 1.10-1.14 | Restrictions: Return WorkflowError::ValidationError for all validation failures, validate all parameters before any crypto operations | Success: All validation rules implemented, clear error messages for each validation failure_
 
-- [ ] 5. SecretSharingWorkflowServiceImpl - PHASE 1ワークフロー実装
-  - File: `client/src/usecase/secret_sharing_service.rs` (continue from task 4)
+- [x] 5. SecretSharingWorkflowServiceImpl - PHASE 1ワークフロー実装
+  - File: `client/src/usecase/workflow/secret_sharing_service.rs` (continue from task 4)
   - Step 1-2: generate_symmetric_key() + split_secret_shamir()
   - Step 1-3: aes_gcm_encrypt() for each share
   - Step 1-4: create_pre_capsule()
@@ -104,8 +104,8 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9_
   - _Prompt: Role: Rust Developer with expertise in cryptographic workflows | Task: Implement execute_secret_sharing following PRD PHASE 1 steps 1-2 through 1-9, orchestrating CryptoService and StorageService calls | Restrictions: Must call services in correct order, handle errors at each step with appropriate WorkflowError, ensure Zeroize on intermediate secrets | Success: Complete PHASE 1 flow works end-to-end, all intermediate secrets are zeroized, proper error handling at each step_
 
-- [ ] 6. SecretSharingWorkflowServiceImpl - ステータス管理実装
-  - File: `client/src/usecase/secret_sharing_service.rs` (continue from task 5)
+- [x] 6. SecretSharingWorkflowServiceImpl - ステータス管理実装
+  - File: `client/src/usecase/workflow/secret_sharing_service.rs` (continue from task 5)
   - get_secret_status()実装
   - ArweaveStorageService.query_by_tags()を使用してステータス取得
   - ResourceNotFoundエラーハンドリング
@@ -118,8 +118,8 @@
 
 ## Phase 3: SecretRecoveryWorkflowService
 
-- [ ] 7. SecretRecoveryWorkflowService trait定義
-  - File: `client/src/usecase/secret_recovery_service.rs`
+- [x] 7. SecretRecoveryWorkflowService trait定義
+  - File: `client/src/usecase/workflow/secret_recovery_service.rs`
   - SecretRecoveryWorkflowService traitを定義
   - `recover_secret(&self, request: SecretRecoveryRequest) -> ServiceResult<SecretRecoveryResult>` メソッド
   - `verify_recovered_data(&self, data: &[u8]) -> bool` メソッド
@@ -128,8 +128,8 @@
   - _Requirements: 3, 4_
   - _Prompt: Role: Rust Developer specializing in trait design | Task: Define SecretRecoveryWorkflowService trait with recover_secret and verify_recovered_data methods following requirements 3 and 4 | Restrictions: Trait must be Send + Sync, recover_secret takes only secret_id, requester_secret_key, and requester_process_id | Success: Trait is well-defined, compatible with dependency injection_
 
-- [ ] 8. SecretRecoveryWorkflowServiceImpl - バリデーション実装
-  - File: `client/src/usecase/secret_recovery_service.rs`
+- [x] 8. SecretRecoveryWorkflowServiceImpl - バリデーション実装
+  - File: `client/src/usecase/workflow/secret_recovery_service.rs`
   - SecretRecoveryWorkflowServiceImpl構造体を作成
   - CryptoService, ArweaveStorageServiceを依存注入で受け取る
   - 入力パラメータのバリデーションを実装（secret_id, accessor_secret_key）
@@ -138,8 +138,8 @@
   - _Requirements: 3.9, 3.11_
   - _Prompt: Role: Rust Developer with expertise in validation | Task: Implement SecretRecoveryWorkflowServiceImpl with input validation following requirements 3.9 and 3.11 | Restrictions: Return WorkflowError::ValidationError for invalid inputs | Success: All validation rules implemented, clear error messages_
 
-- [ ] 9. SecretRecoveryWorkflowServiceImpl - PHASE 3ワークフロー実装
-  - File: `client/src/usecase/secret_recovery_service.rs` (continue from task 8)
+- [x] 9. SecretRecoveryWorkflowServiceImpl - PHASE 3ワークフロー実装
+  - File: `client/src/usecase/workflow/secret_recovery_service.rs` (continue from task 8)
   - Step 1: retrieve_cfrags_from_requester_process() - AO通信でcFrag取得
   - Step 2: retrieve_capsule() - ArweaveからCapsule取得
   - Step 3: combine_and_decrypt() - Capsule結合と共通鍵復号
@@ -153,8 +153,8 @@
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.10, 3.12, 3.13_
   - _Prompt: Role: Rust Developer with expertise in cryptographic workflows | Task: Implement recover_secret following PRD PHASE 3 steps, first fetching cFrags from Requester-Process via AO and Capsule from Arweave, then orchestrating decryption | Restrictions: Must fetch cFrags via retrieve_cfrags_from_requester_process() and Capsule via retrieve_capsule() before crypto operations, validate cFrag count >= threshold, record audit trail on success/failure | Success: Complete PHASE 3 flow works end-to-end, cFrags and Capsule fetched correctly, audit recorded_
 
-- [ ] 10. SecretRecoveryWorkflowServiceImpl - 復元データ検証実装
-  - File: `client/src/usecase/secret_recovery_service.rs` (continue from task 9)
+- [x] 10. SecretRecoveryWorkflowServiceImpl - 復元データ検証実装
+  - File: `client/src/usecase/workflow/secret_recovery_service.rs` (continue from task 9)
   - verify_recovered_data()実装
   - 空データチェック
   - サイズ妥当性チェック
@@ -166,8 +166,8 @@
 
 ## Phase 4: モジュールエクスポートとDI
 
-- [ ] 11. モジュールエクスポート設定
-  - File: `client/src/usecase/mod.rs`
+- [x] 11. モジュールエクスポート設定
+  - File: `client/src/usecase/mod.rs`, `client/src/usecase/workflow/mod.rs`
   - error, dto, secret_sharing_service, secret_recovery_serviceをpub mod
   - 必要な型をre-export
   - Purpose: UseCase層の公開インターフェース整理
@@ -175,8 +175,8 @@
   - _Requirements: All_
   - _Prompt: Role: Rust Developer | Task: Configure module exports in mod.rs to expose WorkflowServices, DTOs, and errors | Restrictions: Only expose public API, keep internal implementation private | Success: All public types are accessible from client::usecase_
 
-- [ ] 12. DI設定更新
-  - File: `client/src/usecase/container.rs` or relevant DI file
+- [x] 12. DI設定更新
+  - File: `client/src/usecase/workflow/container.rs`
   - SecretSharingWorkflowServiceの登録
   - SecretRecoveryWorkflowServiceの登録
   - CryptoService, StorageServiceの依存関係設定
@@ -189,7 +189,7 @@
 
 ## Phase 5: ユニットテスト
 
-- [ ] 13. WorkflowErrorユニットテスト
+- [x] 13. WorkflowErrorユニットテスト
   - File: `client/src/usecase/error.rs` (test module)
   - test_workflow_error_validation
   - test_workflow_error_from_crypto_service
@@ -201,8 +201,8 @@
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6_
   - _Prompt: Role: QA Engineer | Task: Write unit tests for WorkflowError covering all variants and From implementations | Restrictions: Test error message content, verify From trait conversions | Success: All error variants tested, From implementations verified_
 
-- [ ] 14. SecretSharingWorkflowService ユニットテスト - バリデーション
-  - File: `client/src/usecase/secret_sharing_service.rs` (test module)
+- [x] 14. SecretSharingWorkflowService ユニットテスト - バリデーション
+  - File: `client/src/usecase/workflow/secret_sharing_service.rs` (test module)
   - test_phase1_invalid_threshold_exceeds
   - test_phase1_invalid_threshold_below_min
   - test_phase1_invalid_total_shares_exceeds_max
@@ -213,8 +213,8 @@
   - _Requirements: 1.10, 1.11, 1.12, 1.13, 1.14_
   - _Prompt: Role: QA Engineer | Task: Write unit tests for SecretSharingWorkflowService validation using mocked Core Services | Restrictions: Use mockall for mocking, test each validation rule independently | Success: All validation scenarios tested, correct errors returned_
 
-- [ ] 15. SecretSharingWorkflowService ユニットテスト - ワークフロー
-  - File: `client/src/usecase/secret_sharing_service.rs` (test module)
+- [x] 15. SecretSharingWorkflowService ユニットテスト - ワークフロー
+  - File: `client/src/usecase/workflow/secret_sharing_service.rs` (test module)
   - test_phase1_generates_symmetric_key
   - test_phase1_splits_secret_shamir
   - test_phase1_encrypts_shares_aes_gcm
@@ -231,8 +231,8 @@
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9_
   - _Prompt: Role: QA Engineer | Task: Write unit tests for SecretSharingWorkflowService workflow steps using mocked Core Services | Restrictions: Verify each step calls correct service method with correct parameters | Success: All workflow steps tested, service calls verified_
 
-- [ ] 16. SecretSharingWorkflowService ユニットテスト - エラーハンドリング
-  - File: `client/src/usecase/secret_sharing_service.rs` (test module)
+- [x] 16. SecretSharingWorkflowService ユニットテスト - エラーハンドリング
+  - File: `client/src/usecase/workflow/secret_sharing_service.rs` (test module)
   - test_phase1_crypto_service_error
   - test_phase1_storage_service_error
   - test_phase1_ao_communication_error
@@ -244,8 +244,8 @@
   - _Requirements: 1.15, 1.16, 1.17, 2.1, 2.2, 2.3_
   - _Prompt: Role: QA Engineer | Task: Write unit tests for error propagation in SecretSharingWorkflowService | Restrictions: Mock service errors and verify correct WorkflowError is returned | Success: All error scenarios tested, correct error types returned_
 
-- [ ] 17. SecretRecoveryWorkflowService ユニットテスト - バリデーション
-  - File: `client/src/usecase/secret_recovery_service.rs` (test module)
+- [x] 17. SecretRecoveryWorkflowService ユニットテスト - バリデーション
+  - File: `client/src/usecase/workflow/secret_recovery_service.rs` (test module)
   - test_phase3_validates_cfrag_count
   - test_phase3_insufficient_cfrags
   - test_phase3_invalid_capsule
@@ -256,8 +256,8 @@
   - _Requirements: 3.1, 3.8, 3.9, 3.10, 3.11_
   - _Prompt: Role: QA Engineer | Task: Write unit tests for SecretRecoveryWorkflowService validation using mocked Core Services | Restrictions: Test cFrag count validation after fetching from AO | Success: All validation scenarios tested_
 
-- [ ] 18. SecretRecoveryWorkflowService ユニットテスト - ワークフロー
-  - File: `client/src/usecase/secret_recovery_service.rs` (test module)
+- [x] 18. SecretRecoveryWorkflowService ユニットテスト - ワークフロー
+  - File: `client/src/usecase/workflow/secret_recovery_service.rs` (test module)
   - test_phase3_retrieves_cfrags_from_requester_process
   - test_phase3_retrieves_capsule_from_arweave
   - test_phase3_combines_and_decrypts_symmetric_key
@@ -274,8 +274,8 @@
   - _Requirements: 3.2, 3.3, 3.4, 3.5, 3.6, 3.7_
   - _Prompt: Role: QA Engineer | Task: Write unit tests for SecretRecoveryWorkflowService workflow steps, including cFrag/Capsule retrieval from AO/Arweave | Restrictions: Verify retrieve_cfrags_from_requester_process and retrieve_capsule are called before crypto operations | Success: All workflow steps tested including AO/Arweave fetch_
 
-- [ ] 19. SecretRecoveryWorkflowService ユニットテスト - エラーハンドリング
-  - File: `client/src/usecase/secret_recovery_service.rs` (test module)
+- [x] 19. SecretRecoveryWorkflowService ユニットテスト - エラーハンドリング
+  - File: `client/src/usecase/workflow/secret_recovery_service.rs` (test module)
   - test_phase3_decryption_error_with_audit
   - test_phase3_storage_service_error
   - test_phase3_ao_retrieval_error

@@ -359,4 +359,177 @@ mod tests {
         let service_err: ServiceError = domain_err.into();
         assert!(service_err.is_business_error());
     }
+
+    // ========================================================================
+    // WorkflowError Unit Tests (Task 13)
+    // ========================================================================
+
+    #[test]
+    fn test_workflow_error_validation() {
+        let err = WorkflowError::validation("Invalid threshold value");
+        assert!(matches!(err, WorkflowError::ValidationError(_)));
+        assert!(err.is_recoverable());
+
+        let msg = err.to_string();
+        assert!(msg.contains("Validation error"));
+        assert!(msg.contains("Invalid threshold value"));
+    }
+
+    #[test]
+    fn test_workflow_error_from_crypto_service() {
+        // Test conversion from ServiceError::System(CryptoError) to WorkflowError::CryptoError
+        let service_err = ServiceError::crypto_error("Encryption failed");
+        let workflow_err: WorkflowError = service_err.into();
+
+        assert!(matches!(workflow_err, WorkflowError::CryptoError(_)));
+        assert!(!workflow_err.is_recoverable());
+
+        let msg = workflow_err.to_string();
+        assert!(msg.contains("Crypto operation failed"));
+    }
+
+    #[test]
+    fn test_workflow_error_from_storage_service() {
+        // Test conversion from ServiceError::System(StorageError) to WorkflowError::StorageError
+        let service_err = ServiceError::storage_error("Arweave upload failed");
+        let workflow_err: WorkflowError = service_err.into();
+
+        assert!(matches!(workflow_err, WorkflowError::StorageError(_)));
+        assert!(!workflow_err.is_recoverable());
+
+        let msg = workflow_err.to_string();
+        assert!(msg.contains("Storage operation failed"));
+    }
+
+    #[test]
+    fn test_workflow_error_ao_communication() {
+        let err = WorkflowError::ao_communication("Failed to send kFrags to Owner-Process");
+        assert!(matches!(err, WorkflowError::AOCommunicationError(_)));
+        assert!(!err.is_recoverable());
+
+        let msg = err.to_string();
+        assert!(msg.contains("AO communication failed"));
+        assert!(msg.contains("Failed to send kFrags"));
+
+        // Test conversion from ServiceError::System(AONetworkError)
+        let service_err = ServiceError::ao_network_error("Network timeout");
+        let workflow_err: WorkflowError = service_err.into();
+        assert!(matches!(
+            workflow_err,
+            WorkflowError::AOCommunicationError(_)
+        ));
+    }
+
+    #[test]
+    fn test_workflow_error_insufficient_cfrags() {
+        let err = WorkflowError::insufficient_cfrags(3, 2);
+        assert!(matches!(
+            err,
+            WorkflowError::InsufficientCFrags {
+                required: 3,
+                actual: 2
+            }
+        ));
+        assert!(err.is_recoverable());
+
+        let msg = err.to_string();
+        assert!(msg.contains("Insufficient cFrags"));
+        assert!(msg.contains("need 3"));
+        assert!(msg.contains("got 2"));
+
+        // Test conversion from ServiceError::Business(ThresholdNotMet)
+        let service_err = ServiceError::Business(BusinessException::ThresholdNotMet {
+            required: 5,
+            actual: 3,
+        });
+        let workflow_err: WorkflowError = service_err.into();
+        assert!(matches!(
+            workflow_err,
+            WorkflowError::InsufficientCFrags {
+                required: 5,
+                actual: 3
+            }
+        ));
+    }
+
+    #[test]
+    fn test_workflow_error_decryption() {
+        let err = WorkflowError::decryption("PRE decapsulation");
+        assert!(matches!(err, WorkflowError::DecryptionError { .. }));
+        assert!(!err.is_recoverable());
+
+        let msg = err.to_string();
+        assert!(msg.contains("Decryption failed"));
+        assert!(msg.contains("PRE decapsulation"));
+
+        // Test with phase detail
+        let err2 = WorkflowError::DecryptionError {
+            phase: "AES-GCM share decryption".to_string(),
+        };
+        let msg2 = err2.to_string();
+        assert!(msg2.contains("AES-GCM share decryption"));
+    }
+
+    #[test]
+    fn test_workflow_error_resource_not_found() {
+        let err = WorkflowError::not_found("Secret abc123 not found");
+        assert!(matches!(err, WorkflowError::ResourceNotFound(_)));
+        assert!(err.is_recoverable());
+
+        let msg = err.to_string();
+        assert!(msg.contains("Resource not found"));
+        assert!(msg.contains("abc123"));
+
+        // Test conversion from ServiceError::Business(ResourceNotFound)
+        let service_err = ServiceError::not_found("Capsule not found");
+        let workflow_err: WorkflowError = service_err.into();
+        assert!(matches!(workflow_err, WorkflowError::ResourceNotFound(_)));
+    }
+
+    #[test]
+    fn test_workflow_error_from_validation_business() {
+        // Test conversion from ServiceError::Business(ValidationError)
+        let service_err = ServiceError::validation_error("Invalid parameters");
+        let workflow_err: WorkflowError = service_err.into();
+
+        assert!(matches!(workflow_err, WorkflowError::ValidationError(_)));
+        assert!(workflow_err.is_recoverable());
+    }
+
+    #[test]
+    fn test_workflow_error_from_other_business() {
+        // Test that other business exceptions convert to ValidationError
+        let service_err = ServiceError::Business(BusinessException::AuthorizationError(
+            "Not authorized".into(),
+        ));
+        let workflow_err: WorkflowError = service_err.into();
+
+        // Should convert to ValidationError as fallback
+        assert!(matches!(workflow_err, WorkflowError::ValidationError(_)));
+    }
+
+    #[test]
+    fn test_workflow_error_from_other_system() {
+        // Test that other system exceptions convert to StorageError
+        let service_err =
+            ServiceError::System(SystemException::NetworkError("Connection refused".into()));
+        let workflow_err: WorkflowError = service_err.into();
+
+        // Should convert to StorageError as fallback
+        assert!(matches!(workflow_err, WorkflowError::StorageError(_)));
+    }
+
+    #[test]
+    fn test_workflow_error_is_recoverable() {
+        // Recoverable errors
+        assert!(WorkflowError::validation("test").is_recoverable());
+        assert!(WorkflowError::not_found("test").is_recoverable());
+        assert!(WorkflowError::insufficient_cfrags(3, 2).is_recoverable());
+
+        // Non-recoverable errors
+        assert!(!WorkflowError::crypto("test").is_recoverable());
+        assert!(!WorkflowError::storage("test").is_recoverable());
+        assert!(!WorkflowError::ao_communication("test").is_recoverable());
+        assert!(!WorkflowError::decryption("test").is_recoverable());
+    }
 }
