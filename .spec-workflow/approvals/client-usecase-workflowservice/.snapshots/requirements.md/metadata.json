@@ -1,0 +1,38 @@
+{
+  "filePath": ".spec-workflow/specs/client-usecase-workflowservice/requirements.md",
+  "currentVersion": 4,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-01-06T08:58:06.365Z",
+      "trigger": "initial",
+      "approvalId": "approval_1767689886350_9b1vem67v",
+      "approvalTitle": "Requirements: Client UseCase WorkflowService"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-01-07T06:05:51.470Z",
+      "trigger": "revision_requested",
+      "approvalId": "approval_1767691757809_f08i0wpul",
+      "approvalTitle": "Requirements: Client UseCase WorkflowService (Revised)"
+    },
+    {
+      "version": 3,
+      "filename": "snapshot-003.json",
+      "timestamp": "2026-01-07T06:28:16.604Z",
+      "trigger": "revision_requested",
+      "approvalId": "approval_1767766178307_37ebyu1ct",
+      "approvalTitle": "Requirements: WorkflowService (SecretSharing/SecretRecovery) - Revised v2"
+    },
+    {
+      "version": 4,
+      "filename": "snapshot-004.json",
+      "timestamp": "2026-01-07T07:17:50.235Z",
+      "trigger": "approved",
+      "approvalId": "approval_1767769643152_ofm0c03we",
+      "approvalTitle": "Requirements: WorkflowService (SecretSharing/SecretRecovery) - Revised v3"
+    }
+  ]
+}
