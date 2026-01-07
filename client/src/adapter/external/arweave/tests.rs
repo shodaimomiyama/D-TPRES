@@ -66,8 +66,16 @@ mod config_tests {
 
         let config2 = config1.clone();
 
-        println!("Original: gateway={}, timeout={}", config1.gateway_url(), config1.timeout_secs());
-        println!("Cloned:   gateway={}, timeout={}", config2.gateway_url(), config2.timeout_secs());
+        println!(
+            "Original: gateway={}, timeout={}",
+            config1.gateway_url(),
+            config1.timeout_secs()
+        );
+        println!(
+            "Cloned:   gateway={}, timeout={}",
+            config2.gateway_url(),
+            config2.timeout_secs()
+        );
 
         assert_eq!(config1.gateway_url(), config2.gateway_url());
         assert_eq!(config1.timeout_secs(), config2.timeout_secs());
@@ -109,8 +117,14 @@ mod graphql_response_tests {
 
         let data = response.data.unwrap();
         println!("Transaction edges count: {}", data.transactions.edges.len());
-        println!("Edge 0: id={}, cursor={}", data.transactions.edges[0].node.id, data.transactions.edges[0].cursor);
-        println!("Edge 1: id={}, cursor={}", data.transactions.edges[1].node.id, data.transactions.edges[1].cursor);
+        println!(
+            "Edge 0: id={}, cursor={}",
+            data.transactions.edges[0].node.id, data.transactions.edges[0].cursor
+        );
+        println!(
+            "Edge 1: id={}, cursor={}",
+            data.transactions.edges[1].node.id, data.transactions.edges[1].cursor
+        );
         println!("hasNextPage: {}", data.transactions.page_info.has_next_page);
 
         assert_eq!(data.transactions.edges.len(), 2);
@@ -266,7 +280,11 @@ mod client_impl_tests {
             .with_gateway_url("https://custom.gateway.io")
             .with_timeout(120);
 
-        println!("Custom config: gateway={}, timeout={}", config.gateway_url(), config.timeout_secs());
+        println!(
+            "Custom config: gateway={}, timeout={}",
+            config.gateway_url(),
+            config.timeout_secs()
+        );
 
         let client = ArweaveClientImpl::new(config);
         println!("Client creation result: {:?}", client.is_ok());
@@ -289,7 +307,10 @@ mod wallet_tests {
             "e": "AQAB"
         });
         println!("JWK kty: {}", jwk["kty"]);
-        println!("JWK n (first 50 chars): {}...", &jwk["n"].as_str().unwrap()[..50]);
+        println!(
+            "JWK n (first 50 chars): {}...",
+            &jwk["n"].as_str().unwrap()[..50]
+        );
 
         let wallet = ArweaveWallet::from_jwk(jwk);
         println!("Wallet creation result: {:?}", wallet.is_ok());
@@ -327,7 +348,10 @@ mod wallet_tests {
         let wallet = ArweaveWallet::from_jwk(jwk).unwrap();
         let owner = wallet.owner();
 
-        println!("Owner (first 80 chars): {}...", &owner[..80.min(owner.len())]);
+        println!(
+            "Owner (first 80 chars): {}...",
+            &owner[..80.min(owner.len())]
+        );
         println!("Owner length: {}", owner.len());
 
         assert!(!owner.is_empty());
@@ -454,7 +478,9 @@ mod error_tests {
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::adapter::external::arweave::{ArweaveClientConfig, ArweaveClientImpl, ArweaveWallet};
+    use crate::adapter::external::arweave::{
+        ArweaveClientConfig, ArweaveClientImpl, ArweaveWallet,
+    };
     use crate::adapter::repository_impl::{ArweaveClient, Tag};
 
     #[allow(dead_code)]
@@ -485,7 +511,7 @@ mod integration_tests {
         println!("Fetching tx_id: {}", tx_id);
 
         let result = client.get(tx_id).await;
-        println!("Result: {:?}", result);
+        // println!("Result: {:?}", result);
 
         match &result {
             Ok(Some(bytes)) => println!("Data size: {} bytes", bytes.len()),
@@ -511,11 +537,11 @@ mod integration_tests {
         match &result {
             Ok(tx_ids) => {
                 println!("Found {} transactions", tx_ids.len());
-                for (i, tx_id) in tx_ids.iter().take(5).enumerate() {
+                for (i, tx_id) in tx_ids.iter().take(10).enumerate() {
                     println!("  [{}] {}", i, tx_id);
                 }
-                if tx_ids.len() > 5 {
-                    println!("  ... and {} more", tx_ids.len() - 5);
+                if tx_ids.len() > 10 {
+                    println!("  ... and {} more", tx_ids.len() - 10);
                 }
             }
             Err(e) => println!("Error: {:?}", e),

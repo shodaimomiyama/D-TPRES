@@ -2,12 +2,15 @@
 //!
 //! Provides wallet abstraction for Arweave transaction signing.
 
+use std::env;
+
 use sha2::{Digest, Sha256};
 
 use crate::adapter::errors::AdapterError;
 use crate::adapter::external::arweave::client::base64url_encode;
 
 /// Arweave wallet for transaction signing
+#[derive(Debug)]
 pub struct ArweaveWallet {
     jwk: serde_json::Value,
     public_key_bytes: Vec<u8>,
@@ -42,6 +45,27 @@ impl ArweaveWallet {
             jwk,
             public_key_bytes,
         })
+    }
+
+    /// Create wallet from ARWEAVE_WALLET_JWK environment variable
+    ///
+    /// The environment variable should contain a valid JWK JSON string.
+    pub fn from_env() -> Result<Self, AdapterError> {
+        let jwk_str = env::var("ARWEAVE_WALLET_JWK").map_err(|_| {
+            AdapterError::configuration_error(
+                "wallet",
+                "ARWEAVE_WALLET_JWK environment variable not set",
+            )
+        })?;
+
+        let jwk: serde_json::Value = serde_json::from_str(&jwk_str).map_err(|e| {
+            AdapterError::configuration_error(
+                "wallet",
+                &format!("Invalid JSON in ARWEAVE_WALLET_JWK: {e}"),
+            )
+        })?;
+
+        Self::from_jwk(jwk)
     }
 
     /// Get wallet address (derived from SHA-256 hash of public key)
