@@ -3,8 +3,10 @@
   "title": "Requirements: Client UseCase CoreService (CryptoService & ArweaveStorageService)",
   "filePath": ".spec-workflow/specs/client-usecase-coreservice/requirements.md",
   "type": "document",
-  "status": "pending",
+  "status": "rejected",
   "createdAt": "2025-12-25T23:03:57.582Z",
   "category": "spec",
-  "categoryName": "client-usecase-coreservice"
+  "categoryName": "client-usecase-coreservice",
+  "response": "これはキャッシュです。",
+  "respondedAt": "2026-01-07T07:45:25.531Z"
 }

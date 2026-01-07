@@ -2,6 +2,8 @@
 //!
 //! This module defines error types for the service layer, distinguishing between
 //! business exceptions (recoverable) and system exceptions (non-recoverable).
+//!
+//! Additionally defines WorkflowError for Workflow Service layer operations.
 
 use thiserror::Error;
 
@@ -208,6 +210,126 @@ impl ServiceError {
     /// Create a storage error
     pub fn storage_error(message: impl Into<String>) -> Self {
         ServiceError::System(SystemException::StorageError(message.into()))
+    }
+
+    /// Create an AO network error
+    pub fn ao_network_error(message: impl Into<String>) -> Self {
+        ServiceError::System(SystemException::AONetworkError(message.into()))
+    }
+}
+
+// ============================================================================
+// WorkflowError - Workflow Service Layer Errors
+// ============================================================================
+
+/// Workflow layer result type
+pub type WorkflowResult<T> = Result<T, WorkflowError>;
+
+/// Workflow layer error hierarchy
+///
+/// Defines errors specific to Workflow Service operations that orchestrate
+/// Core Services for PHASE 1 (secret sharing) and PHASE 3 (secret recovery).
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum WorkflowError {
+    /// Input parameter validation errors
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+
+    /// Crypto operation failures (from CryptoService)
+    #[error("Crypto operation failed: {0}")]
+    CryptoError(String),
+
+    /// Storage operation failures (from StorageService)
+    #[error("Storage operation failed: {0}")]
+    StorageError(String),
+
+    /// AO Network communication failures
+    #[error("AO communication failed: {0}")]
+    AOCommunicationError(String),
+
+    /// Insufficient cFrags for threshold reconstruction
+    #[error("Insufficient cFrags: need {required}, got {actual}")]
+    InsufficientCFrags { required: u8, actual: u8 },
+
+    /// Decryption failures at specific phases
+    #[error("Decryption failed at phase: {phase}")]
+    DecryptionError { phase: String },
+
+    /// Resource not found errors
+    #[error("Resource not found: {0}")]
+    ResourceNotFound(String),
+}
+
+/// Conversion from ServiceError to WorkflowError
+impl From<ServiceError> for WorkflowError {
+    fn from(err: ServiceError) -> Self {
+        match err {
+            ServiceError::Business(business_err) => match business_err {
+                BusinessException::ValidationError(msg) => WorkflowError::ValidationError(msg),
+                BusinessException::ResourceNotFound(msg) => WorkflowError::ResourceNotFound(msg),
+                BusinessException::ThresholdNotMet { required, actual } => {
+                    WorkflowError::InsufficientCFrags { required, actual }
+                }
+                other => WorkflowError::ValidationError(other.to_string()),
+            },
+            ServiceError::System(system_err) => match system_err {
+                SystemException::CryptoError(msg) => WorkflowError::CryptoError(msg),
+                SystemException::StorageError(msg) => WorkflowError::StorageError(msg),
+                SystemException::AONetworkError(msg) => WorkflowError::AOCommunicationError(msg),
+                other => WorkflowError::StorageError(other.to_string()),
+            },
+        }
+    }
+}
+
+/// Helper methods for WorkflowError
+impl WorkflowError {
+    /// Create a validation error
+    pub fn validation(message: impl Into<String>) -> Self {
+        WorkflowError::ValidationError(message.into())
+    }
+
+    /// Create a crypto error
+    pub fn crypto(message: impl Into<String>) -> Self {
+        WorkflowError::CryptoError(message.into())
+    }
+
+    /// Create a storage error
+    pub fn storage(message: impl Into<String>) -> Self {
+        WorkflowError::StorageError(message.into())
+    }
+
+    /// Create an AO communication error
+    pub fn ao_communication(message: impl Into<String>) -> Self {
+        WorkflowError::AOCommunicationError(message.into())
+    }
+
+    /// Create an insufficient cFrags error
+    pub fn insufficient_cfrags(required: u8, actual: u8) -> Self {
+        WorkflowError::InsufficientCFrags { required, actual }
+    }
+
+    /// Create a decryption error
+    pub fn decryption(phase: impl Into<String>) -> Self {
+        WorkflowError::DecryptionError {
+            phase: phase.into(),
+        }
+    }
+
+    /// Create a resource not found error
+    pub fn not_found(message: impl Into<String>) -> Self {
+        WorkflowError::ResourceNotFound(message.into())
+    }
+
+    /// Check if this error is recoverable
+    pub const fn is_recoverable(&self) -> bool {
+        matches!(
+            self,
+            WorkflowError::ValidationError(_)
+                | WorkflowError::ResourceNotFound(_)
+                | WorkflowError::InsufficientCFrags { .. }
+        )
     }
 }
 
