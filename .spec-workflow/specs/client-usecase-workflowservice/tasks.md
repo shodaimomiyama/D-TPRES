@@ -292,7 +292,7 @@
 
 ## Phase 6: 統合テスト
 
-- [ ] 20. PHASE 1統合テスト
+- [x] 20. PHASE 1統合テスト
   - File: `client/tests/integration/secret_sharing_workflow_test.rs`
   - test_phase1_integration_complete_flow
   - 実CryptoService、MockStorageServiceを使用
@@ -302,7 +302,7 @@
   - _Requirements: 1 (all)_
   - _Prompt: Role: Integration Test Engineer | Task: Write integration test for PHASE 1 using real CryptoService and mocked StorageService | Restrictions: Verify crypto operations produce valid outputs, test full workflow | Success: Integration test passes, crypto outputs are valid_
 
-- [ ] 21. PHASE 3統合テスト
+- [x] 21. PHASE 3統合テスト
   - File: `client/tests/integration/secret_recovery_workflow_test.rs`
   - test_phase3_integration_complete_flow
   - 実CryptoService、MockStorageServiceを使用
@@ -313,7 +313,7 @@
   - _Requirements: 3 (all)_
   - _Prompt: Role: Integration Test Engineer | Task: Write integration test for PHASE 3 using real CryptoService and mocked StorageService | Restrictions: Mock AO/Arweave responses for cFrags/Capsule, verify decryption produces original secret | Success: Integration test passes, recovered secret matches original_
 
-- [ ] 22. PHASE 1 → PHASE 3 ラウンドトリップテスト
+- [x] 22. PHASE 1 → PHASE 3 ラウンドトリップテスト
   - File: `client/tests/integration/workflow_roundtrip_test.rs`
   - test_share_and_recover_roundtrip
   - PHASE 1で秘密を分割、PHASE 3で復元
