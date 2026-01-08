@@ -389,34 +389,54 @@ impl ArweaveClient for ArweaveClientImpl {
     async fn query(&self, tags: Vec<Tag>) -> Result<Vec<String>, AdapterError> {
         let mut all_tx_ids = Vec::new();
         let mut cursor: Option<String> = None;
+        let max_retries = self.config.max_retries();
+        let backoff_ms = self.config.retry_backoff_ms();
 
         loop {
             let query = self.build_graphql_query(&tags, cursor.as_deref());
             let payload = serde_json::json!({ "query": query });
+            let mut retries = 0;
 
-            let response = self
-                .http_client
-                .post(self.config.graphql_url())
-                .json(&payload)
-                .send()
-                .await
-                .map_err(|e| {
-                    AdapterError::network_error("query", &format!("Request failed: {e}"), 0)
-                })?;
+            let graphql_response: GraphQLResponse = loop {
+                match self
+                    .http_client
+                    .post(self.config.graphql_url())
+                    .json(&payload)
+                    .send()
+                    .await
+                {
+                    Ok(response) => {
+                        if response.status().is_success() {
+                            break response.json().await.map_err(|e| {
+                                AdapterError::serialization_error(
+                                    "query",
+                                    &format!("Failed to parse response: {e}"),
+                                )
+                            })?;
+                        }
 
-            if !response.status().is_success() {
-                return Err(AdapterError::query_error(
-                    "query",
-                    &format!("GraphQL request failed: {}", response.status()),
-                ));
-            }
+                        if retries >= max_retries {
+                            return Err(AdapterError::network_error(
+                                "query",
+                                &format!("GraphQL request failed: {}", response.status()),
+                                retries,
+                            ));
+                        }
+                    }
+                    Err(e) => {
+                        if retries >= max_retries {
+                            return Err(AdapterError::network_error(
+                                "query",
+                                &format!("Request failed: {e}"),
+                                retries,
+                            ));
+                        }
+                    }
+                }
 
-            let graphql_response: GraphQLResponse = response.json().await.map_err(|e| {
-                AdapterError::serialization_error(
-                    "query",
-                    &format!("Failed to parse response: {e}"),
-                )
-            })?;
+                retries += 1;
+                sleep_backoff(Duration::from_millis(backoff_ms * (1 << retries))).await;
+            };
 
             if let Some(errors) = graphql_response.errors {
                 if !errors.is_empty() {
