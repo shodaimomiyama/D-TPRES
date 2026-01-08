@@ -5,6 +5,8 @@
 
 use std::sync::Arc;
 
+use zeroize::Zeroizing;
+
 use crate::domain::value_objects::SecretId;
 use crate::usecase::core::crypto::{CryptoService, KeyFragment, PublicKey, ShamirShare, constants};
 use crate::usecase::dto::{SecretSharingRequest, SecretSharingResult, SecretStatus};
@@ -203,8 +205,8 @@ impl<C: CryptoService> SecretSharingWorkflowService for SecretSharingWorkflowSer
         // Step 0: Validate input parameters
         self.validate_request(&request)?;
 
-        // Step 1: Generate symmetric key kₒ
-        let symmetric_key = self.generate_symmetric_key()?;
+        // Step 1: Generate symmetric key kₒ (wrapped with Zeroizing for automatic cleanup)
+        let symmetric_key: Zeroizing<Vec<u8>> = Zeroizing::new(self.generate_symmetric_key()?);
 
         // Step 2: Split secret using Shamir Secret Sharing
         let shares = self.split_secret(&request.secret, request.threshold, request.total_shares)?;
