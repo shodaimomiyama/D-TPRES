@@ -189,8 +189,17 @@ impl<C: CryptoService> SecretRecoveryWorkflowServiceImpl<C> {
                         phase: format!("AES-GCM decryption of share {}: {}", i, e),
                     })?;
 
+                // shamirsecretsharing library embeds the index in the first byte of share data
+                if decrypted_data.is_empty() {
+                    return Err(WorkflowError::DecryptionError {
+                        phase: "Share data is empty after decryption".to_string(),
+                    });
+                }
+
+                let index = decrypted_data[0];
+
                 Ok(ShamirShare {
-                    index: (i + 1) as u8,
+                    index,
                     data: decrypted_data,
                 })
             })
