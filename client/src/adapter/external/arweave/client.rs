@@ -43,13 +43,16 @@ pub(crate) struct TransactionEdge {
 #[derive(Debug, Deserialize)]
 pub(crate) struct TransactionNode {
     pub id: String,
+    #[allow(dead_code)]
     pub block: Option<BlockInfo>,
 }
 
 /// Block information
 #[derive(Debug, Deserialize)]
 pub(crate) struct BlockInfo {
+    #[allow(dead_code)]
     pub height: u64,
+    #[allow(dead_code)]
     pub timestamp: u64,
 }
 
@@ -132,6 +135,18 @@ use async_trait::async_trait;
 use reqwest::Client;
 
 use crate::adapter::errors::AdapterError;
+
+// Platform-specific sleep implementation for retry backoff
+#[cfg(not(target_arch = "wasm32"))]
+async fn sleep_backoff(duration: Duration) {
+    tokio::time::sleep(duration).await;
+}
+
+#[cfg(target_arch = "wasm32")]
+async fn sleep_backoff(_duration: Duration) {
+    // WASM environment: immediate retry without delay
+    // Browser fetch handles its own timeout/retry semantics
+}
 use crate::adapter::repository_impl::{ArweaveClient, Tag};
 
 use super::wallet::ArweaveWallet;
@@ -146,6 +161,7 @@ pub struct ArweaveClientImpl {
 impl ArweaveClientImpl {
     /// Create a new ArweaveClientImpl with the given configuration
     pub fn new(config: ArweaveClientConfig) -> Result<Self, AdapterError> {
+        #[cfg(not(target_arch = "wasm32"))]
         let http_client = Client::builder()
             .timeout(Duration::from_secs(config.timeout_secs()))
             .build()
@@ -155,6 +171,14 @@ impl ArweaveClientImpl {
                     &format!("Failed to create HTTP client: {e}"),
                 )
             })?;
+
+        #[cfg(target_arch = "wasm32")]
+        let http_client = Client::builder().build().map_err(|e| {
+            AdapterError::configuration_error(
+                "http_client",
+                &format!("Failed to create HTTP client: {e}"),
+            )
+        })?;
 
         Ok(Self {
             config,
@@ -210,7 +234,8 @@ impl ArweaveClientImpl {
     }
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl ArweaveClient for ArweaveClientImpl {
     async fn get(&self, tx_id: &str) -> Result<Option<Vec<u8>>, AdapterError> {
         let url = format!("{}/tx/{}/data", self.config.gateway_url(), tx_id);
@@ -271,7 +296,7 @@ impl ArweaveClient for ArweaveClientImpl {
             }
 
             retries += 1;
-            tokio::time::sleep(Duration::from_millis(backoff_ms * (1 << retries))).await;
+            sleep_backoff(Duration::from_millis(backoff_ms * (1 << retries))).await;
         }
     }
 
@@ -357,7 +382,7 @@ impl ArweaveClient for ArweaveClientImpl {
             }
 
             retries += 1;
-            tokio::time::sleep(Duration::from_millis(backoff_ms * (1 << retries))).await;
+            sleep_backoff(Duration::from_millis(backoff_ms * (1 << retries))).await;
         }
     }
 

@@ -175,6 +175,53 @@
 
 ---
 
+## WASM互換性修正タスク（PR #48レビュー対応）
+
+PR #48のコードレビューで指摘されたWASM互換性問題を修正します。
+
+**問題:**
+- `reqwest`の`rustls-tls`機能は`wasm32-unknown-unknown`ターゲットで動作しない
+- `tokio::time::sleep`はWASM環境で動作しない
+- steering docs（tech.md, structure.md）によると、`client/`は**ブラウザWASMが主要実行環境**
+
+- [-] 17. Cargo.toml のプラットフォーム別依存関係設定
+  - File: `client/Cargo.toml`
+  - `rustls-tls`をネイティブ専用に変更
+  - `tokio`の`time`機能をネイティブ専用に変更
+  - WASM用のベース依存関係を設定
+  - Purpose: WASMビルドでの依存関係エラーを解消
+  - _Requirements: steering docs (tech.md: wasm32-unknown-unknown target)_
+  - _Prompt: Implement the task for spec client-adapter-external-arweaveclient, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Rust Developer with expertise in cross-platform compilation | Task: Update Cargo.toml to separate native-only dependencies (rustls-tls, tokio time) from WASM-compatible dependencies | Restrictions: Maintain backward compatibility for native builds, follow Cargo target-specific dependency syntax | _Leverage: client/Cargo.toml, .spec-workflow/steering/tech.md | Success: `cargo check --target wasm32-unknown-unknown` succeeds without TLS/tokio errors | Instructions: 1. Mark task as in-progress in tasks.md, 2. Implement, 3. Log with log-implementation tool, 4. Mark as complete_
+
+- [ ] 18. client.rs の条件付きコンパイル追加
+  - File: `client/src/adapter/external/arweave/client.rs`
+  - `tokio::time::sleep`を条件付きコンパイルでラップ
+  - WASM用の代替実装（スリープなしまたはgloo-timers）を追加
+  - `#[cfg(not(target_arch = "wasm32"))]`と`#[cfg(target_arch = "wasm32")]`を使用
+  - Purpose: WASMビルドでのtokio依存を解消
+  - _Requirements: steering docs (tech.md: wasm32-unknown-unknown target)_
+  - _Prompt: Implement the task for spec client-adapter-external-arweaveclient, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Rust Developer with expertise in conditional compilation | Task: Add cfg attributes to isolate tokio::time::sleep for native-only, provide WASM alternative | Restrictions: Keep retry logic functional on both platforms, minimize code duplication | _Leverage: client/src/adapter/external/arweave/client.rs lines 274, 360 | Success: Code compiles for both native and wasm32 targets | Instructions: 1. Mark task as in-progress in tasks.md, 2. Implement, 3. Log with log-implementation tool, 4. Mark as complete_
+
+- [ ] 19. dead_code 警告の修正
+  - File: `client/src/adapter/external/arweave/client.rs`
+  - `TransactionNode.block`フィールドに`#[allow(dead_code)]`追加
+  - `BlockInfo.height`と`BlockInfo.timestamp`フィールドに`#[allow(dead_code)]`追加
+  - Arweave GraphQL APIレスポンス構造として必要なフィールドであることをコメントで説明
+  - Purpose: clippy警告をクリーンアップ
+  - _Requirements: コードレビュー指摘事項_
+  - _Prompt: Implement the task for spec client-adapter-external-arweaveclient, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Rust Developer | Task: Add #[allow(dead_code)] attributes to GraphQL response struct fields that are part of API contract but not currently used | Restrictions: Add explanatory comments for future maintainers | _Leverage: client/src/adapter/external/arweave/client.rs lines 44-53 | Success: `make clippy` passes without dead_code warnings | Instructions: 1. Mark task as in-progress in tasks.md, 2. Implement, 3. Log with log-implementation tool, 4. Mark as complete_
+
+- [ ] 20. WASMビルド検証
+  - File: N/A (verification task)
+  - `cargo check --manifest-path client/Cargo.toml --target wasm32-unknown-unknown`を実行
+  - ネイティブビルド`cargo check --manifest-path client/Cargo.toml`も確認
+  - `make clippy`でlint警告がないことを確認
+  - Purpose: WASM互換性の最終検証
+  - _Requirements: steering docs (tech.md: wasm32-unknown-unknown target)_
+  - _Prompt: Implement the task for spec client-adapter-external-arweaveclient, first run spec-workflow-guide to get the workflow guide then implement the task: Role: QA Engineer | Task: Verify WASM build succeeds and native build still works | Restrictions: Both targets must compile without errors | _Leverage: Makefile, Cargo.toml | Success: Both wasm32 and native targets compile successfully, clippy passes | Instructions: 1. Mark task as in-progress in tasks.md, 2. Run verification commands, 3. Log results with log-implementation tool, 4. Mark as complete_
+
+---
+
 ## タスク依存関係
 
 ```mermaid

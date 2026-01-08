@@ -41,7 +41,8 @@
       "Bash(xargs:*)",
       "mcp__spec-workflow__spec-workflow-guide",
       "WebFetch(domain:lib.rs)",
-      "mcp__spec-workflow__spec-status"
+      "mcp__spec-workflow__spec-status",
+      "Bash(gh api:*)"
     ],
     "deny": []
   },

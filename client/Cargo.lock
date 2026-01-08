@@ -412,6 +412,7 @@ dependencies = [
  "cw-multi-test",
  "cw-storage-plus",
  "generic-array",
+ "getrandom 0.2.16",
  "rand 0.8.5",
  "reqwest",
  "secrecy",

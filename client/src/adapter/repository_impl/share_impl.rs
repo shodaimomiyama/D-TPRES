@@ -132,7 +132,8 @@ impl<C: ArweaveClient> ArweaveShareCollectionRepository<C> {
     }
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl<C: ArweaveClient> Repository<ShareCollection, ShareCollectionId>
     for ArweaveShareCollectionRepository<C>
 {
@@ -226,7 +227,8 @@ impl<C: ArweaveClient> Repository<ShareCollection, ShareCollectionId>
     }
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl<C: ArweaveClient> ShareCollectionRepository for ArweaveShareCollectionRepository<C> {
     async fn find_by_secret_id(
         &self,
