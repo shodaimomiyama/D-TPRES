@@ -511,7 +511,7 @@ mod integration_tests {
         println!("Fetching tx_id: {}", tx_id);
 
         let result = client.get(tx_id).await;
-        // println!("Result: {:?}", result);
+        println!("Result: {:?}", result);
 
         match &result {
             Ok(Some(bytes)) => println!("Data size: {} bytes", bytes.len()),
