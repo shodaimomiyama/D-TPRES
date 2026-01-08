@@ -14,15 +14,14 @@ use super::Repository;
 /// Secret is the aggregate root in D-TPRES, managing references to related entities
 /// (ShareCollection, Capsule, KFrag). This repository handles Secret persistence
 /// with state transition support (Initialized → Split → Distributed → Recovered).
+#[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
-pub trait SecretRepository: Repository<Secret, SecretId> {
-    // Inherits all methods from base Repository trait:
-    // - save(&self, entity: &Secret) -> DomainResult<()>
-    // - find_by_id(&self, id: &SecretId) -> DomainResult<Option<Secret>>
-    // - delete(&self, id: &SecretId) -> DomainResult<()>
-    // - exists(&self, id: &SecretId) -> DomainResult<bool>
-    // - find_by_ids(&self, ids: &[SecretId]) -> DomainResult<Vec<Secret>>
-}
+pub trait SecretRepository: Repository<Secret, SecretId> {}
+
+/// Repository interface for Secret entity (WASM version)
+#[cfg(target_arch = "wasm32")]
+#[async_trait(?Send)]
+pub trait SecretRepository: Repository<Secret, SecretId> {}
 
 #[cfg(test)]
 mod tests {

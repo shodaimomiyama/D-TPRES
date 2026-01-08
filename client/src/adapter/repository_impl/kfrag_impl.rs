@@ -117,7 +117,8 @@ impl<C: ArweaveClient> ArweaveKFragRepository<C> {
     }
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl<C: ArweaveClient> Repository<KFrag, KFragId> for ArweaveKFragRepository<C> {
     async fn save(&self, entity: &KFrag) -> DomainResult<()> {
         let stored = StoredKFrag::from_entity(entity);
@@ -212,7 +213,8 @@ impl<C: ArweaveClient> Repository<KFrag, KFragId> for ArweaveKFragRepository<C> 
     }
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl<C: ArweaveClient> KFragRepository for ArweaveKFragRepository<C> {
     async fn find_by_secret_id(&self, secret_id: &SecretId) -> DomainResult<Vec<KFrag>> {
         use std::collections::HashMap;
