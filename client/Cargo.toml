@@ -33,3 +33,4 @@ getrandom = { version = "0.2", features = ["js"] }
 [dev-dependencies]
 cw-multi-test = "0.13.4"
 tokio = { version = "1", features = ["rt", "macros"] }
+dotenvy = "0.15"

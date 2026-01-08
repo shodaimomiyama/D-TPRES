@@ -483,6 +483,13 @@ mod integration_tests {
     };
     use crate::adapter::repository_impl::{ArweaveClient, Tag};
 
+    fn is_integration_test_enabled() -> bool {
+        let _ = dotenvy::dotenv();
+        std::env::var("ARWEAVE_INTEGRATION_TESTS")
+            .map(|v| v == "true")
+            .unwrap_or(false)
+    }
+
     #[allow(dead_code)]
     fn try_load_wallet_from_env() -> Option<ArweaveWallet> {
         match ArweaveWallet::from_env() {
@@ -500,6 +507,11 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_get_transaction_from_arweave() {
+        if !is_integration_test_enabled() {
+            println!("Skipping: set ARWEAVE_INTEGRATION_TESTS=true in .env to run");
+            return;
+        }
+
         println!("\n=== Integration Test: get_transaction_from_arweave ===");
 
         let config = ArweaveClientConfig::default();
@@ -522,6 +534,11 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_query_transactions_by_tags() {
+        if !is_integration_test_enabled() {
+            println!("Skipping: set ARWEAVE_INTEGRATION_TESTS=true in .env to run");
+            return;
+        }
+
         println!("\n=== Integration Test: query_transactions_by_tags ===");
 
         let config = ArweaveClientConfig::default();
