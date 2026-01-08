@@ -39,7 +39,9 @@
       "mcp__spec-workflow__log-implementation",
       "mcp__spec-workflow__approvals",
       "Bash(xargs:*)",
-      "mcp__spec-workflow__spec-workflow-guide"
+      "mcp__spec-workflow__spec-workflow-guide",
+      "mcp__spec-workflow__spec-status",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": []
   },
