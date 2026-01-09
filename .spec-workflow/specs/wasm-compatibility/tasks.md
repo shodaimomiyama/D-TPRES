@@ -91,3 +91,63 @@ $ cargo check --target wasm32-unknown-unknown
 $ cargo check
     Finished `dev` profile [unoptimized + debuginfo] target(s)
 ```
+
+---
+
+## Phase 2: Security Fixes (PR #48 Review)
+
+Additional issues identified during PR review and fixed.
+
+### Tasks
+
+- [x] 11. Add pagination infinite loop guard
+  - **Files**: `client/src/adapter/external/arweave/client.rs`
+  - **Description**: Added empty edges check before has_next_page to prevent infinite loop when API returns `has_next_page=true` with empty edges
+
+- [x] 12. Add GraphQL injection protection
+  - **Files**: `client/src/adapter/external/arweave/client.rs`
+  - **Description**: Added `escape_graphql_string()` function to escape special characters (\\, ", \n, \r, \t) in tag values and cursor
+
+- [x] 13. Fix configuration mismatch in .env.example
+  - **Files**: `.env.example` (root)
+  - **Description**: Changed `ARWEAVE_WALLET_PATH` to `ARWEAVE_WALLET_JWK` to match code expectations
+
+### Phase 2 Implementation Summary
+
+#### Files Modified
+1. `client/src/adapter/external/arweave/client.rs` - Added escape function, pagination guard
+2. `.env.example` - Fixed wallet configuration variable name
+
+#### Code Changes
+
+**Pagination Guard (client.rs:478-481):**
+```rust
+// Empty edges guard to prevent infinite loop when has_next_page is true but no results
+if response_data.transactions.edges.is_empty() {
+    break;
+}
+```
+
+**GraphQL Escape Function (client.rs:206-213):**
+```rust
+fn escape_graphql_string(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
+}
+```
+
+### Phase 2 Verification Results
+
+```
+$ cargo check --target wasm32-unknown-unknown
+    Finished `dev` profile [unoptimized + debuginfo] target(s)
+
+$ cargo check
+    Finished `dev` profile [unoptimized + debuginfo] target(s)
+
+$ cargo test
+test result: ok. 173 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
