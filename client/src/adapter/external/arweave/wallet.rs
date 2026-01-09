@@ -6,6 +6,9 @@ use std::env;
 use std::fs;
 use std::path::Path;
 
+use rsa::pss::{BlindedSigningKey, Signature};
+use rsa::signature::{RandomizedSigner, SignatureEncoding};
+use rsa::{BigUint, RsaPrivateKey};
 use sha2::{Digest, Sha256};
 
 use crate::adapter::errors::AdapterError;
@@ -103,26 +106,51 @@ impl ArweaveWallet {
     }
 
     /// Sign message using RSA-PSS with SHA-256
-    ///
-    /// Note: Full RSA-PSS signing requires the `rsa` crate and private key components.
-    /// This placeholder returns an error until proper signing is implemented.
-    #[allow(unused_variables)]
     pub fn sign(&self, message: &[u8]) -> Result<Vec<u8>, AdapterError> {
-        // Check for private key components
-        let _d = self.jwk.get("d").and_then(|v| v.as_str()).ok_or_else(|| {
+        let private_key = self.build_rsa_private_key()?;
+
+        let signing_key: BlindedSigningKey<Sha256> = BlindedSigningKey::new(private_key);
+
+        let mut rng = rand::thread_rng();
+        let signature: Signature = signing_key.sign_with_rng(&mut rng, message);
+
+        Ok(signature.to_vec())
+    }
+
+    /// Build RSA private key from JWK components
+    fn build_rsa_private_key(&self) -> Result<RsaPrivateKey, AdapterError> {
+        let modulus = self.decode_jwk_component("n", "modulus")?;
+        let public_exp = self.decode_jwk_component("e", "public exponent")?;
+        let private_exp = self.decode_jwk_component("d", "private exponent")?;
+        let prime_p = self.decode_jwk_component("p", "prime p")?;
+        let prime_q = self.decode_jwk_component("q", "prime q")?;
+
+        RsaPrivateKey::from_components(modulus, public_exp, private_exp, vec![prime_p, prime_q])
+            .map_err(|err| {
+                AdapterError::configuration_error(
+                    "wallet",
+                    &format!("Failed to construct RSA private key: {err}"),
+                )
+            })
+    }
+
+    /// Decode a JWK component from Base64URL to BigUint
+    fn decode_jwk_component(&self, key: &str, name: &str) -> Result<BigUint, AdapterError> {
+        let value = self.jwk.get(key).and_then(|v| v.as_str()).ok_or_else(|| {
             AdapterError::configuration_error(
                 "wallet",
-                "Missing private key component 'd' in JWK - cannot sign",
+                &format!("Missing JWK component '{key}' ({name})"),
             )
         })?;
 
-        // Note: Full RSA-PSS signing implementation requires the `rsa` crate
-        // and proper key reconstruction. For now, return an error indicating
-        // that signing is not yet implemented.
-        Err(AdapterError::configuration_error(
-            "wallet",
-            "RSA-PSS signing not yet implemented - requires additional cryptographic library",
-        ))
+        let bytes = base64url_decode_internal(value).map_err(|e| {
+            AdapterError::configuration_error(
+                "wallet",
+                &format!("Invalid Base64URL in JWK component '{key}': {e}"),
+            )
+        })?;
+
+        Ok(BigUint::from_bytes_be(&bytes))
     }
 }
 

@@ -134,6 +134,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use reqwest::Client;
+use sha2::{Digest, Sha256};
 
 use crate::adapter::errors::AdapterError;
 
@@ -232,7 +233,7 @@ impl ArweaveClientImpl {
             .unwrap_or_default();
 
         format!(
-            r#"{{
+            r"{{
                 transactions(
                     tags: [{}]
                     first: 100
@@ -244,10 +245,164 @@ impl ArweaveClientImpl {
                     }}
                     pageInfo {{ hasNextPage }}
                 }}
-            }}"#,
+            }}",
             tags_query.join(", "),
             after_clause
         )
+    }
+
+    /// Fetch transaction anchor from the network
+    async fn fetch_anchor(&self) -> Result<String, AdapterError> {
+        let url = format!("{}/tx_anchor", self.config.gateway_url());
+        let mut retries = 0;
+        let max_retries = self.config.max_retries();
+        let backoff_ms = self.config.retry_backoff_ms();
+
+        loop {
+            let result = self.http_client.get(&url).send().await;
+            let should_retry = match result {
+                Ok(response) if response.status().is_success() => {
+                    return response
+                        .text()
+                        .await
+                        .map_err(|e| Self::anchor_read_error(e, retries));
+                }
+                Ok(response) => {
+                    if retries >= max_retries {
+                        return Err(Self::anchor_http_error(response.status(), retries));
+                    }
+                    true
+                }
+                Err(e) => {
+                    if retries >= max_retries {
+                        return Err(Self::anchor_request_error(e, retries));
+                    }
+                    true
+                }
+            };
+
+            if should_retry {
+                retries += 1;
+                sleep_backoff(Duration::from_millis(backoff_ms * (1 << retries))).await;
+            }
+        }
+    }
+
+    fn anchor_read_error(e: reqwest::Error, retries: u32) -> AdapterError {
+        AdapterError::network_error("fetch_anchor", &format!("Failed to read anchor: {e}"), retries)
+    }
+
+    fn anchor_http_error(status: reqwest::StatusCode, retries: u32) -> AdapterError {
+        AdapterError::network_error("fetch_anchor", &format!("HTTP error: {status}"), retries)
+    }
+
+    fn anchor_request_error(e: reqwest::Error, retries: u32) -> AdapterError {
+        AdapterError::network_error("fetch_anchor", &format!("Request failed: {e}"), retries)
+    }
+
+    /// Fetch transaction price (reward) for given data size
+    async fn fetch_price(&self, data_size: usize) -> Result<String, AdapterError> {
+        let url = format!("{}/price/{data_size}", self.config.gateway_url());
+        let mut retries = 0;
+        let max_retries = self.config.max_retries();
+        let backoff_ms = self.config.retry_backoff_ms();
+
+        loop {
+            let result = self.http_client.get(&url).send().await;
+            let should_retry = match result {
+                Ok(response) if response.status().is_success() => {
+                    return response
+                        .text()
+                        .await
+                        .map_err(|e| Self::price_read_error(e, retries));
+                }
+                Ok(response) => {
+                    if retries >= max_retries {
+                        return Err(Self::price_http_error(response.status(), retries));
+                    }
+                    true
+                }
+                Err(e) => {
+                    if retries >= max_retries {
+                        return Err(Self::price_request_error(e, retries));
+                    }
+                    true
+                }
+            };
+
+            if should_retry {
+                retries += 1;
+                sleep_backoff(Duration::from_millis(backoff_ms * (1 << retries))).await;
+            }
+        }
+    }
+
+    fn price_read_error(e: reqwest::Error, retries: u32) -> AdapterError {
+        AdapterError::network_error("fetch_price", &format!("Failed to read price: {e}"), retries)
+    }
+
+    fn price_http_error(status: reqwest::StatusCode, retries: u32) -> AdapterError {
+        AdapterError::network_error("fetch_price", &format!("HTTP error: {status}"), retries)
+    }
+
+    fn price_request_error(e: reqwest::Error, retries: u32) -> AdapterError {
+        AdapterError::network_error("fetch_price", &format!("Request failed: {e}"), retries)
+    }
+
+    /// Compute data root hash for small data (< 256KB uses single chunk)
+    fn compute_data_root(payload: &[u8]) -> String {
+        if payload.is_empty() {
+            return String::new();
+        }
+
+        let mut hasher = Sha256::new();
+        hasher.update(payload);
+        let hash = hasher.finalize();
+        base64url_encode(&hash)
+    }
+
+    /// Build the signature data for Arweave format 2 transaction
+    fn build_signature_data(tx: &ArweaveTransaction) -> Vec<u8> {
+        let tags_data: Vec<u8> = tx
+            .tags
+            .iter()
+            .flat_map(|tag| {
+                let mut chunk = base64url_decode(&tag.name).unwrap_or_default();
+                chunk.extend(base64url_decode(&tag.value).unwrap_or_default());
+                chunk
+            })
+            .collect();
+
+        let parts: Vec<Vec<u8>> = vec![
+            b"2".to_vec(),
+            base64url_decode(&tx.owner).unwrap_or_default(),
+            base64url_decode(&tx.target).unwrap_or_default(),
+            tx.quantity.as_bytes().to_vec(),
+            tx.reward.as_bytes().to_vec(),
+            base64url_decode(&tx.last_tx).unwrap_or_default(),
+            tags_data,
+            tx.data_size.as_bytes().to_vec(),
+            base64url_decode(&tx.data_root).unwrap_or_default(),
+        ];
+
+        Self::deep_hash(&parts)
+    }
+
+    /// Compute deep hash of data parts (Arweave specific)
+    fn deep_hash(parts: &[Vec<u8>]) -> Vec<u8> {
+        let mut hasher = Sha256::new();
+        hasher.update(b"list");
+        hasher.update(parts.len().to_string().as_bytes());
+
+        for part in parts {
+            let mut part_hasher = Sha256::new();
+            part_hasher.update(b"blob");
+            part_hasher.update(part.len().to_string().as_bytes());
+            part_hasher.update(part);
+            hasher.update(part_hasher.finalize());
+        }
+
+        hasher.finalize().to_vec()
     }
 }
 
@@ -319,6 +474,14 @@ impl ArweaveClient for ArweaveClientImpl {
     async fn post(&self, payload: &[u8], tags: Vec<Tag>) -> Result<String, AdapterError> {
         use crate::adapter::repository_impl::{tag_names, tag_values};
 
+        // Wallet validation: fail fast if no wallet configured
+        let wallet = self.wallet.as_ref().ok_or_else(|| {
+            AdapterError::configuration_error(
+                "post",
+                "Wallet not configured - cannot sign transaction",
+            )
+        })?;
+
         // Validate payload size (max 2MB for inline data)
         const MAX_DATA_SIZE: usize = 2 * 1024 * 1024;
         if payload.len() > MAX_DATA_SIZE {
@@ -350,24 +513,41 @@ impl ArweaveClient for ArweaveClientImpl {
             })
             .collect();
 
+        // Fetch anchor and price from network
+        let last_tx = self.fetch_anchor().await?;
+        let reward = self.fetch_price(payload.len()).await?;
+
         // Encode payload to Base64URL
         let encoded_payload = base64url_encode(payload);
 
-        // Create transaction structure
-        let tx = ArweaveTransaction {
+        // Compute data root
+        let data_root = Self::compute_data_root(payload);
+
+        // Create unsigned transaction structure
+        let mut tx = ArweaveTransaction {
             format: 2,
             id: String::new(),
-            last_tx: String::new(),
-            owner: String::new(),
+            last_tx,
+            owner: wallet.owner(),
             tags: encoded_tags,
             target: String::new(),
             quantity: "0".to_string(),
             data: encoded_payload,
             data_size: payload.len().to_string(),
-            data_root: String::new(),
-            reward: "0".to_string(),
+            data_root,
+            reward,
             signature: String::new(),
         };
+
+        // Sign the transaction
+        let signature_data = Self::build_signature_data(&tx);
+        let signature_bytes = wallet.sign(&signature_data)?;
+        tx.signature = base64url_encode(&signature_bytes);
+
+        // Compute transaction ID from signature hash
+        let mut hasher = Sha256::new();
+        hasher.update(&signature_bytes);
+        tx.id = base64url_encode(&hasher.finalize());
 
         // Post transaction
         let url = format!("{}/tx", self.config.gateway_url());
