@@ -203,15 +203,31 @@ impl ArweaveClientImpl {
         self.wallet.is_some()
     }
 
+    /// Escape special characters in GraphQL string values to prevent injection
+    fn escape_graphql_string(s: &str) -> String {
+        s.replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n")
+            .replace('\r', "\\r")
+            .replace('\t', "\\t")
+    }
+
     /// Build GraphQL query for transaction search
     fn build_graphql_query(&self, tags: &[Tag], cursor: Option<&str>) -> String {
         let tags_query: Vec<String> = tags
             .iter()
-            .map(|t| format!(r#"{{ name: "{}", values: ["{}"] }}"#, t.name, t.value))
+            .map(|t| {
+                let name = Self::escape_graphql_string(&t.name);
+                let value = Self::escape_graphql_string(&t.value);
+                format!(r#"{{ name: "{name}", values: ["{value}"] }}"#)
+            })
             .collect();
 
         let after_clause = cursor
-            .map(|c| format!(r#", after: "{}""#, c))
+            .map(|c| {
+                let escaped = Self::escape_graphql_string(c);
+                format!(r#", after: "{escaped}""#)
+            })
             .unwrap_or_default();
 
         format!(
@@ -457,6 +473,11 @@ impl ArweaveClient for ArweaveClientImpl {
 
             for edge in &response_data.transactions.edges {
                 all_tx_ids.push(edge.node.id.clone());
+            }
+
+            // Empty edges guard to prevent infinite loop when has_next_page is true but no results
+            if response_data.transactions.edges.is_empty() {
+                break;
             }
 
             if response_data.transactions.page_info.has_next_page {
