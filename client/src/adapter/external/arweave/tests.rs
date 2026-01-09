@@ -494,7 +494,7 @@ mod integration_tests {
     fn try_load_wallet_from_env() -> Option<ArweaveWallet> {
         match ArweaveWallet::from_env() {
             Ok(wallet) => {
-                println!("Wallet loaded from ARWEAVE_WALLET_JWK");
+                println!("Wallet loaded from ARWEAVE_WALLET_PATH");
                 println!("  Address: {}", wallet.address());
                 Some(wallet)
             }
