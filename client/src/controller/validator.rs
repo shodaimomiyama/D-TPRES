@@ -21,17 +21,19 @@ impl ShareValidator {
     ///
     /// Validation order (deterministic):
     /// 1. secret empty check
-    /// 2. threshold > 0 check
-    /// 3. threshold >= MIN_THRESHOLD check
-    /// 4. total_shares <= MAX_SHARES check
-    /// 5. threshold <= total_shares check
+    /// 2. owner_secret_key empty check
+    /// 3. requester_public_key empty check
+    /// 4. threshold > 0 check
+    /// 5. threshold >= MIN_THRESHOLD check
+    /// 6. total_shares <= MAX_SHARES check
+    /// 7. threshold <= total_shares check
     ///
     /// # Arguments
     /// * `secret` - Secret data to be split
     /// * `threshold` - Minimum shares required for reconstruction (k)
     /// * `total_shares` - Total number of shares to generate (n)
-    /// * `_owner_secret_key` - Owner's secret key (validated for non-empty)
-    /// * `_requester_public_key` - Requester's public key (validated for non-empty)
+    /// * `owner_secret_key` - Owner's secret key (validated for non-empty)
+    /// * `requester_public_key` - Requester's public key (validated for non-empty)
     ///
     /// # Returns
     /// * `Ok(())` - All validations passed
@@ -41,8 +43,8 @@ impl ShareValidator {
         secret: &[u8],
         threshold: u8,
         total_shares: u8,
-        _owner_secret_key: &SecretKey,
-        _requester_public_key: &PublicKey,
+        owner_secret_key: &SecretKey,
+        requester_public_key: &PublicKey,
     ) -> Result<(), ValidationError> {
         // 1. Secret empty check
         if secret.is_empty() {
@@ -53,7 +55,25 @@ impl ShareValidator {
             ));
         }
 
-        // 2. Threshold > 0 check
+        // 2. Owner secret key empty check (AC 1.4)
+        if owner_secret_key.is_empty() {
+            return Err(ValidationError::with_field(
+                error_codes::INVALID_OWNER_KEY,
+                "Owner secret key cannot be empty",
+                "owner_secret_key",
+            ));
+        }
+
+        // 3. Requester public key empty check (AC 1.5)
+        if requester_public_key.key_data.is_empty() {
+            return Err(ValidationError::with_field(
+                error_codes::INVALID_REQUESTER_KEY,
+                "Requester public key cannot be empty",
+                "requester_public_key",
+            ));
+        }
+
+        // 4. Threshold > 0 check
         if threshold == 0 {
             return Err(ValidationError::with_field(
                 error_codes::INVALID_THRESHOLD,
@@ -62,7 +82,7 @@ impl ShareValidator {
             ));
         }
 
-        // 3. Threshold >= MIN_THRESHOLD check
+        // 5. Threshold >= MIN_THRESHOLD check
         if threshold < MIN_THRESHOLD {
             return Err(ValidationError::with_field(
                 error_codes::THRESHOLD_BELOW_MIN,
@@ -71,7 +91,7 @@ impl ShareValidator {
             ));
         }
 
-        // 4. Total shares <= MAX_SHARES check
+        // 6. Total shares <= MAX_SHARES check
         if total_shares > MAX_SHARES {
             return Err(ValidationError::with_field(
                 error_codes::TOTAL_SHARES_EXCEEDS_MAX,
@@ -80,7 +100,7 @@ impl ShareValidator {
             ));
         }
 
-        // 5. Threshold <= total_shares check
+        // 7. Threshold <= total_shares check
         if threshold > total_shares {
             return Err(ValidationError::with_field(
                 error_codes::THRESHOLD_EXCEEDS_TOTAL,
@@ -114,11 +134,12 @@ impl RecoverValidator {
     ///
     /// Validation order (deterministic):
     /// 1. secret_id empty check
-    /// 2. requester_process_id empty check
+    /// 2. requester_secret_key empty check
+    /// 3. requester_process_id empty check
     ///
     /// # Arguments
     /// * `secret_id` - ID of the secret to recover
-    /// * `_requester_secret_key` - Requester's secret key
+    /// * `requester_secret_key` - Requester's secret key (validated for non-empty)
     /// * `requester_process_id` - Requester's process ID
     ///
     /// # Returns
@@ -127,7 +148,7 @@ impl RecoverValidator {
     pub fn validate(
         &self,
         secret_id: &str,
-        _requester_secret_key: &SecretKey,
+        requester_secret_key: &SecretKey,
         requester_process_id: &str,
     ) -> Result<(), ValidationError> {
         // 1. Secret ID empty check
@@ -139,7 +160,16 @@ impl RecoverValidator {
             ));
         }
 
-        // 2. Requester process ID empty check
+        // 2. Requester secret key empty check (AC 2.2)
+        if requester_secret_key.is_empty() {
+            return Err(ValidationError::with_field(
+                error_codes::INVALID_REQUESTER_KEY,
+                "Requester secret key cannot be empty",
+                "requester_secret_key",
+            ));
+        }
+
+        // 3. Requester process ID empty check
         if requester_process_id.is_empty() {
             return Err(ValidationError::with_field(
                 error_codes::INVALID_PROCESS_ID,
@@ -171,6 +201,14 @@ mod tests {
             .expect("Failed to generate test keys")
     }
 
+    fn create_empty_secret_key() -> SecretKey {
+        SecretKey::empty_for_test()
+    }
+
+    fn create_empty_public_key() -> PublicKey {
+        PublicKey { key_data: vec![] }
+    }
+
     // ========================================================================
     // ShareValidator Tests
     // ========================================================================
@@ -187,6 +225,34 @@ mod tests {
         let err = result.unwrap_err();
         assert_eq!(err.code(), error_codes::SECRET_EMPTY);
         assert_eq!(err.field(), Some("secret"));
+    }
+
+    #[test]
+    fn test_share_validator_empty_owner_key() {
+        let validator = ShareValidator::new();
+        let empty_owner_sk = create_empty_secret_key();
+        let (_, requester_pk) = create_test_keys();
+
+        let result = validator.validate(b"secret", 3, 5, &empty_owner_sk, &requester_pk);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), error_codes::INVALID_OWNER_KEY);
+        assert_eq!(err.field(), Some("owner_secret_key"));
+    }
+
+    #[test]
+    fn test_share_validator_empty_requester_key() {
+        let validator = ShareValidator::new();
+        let (owner_sk, _) = create_test_keys();
+        let empty_requester_pk = create_empty_public_key();
+
+        let result = validator.validate(b"secret", 3, 5, &owner_sk, &empty_requester_pk);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), error_codes::INVALID_REQUESTER_KEY);
+        assert_eq!(err.field(), Some("requester_public_key"));
     }
 
     #[test]
@@ -293,6 +359,19 @@ mod tests {
         let err = result.unwrap_err();
         assert_eq!(err.code(), error_codes::INVALID_SECRET_ID);
         assert_eq!(err.field(), Some("secret_id"));
+    }
+
+    #[test]
+    fn test_recover_validator_empty_requester_key() {
+        let validator = RecoverValidator::new();
+        let empty_requester_sk = create_empty_secret_key();
+
+        let result = validator.validate("secret_abc123", &empty_requester_sk, "process_123");
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), error_codes::INVALID_REQUESTER_KEY);
+        assert_eq!(err.field(), Some("requester_secret_key"));
     }
 
     #[test]
