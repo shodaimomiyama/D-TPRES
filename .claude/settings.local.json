@@ -42,7 +42,8 @@
       "mcp__spec-workflow__spec-workflow-guide",
       "WebFetch(domain:lib.rs)",
       "mcp__spec-workflow__spec-status",
-      "Bash(gh api:*)"
+      "Bash(gh api:*)",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": []
   },
