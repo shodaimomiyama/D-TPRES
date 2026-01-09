@@ -1,0 +1,30 @@
+{
+  "filePath": ".spec-workflow/specs/client-usecase-workflowservice/design.md",
+  "currentVersion": 3,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-01-07T07:21:47.652Z",
+      "trigger": "initial",
+      "approvalId": "approval_1767770507642_hz0epibvl",
+      "approvalTitle": "Design Document for WorkflowService (Phase 1 & 3)"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-01-07T07:34:25.915Z",
+      "trigger": "revision_requested",
+      "approvalId": "approval_1767770507642_hz0epibvl",
+      "approvalTitle": "Design Document for WorkflowService (Phase 1 & 3)"
+    },
+    {
+      "version": 3,
+      "filename": "snapshot-003.json",
+      "timestamp": "2026-01-07T07:43:51.459Z",
+      "trigger": "approved",
+      "approvalId": "approval_1767771392615_t0ayxwnz6",
+      "approvalTitle": "Design Document v2 - WorkflowService (Phase 1 & 3)"
+    }
+  ]
+}

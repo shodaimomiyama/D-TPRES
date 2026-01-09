@@ -3,6 +3,10 @@
 //! Threshold Proxy Re-Encryption (TPRE) とShamir Secret Sharingの実装を提供します。
 //! AO環境の制約に従い、すべての操作は同期的に実行されます。
 
+use aes_gcm::{
+    Aes256Gcm, Nonce,
+    aead::{Aead, AeadCore, KeyInit, OsRng},
+};
 use bincode;
 use generic_array::{GenericArray, typenum::U32};
 use shamirsecretsharing::{DATA_SIZE, combine_shares, create_shares};
@@ -46,6 +50,15 @@ pub mod constants {
     /// カプセルサイズ定数
     pub const CAPSULE_POINT_SIZE: usize = 33;
     pub const CAPSULE_SIGNATURE_SIZE: usize = 64;
+
+    /// AES-256-GCM Nonce size (12 bytes)
+    pub const AES_GCM_NONCE_SIZE: usize = 12;
+
+    /// AES-256-GCM Tag size (16 bytes)
+    pub const AES_GCM_TAG_SIZE: usize = 16;
+
+    /// AES-256 key size (32 bytes)
+    pub const AES_KEY_SIZE: usize = 32;
 }
 
 /// Shamir Secret Sharingのシェア
@@ -82,6 +95,13 @@ pub struct SecretKey {
     key_data: Vec<u8>,
 }
 
+impl SecretKey {
+    /// Check if the key data is empty
+    pub fn is_empty(&self) -> bool {
+        self.key_data.is_empty()
+    }
+}
+
 /// 再暗号化鍵
 ///
 /// 実際にはkFrags生成に必要な情報を保持する中間構造体
@@ -113,6 +133,18 @@ pub struct CipherFragment {
     pub fragment_id: u8,
     pub capsule_fragment: Vec<u8>,
     pub proof: Vec<u8>,
+}
+
+/// cFragデータ（AO Network/Arweaveから取得したcFrag）
+///
+/// WorkflowServiceがAOから取得したcFragデータを表す構造体
+#[non_exhaustive]
+#[derive(Debug, Clone)]
+pub struct CFragData {
+    /// cFragのシリアライズデータ
+    pub cfrag_data: Vec<u8>,
+    /// このcFragを生成したHolder ID
+    pub holder_id: String,
 }
 
 /// CryptoService trait - 暗号化操作のインターフェース
@@ -172,6 +204,41 @@ pub trait CryptoService: Send + Sync {
 
     /// 鍵ペアの生成
     fn generate_keypair(&self) -> ServiceResult<(SecretKey, PublicKey)>;
+
+    /// AES-256-GCM暗号化
+    ///
+    /// 12バイトのランダムnonceを生成し、暗号文の先頭に付加して返します。
+    /// 返却形式: nonce (12 bytes) || ciphertext || tag (16 bytes)
+    fn aes_gcm_encrypt(&self, key: &[u8], plaintext: &[u8]) -> ServiceResult<Vec<u8>>;
+
+    /// AES-256-GCM復号
+    ///
+    /// 暗号文の先頭12バイトをnonceとして使用し、残りを復号します。
+    /// 入力形式: nonce (12 bytes) || ciphertext || tag (16 bytes)
+    fn aes_gcm_decrypt(&self, key: &[u8], ciphertext: &[u8]) -> ServiceResult<Vec<u8>>;
+
+    /// 対称鍵生成
+    ///
+    /// AES-256用の32バイト暗号学的に安全な乱数を生成します。
+    fn generate_symmetric_key(&self) -> ServiceResult<Vec<u8>>;
+
+    /// PRE Capsuleの復号（cFragsを使用）
+    ///
+    /// AOから取得したcFragsを使用してCapsuleを復号し、対称鍵を復元します。
+    ///
+    /// # Arguments
+    /// * `capsule` - 暗号化時に生成されたCapsule
+    /// * `cfrags` - AOから取得したcFragデータのリスト
+    /// * `requester_secret_key` - リクエスター（受信者）の秘密鍵
+    ///
+    /// # Returns
+    /// * `ServiceResult<Vec<u8>>` - 復元された対称鍵
+    fn decrypt_pre_capsule(
+        &self,
+        capsule: &Capsule,
+        cfrags: &[CFragData],
+        requester_secret_key: &SecretKey,
+    ) -> ServiceResult<Vec<u8>>;
 }
 
 /// CryptoService実装 - Umbral-PREとShamirライブラリを使用
@@ -683,6 +750,143 @@ impl CryptoService for CryptoServiceImpl {
         let public_key: PublicKey = PublicKey { key_data: pk_bytes };
 
         Ok((secret_key, public_key))
+    }
+
+    fn aes_gcm_encrypt(&self, key: &[u8], plaintext: &[u8]) -> ServiceResult<Vec<u8>> {
+        // Validate key length
+        if key.len() != constants::AES_KEY_SIZE {
+            return Err(ServiceError::validation_error(
+                "Invalid key length: expected 32 bytes for AES-256",
+            ));
+        }
+
+        // Create cipher from key
+        let cipher = Aes256Gcm::new_from_slice(key)
+            .map_err(|_| ServiceError::crypto_error("Failed to create AES-GCM cipher"))?;
+
+        // Generate random 12-byte nonce
+        let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+
+        // Encrypt plaintext
+        let ciphertext = cipher
+            .encrypt(&nonce, plaintext)
+            .map_err(|_| ServiceError::crypto_error("AES-GCM encryption failed"))?;
+
+        // Prepend nonce to ciphertext: nonce (12 bytes) || ciphertext || tag (16 bytes)
+        let mut result = Vec::with_capacity(constants::AES_GCM_NONCE_SIZE + ciphertext.len());
+        result.extend_from_slice(&nonce);
+        result.extend_from_slice(&ciphertext);
+
+        Ok(result)
+    }
+
+    fn aes_gcm_decrypt(&self, key: &[u8], ciphertext: &[u8]) -> ServiceResult<Vec<u8>> {
+        // Validate key length
+        if key.len() != constants::AES_KEY_SIZE {
+            return Err(ServiceError::validation_error(
+                "Invalid key length: expected 32 bytes for AES-256",
+            ));
+        }
+
+        // Validate minimum ciphertext length (nonce + at least tag)
+        let min_length = constants::AES_GCM_NONCE_SIZE + constants::AES_GCM_TAG_SIZE;
+        if ciphertext.len() < min_length {
+            return Err(ServiceError::validation_error(
+                "Ciphertext too short: must include nonce and authentication tag",
+            ));
+        }
+
+        // Extract nonce from first 12 bytes
+        let nonce = Nonce::from_slice(&ciphertext[..constants::AES_GCM_NONCE_SIZE]);
+
+        // Create cipher from key
+        let cipher = Aes256Gcm::new_from_slice(key)
+            .map_err(|_| ServiceError::crypto_error("Failed to create AES-GCM cipher"))?;
+
+        // Decrypt remaining bytes (ciphertext + tag)
+        let plaintext = cipher
+            .decrypt(nonce, &ciphertext[constants::AES_GCM_NONCE_SIZE..])
+            .map_err(|_| {
+                ServiceError::crypto_error(
+                    "AES-GCM decryption failed: invalid ciphertext or authentication tag",
+                )
+            })?;
+
+        Ok(plaintext)
+    }
+
+    fn generate_symmetric_key(&self) -> ServiceResult<Vec<u8>> {
+        use rand::RngCore;
+
+        let mut key = vec![0u8; constants::AES_KEY_SIZE];
+        OsRng.fill_bytes(&mut key);
+
+        Ok(key)
+    }
+
+    fn decrypt_pre_capsule(
+        &self,
+        capsule: &Capsule,
+        cfrags: &[CFragData],
+        requester_secret_key: &SecretKey,
+    ) -> ServiceResult<Vec<u8>> {
+        // Input validation
+        if capsule.data.is_empty() {
+            return Err(ServiceError::validation_error("Capsule cannot be empty"));
+        }
+
+        if cfrags.is_empty() {
+            return Err(ServiceError::validation_error("No cFrags provided"));
+        }
+
+        if requester_secret_key.key_data.is_empty() {
+            return Err(ServiceError::validation_error(
+                "Requester secret key cannot be empty",
+            ));
+        }
+
+        // Deserialize the capsule
+        let _umbral_capsule = self.deserialize_capsule(capsule)?;
+
+        // Deserialize the requester's secret key
+        let _receiving_sk = self.deserialize_secret_key(requester_secret_key)?;
+
+        // TODO: When AO integration is complete (Issue #47), cFrags will include
+        // verification data. For now, we need to handle the case where verification
+        // data may or may not be present in cfrag_data.
+
+        // Convert CFragData to verified CapsuleFrags
+        // Note: In production, each cFrag should include verification data
+        // For this implementation, we attempt to deserialize and use without verification
+        // since the verification data structure from AO is not yet defined.
+        let mut capsule_frags = Vec::with_capacity(cfrags.len());
+
+        for cfrag_data in cfrags {
+            if cfrag_data.cfrag_data.is_empty() {
+                return Err(ServiceError::validation_error(format!(
+                    "Empty cFrag data from holder {}",
+                    cfrag_data.holder_id
+                )));
+            }
+
+            // Try to deserialize as CapsuleFrag
+            let capsule_frag = umbral_pre::CapsuleFrag::from_bytes(&cfrag_data.cfrag_data)
+                .map_err(|_| {
+                    ServiceError::crypto_error(format!(
+                        "Failed to deserialize cFrag from holder {}",
+                        cfrag_data.holder_id
+                    ))
+                })?;
+
+            capsule_frags.push(capsule_frag);
+        }
+
+        // For decapsulation, we need the delegating public key
+        // TODO: This should be retrieved from the secret metadata stored on Arweave
+        // For now, return an error indicating this is not yet fully implemented
+        Err(ServiceError::crypto_error(
+            "decrypt_pre_capsule requires delegating_pk from secret metadata (Issue #47)",
+        ))
     }
 }
 
@@ -1379,5 +1583,204 @@ mod tests {
         );
 
         println!("\n✅ すべてのcreate_pre_capsuleテストが成功しました！");
+    }
+
+    #[test]
+    fn test_aes_gcm_encrypt_decrypt_roundtrip() {
+        println!("\n=== CryptoService: AES-GCM Encrypt/Decrypt Roundtrip Test ===");
+        println!("【テスト内容】: AES-256-GCM暗号化と復号のラウンドトリップを検証");
+        println!("【期待結果】: 復号された平文が元の平文と一致する");
+
+        let service = CryptoServiceImpl::new();
+
+        // Generate a valid 32-byte key
+        let key = service
+            .generate_symmetric_key()
+            .expect("Failed to generate key");
+        assert_eq!(key.len(), 32);
+        println!("   ✓ 32バイトの鍵を生成");
+
+        // Test with various plaintext sizes
+        let test_cases = vec![
+            b"Hello, World!".to_vec(),
+            b"".to_vec(),       // Empty plaintext
+            vec![0x42u8; 1024], // 1KB
+            vec![0xABu8; 16],   // Exactly one block
+        ];
+
+        for (i, plaintext) in test_cases.iter().enumerate() {
+            println!("\n   テストケース {}: {} bytes", i + 1, plaintext.len());
+
+            let ciphertext = service
+                .aes_gcm_encrypt(&key, plaintext)
+                .expect("Encryption failed");
+
+            // Verify ciphertext has nonce prepended (12 bytes) and tag appended (16 bytes)
+            assert!(
+                ciphertext.len() >= constants::AES_GCM_NONCE_SIZE + constants::AES_GCM_TAG_SIZE,
+                "Ciphertext too short"
+            );
+            println!(
+                "      暗号文サイズ: {} bytes (nonce 12 + plaintext {} + tag 16)",
+                ciphertext.len(),
+                plaintext.len()
+            );
+
+            let decrypted = service
+                .aes_gcm_decrypt(&key, &ciphertext)
+                .expect("Decryption failed");
+
+            assert_eq!(
+                plaintext, &decrypted,
+                "Decrypted data should match original"
+            );
+            println!("      ✓ ラウンドトリップ成功");
+        }
+
+        println!("\n✅ AES-GCM暗号化/復号ラウンドトリップテスト成功！");
+    }
+
+    #[test]
+    fn test_aes_gcm_decrypt_invalid_key() {
+        println!("\n=== CryptoService: AES-GCM Decrypt with Invalid Key Test ===");
+        println!("【テスト内容】: 異なる鍵での復号がエラーになることを検証");
+        println!("【期待結果】: 復号がエラーになる");
+
+        let service = CryptoServiceImpl::new();
+
+        // Generate two different keys
+        let key1 = service
+            .generate_symmetric_key()
+            .expect("Failed to generate key1");
+        let key2 = service
+            .generate_symmetric_key()
+            .expect("Failed to generate key2");
+
+        let plaintext = b"Secret message";
+
+        // Encrypt with key1
+        let ciphertext = service
+            .aes_gcm_encrypt(&key1, plaintext)
+            .expect("Encryption failed");
+        println!("   ✓ key1で暗号化成功");
+
+        // Try to decrypt with key2 (should fail)
+        let result = service.aes_gcm_decrypt(&key2, &ciphertext);
+        assert!(result.is_err(), "Decryption with wrong key should fail");
+        println!("   ✓ key2での復号が期待通りエラー");
+
+        // Test with invalid key length
+        let short_key = vec![0u8; 16]; // Too short
+        let result = service.aes_gcm_encrypt(&short_key, plaintext);
+        assert!(
+            result.is_err(),
+            "Encryption with invalid key length should fail"
+        );
+        println!("   ✓ 短い鍵でのエラーを確認");
+
+        println!("\n✅ 無効な鍵でのAES-GCM復号テスト成功！");
+    }
+
+    #[test]
+    fn test_aes_gcm_decrypt_corrupted_ciphertext() {
+        println!("\n=== CryptoService: AES-GCM Decrypt Corrupted Ciphertext Test ===");
+        println!("【テスト内容】: 破損した暗号文での復号がエラーになることを検証");
+        println!("【期待結果】: 認証タグ検証でエラーになる");
+
+        let service = CryptoServiceImpl::new();
+        let key = service
+            .generate_symmetric_key()
+            .expect("Failed to generate key");
+
+        let plaintext = b"Original message";
+        let mut ciphertext = service
+            .aes_gcm_encrypt(&key, plaintext)
+            .expect("Encryption failed");
+        println!("   ✓ 暗号化成功 ({} bytes)", ciphertext.len());
+
+        // Corrupt a byte in the ciphertext (after nonce, in the actual ciphertext)
+        if ciphertext.len() > constants::AES_GCM_NONCE_SIZE {
+            ciphertext[constants::AES_GCM_NONCE_SIZE] ^= 0xFF;
+            println!("   暗号文を破損させました");
+        }
+
+        let result = service.aes_gcm_decrypt(&key, &ciphertext);
+        assert!(
+            result.is_err(),
+            "Decryption of corrupted ciphertext should fail"
+        );
+        println!("   ✓ 破損した暗号文での復号が期待通りエラー");
+
+        // Test with truncated ciphertext
+        let truncated = vec![0u8; 10]; // Too short
+        let result = service.aes_gcm_decrypt(&key, &truncated);
+        assert!(
+            result.is_err(),
+            "Decryption of truncated ciphertext should fail"
+        );
+        println!("   ✓ 短すぎる暗号文でのエラーを確認");
+
+        println!("\n✅ 破損した暗号文でのAES-GCM復号テスト成功！");
+    }
+
+    #[test]
+    fn test_generate_symmetric_key_length() {
+        println!("\n=== CryptoService: Generate Symmetric Key Length Test ===");
+        println!("【テスト内容】: 生成された対称鍵の長さを検証");
+        println!("【期待結果】: 32バイト（AES-256用）の鍵が生成される");
+
+        let service = CryptoServiceImpl::new();
+
+        for i in 0..10 {
+            let key = service
+                .generate_symmetric_key()
+                .expect("Failed to generate key");
+            assert_eq!(key.len(), constants::AES_KEY_SIZE, "Key should be 32 bytes");
+            println!("   鍵 {}: {} bytes ✓", i + 1, key.len());
+        }
+
+        println!("\n✅ 対称鍵長テスト成功！");
+    }
+
+    #[test]
+    fn test_generate_symmetric_key_randomness() {
+        println!("\n=== CryptoService: Generate Symmetric Key Randomness Test ===");
+        println!("【テスト内容】: 生成された対称鍵のランダム性を検証");
+        println!("【期待結果】: 連続して生成された鍵が異なる");
+
+        let service = CryptoServiceImpl::new();
+
+        let mut keys: Vec<Vec<u8>> = Vec::new();
+
+        // Generate multiple keys
+        for _ in 0..100 {
+            let key = service
+                .generate_symmetric_key()
+                .expect("Failed to generate key");
+            keys.push(key);
+        }
+
+        // Check that all keys are unique
+        for i in 0..keys.len() {
+            for j in (i + 1)..keys.len() {
+                assert_ne!(keys[i], keys[j], "Keys {} and {} should be different", i, j);
+            }
+        }
+        println!("   ✓ 100個の鍵がすべて異なることを確認");
+
+        // Check that keys have good entropy (not all zeros or repeated patterns)
+        for (i, key) in keys.iter().take(5).enumerate() {
+            let all_same = key.iter().all(|&b| b == key[0]);
+            assert!(!all_same, "Key {} should not have all identical bytes", i);
+
+            // Print first few bytes of each key for visual inspection
+            print!("   鍵 {}: ", i + 1);
+            for byte in key.iter().take(8) {
+                print!("{:02x} ", byte);
+            }
+            println!("...");
+        }
+
+        println!("\n✅ 対称鍵ランダム性テスト成功！");
     }
 }

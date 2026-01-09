@@ -1,0 +1,12 @@
+{
+  "id": "approval_1767771392615_t0ayxwnz6",
+  "title": "Design Document v2 - WorkflowService (Phase 1 & 3)",
+  "filePath": ".spec-workflow/specs/client-usecase-workflowservice/design.md",
+  "type": "document",
+  "status": "approved",
+  "createdAt": "2026-01-07T07:36:32.615Z",
+  "category": "spec",
+  "categoryName": "client-usecase-workflowservice",
+  "response": "ダッシュボードから承認",
+  "respondedAt": "2026-01-07T07:43:51.463Z"
+}
