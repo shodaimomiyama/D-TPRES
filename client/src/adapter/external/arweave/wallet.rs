@@ -3,6 +3,8 @@
 //! Provides wallet abstraction for Arweave transaction signing.
 
 use std::env;
+use std::fs;
+use std::path::Path;
 
 use sha2::{Digest, Sha256};
 
@@ -47,21 +49,35 @@ impl ArweaveWallet {
         })
     }
 
-    /// Create wallet from ARWEAVE_WALLET_JWK environment variable
+    /// Create wallet from ARWEAVE_WALLET_PATH environment variable
     ///
-    /// The environment variable should contain a valid JWK JSON string.
+    /// The environment variable should contain a path to a JWK JSON file.
     pub fn from_env() -> Result<Self, AdapterError> {
-        let jwk_str = env::var("ARWEAVE_WALLET_JWK").map_err(|_| {
+        let wallet_path = env::var("ARWEAVE_WALLET_PATH").map_err(|_| {
             AdapterError::configuration_error(
                 "wallet",
-                "ARWEAVE_WALLET_JWK environment variable not set",
+                "ARWEAVE_WALLET_PATH environment variable not set",
+            )
+        })?;
+
+        Self::from_file(&wallet_path)
+    }
+
+    /// Create wallet from a JWK file path
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, AdapterError> {
+        let path = path.as_ref();
+
+        let jwk_str = fs::read_to_string(path).map_err(|e| {
+            AdapterError::configuration_error(
+                "wallet",
+                &format!("Failed to read wallet file '{}': {e}", path.display()),
             )
         })?;
 
         let jwk: serde_json::Value = serde_json::from_str(&jwk_str).map_err(|e| {
             AdapterError::configuration_error(
                 "wallet",
-                &format!("Invalid JSON in ARWEAVE_WALLET_JWK: {e}"),
+                &format!("Invalid JSON in wallet file '{}': {e}", path.display()),
             )
         })?;
 

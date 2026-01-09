@@ -30,9 +30,10 @@ ARWEAVE_GATEWAY_URL=https://arweave.net
 # Arweave GraphQL Endpoint (default: https://arweave.net/graphql)
 ARWEAVE_GRAPHQL_URL=https://arweave.net/graphql
 
-# Arweave Wallet JWK file path (required for write operations)
+# Arweave Wallet JWK JSON string (required for write operations)
 # Leave empty for read-only mode
-ARWEAVE_WALLET_PATH=
+# Format: '{"kty":"RSA","n":"...","e":"AQAB","d":"..."}'
+ARWEAVE_WALLET_JWK=
 
 # HTTP Request Timeout in seconds (default: 30)
 ARWEAVE_TIMEOUT_SECS=30

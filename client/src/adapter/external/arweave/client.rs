@@ -120,6 +120,7 @@ pub(crate) fn base64url_encode(bytes: &[u8]) -> String {
 }
 
 /// Decode Base64URL format to bytes
+#[allow(dead_code)]
 pub(crate) fn base64url_decode(encoded: &str) -> Result<Vec<u8>, base64::DecodeError> {
     use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
     URL_SAFE_NO_PAD.decode(encoded)
@@ -254,7 +255,8 @@ impl ArweaveClientImpl {
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl ArweaveClient for ArweaveClientImpl {
     async fn get(&self, tx_id: &str) -> Result<Option<Vec<u8>>, AdapterError> {
-        let url = format!("{}/tx/{}/data", self.config.gateway_url(), tx_id);
+        // Use raw data endpoint (/{tx_id}) which returns bytes directly
+        let url = format!("{}/{}", self.config.gateway_url(), tx_id);
         let mut retries = 0;
         let max_retries = self.config.max_retries();
         let backoff_ms = self.config.retry_backoff_ms();
@@ -262,11 +264,22 @@ impl ArweaveClient for ArweaveClientImpl {
         loop {
             match self.http_client.get(&url).send().await {
                 Ok(response) => {
-                    if response.status() == reqwest::StatusCode::NOT_FOUND {
+                    let status = response.status();
+
+                    if status == reqwest::StatusCode::NOT_FOUND {
                         return Ok(None);
                     }
 
-                    if response.status().is_success() {
+                    // 4xx client errors are not retryable - fail fast
+                    if status.is_client_error() {
+                        return Err(AdapterError::network_error(
+                            "get",
+                            &format!("Client error: {status}"),
+                            retries,
+                        ));
+                    }
+
+                    if status.is_success() {
                         let bytes = response.bytes().await.map_err(|e| {
                             AdapterError::network_error(
                                 "get",
@@ -275,27 +288,14 @@ impl ArweaveClient for ArweaveClientImpl {
                             )
                         })?;
 
-                        let decoded_bytes =
-                            base64url_decode(std::str::from_utf8(&bytes).map_err(|e| {
-                                AdapterError::serialization_error(
-                                    "get",
-                                    &format!("Invalid UTF-8 in response: {e}"),
-                                )
-                            })?)
-                            .map_err(|e| {
-                                AdapterError::serialization_error(
-                                    "get",
-                                    &format!("Failed to decode Base64URL: {e}"),
-                                )
-                            })?;
-
-                        return Ok(Some(decoded_bytes));
+                        return Ok(Some(bytes.to_vec()));
                     }
 
+                    // 5xx server errors are retryable
                     if retries >= max_retries {
                         return Err(AdapterError::network_error(
                             "get",
-                            &format!("HTTP error: {}", response.status()),
+                            &format!("HTTP error: {status}"),
                             retries,
                         ));
                     }
@@ -317,6 +317,8 @@ impl ArweaveClient for ArweaveClientImpl {
     }
 
     async fn post(&self, payload: &[u8], tags: Vec<Tag>) -> Result<String, AdapterError> {
+        use crate::adapter::repository_impl::{tag_names, tag_values};
+
         // Validate payload size (max 2MB for inline data)
         const MAX_DATA_SIZE: usize = 2 * 1024 * 1024;
         if payload.len() > MAX_DATA_SIZE {
@@ -330,8 +332,17 @@ impl ArweaveClient for ArweaveClientImpl {
             ));
         }
 
+        // Auto-inject D-TPRES application tag if not already present
+        let mut all_tags = tags;
+        let has_app_tag = all_tags
+            .iter()
+            .any(|t| t.name == tag_names::APP_NAME && t.value == tag_values::APP_NAME);
+        if !has_app_tag {
+            all_tags.push(Tag::new(tag_names::APP_NAME, tag_values::APP_NAME));
+        }
+
         // Encode tags to Base64URL
-        let encoded_tags: Vec<EncodedTag> = tags
+        let encoded_tags: Vec<EncodedTag> = all_tags
             .iter()
             .map(|t| EncodedTag {
                 name: base64url_encode(t.name.as_bytes()),
@@ -367,7 +378,9 @@ impl ArweaveClient for ArweaveClientImpl {
         loop {
             match self.http_client.post(&url).json(&tx).send().await {
                 Ok(response) => {
-                    if response.status().is_success() {
+                    let status = response.status();
+
+                    if status.is_success() {
                         let tx_id: String = response.text().await.map_err(|e| {
                             AdapterError::network_error(
                                 "post",
@@ -378,10 +391,20 @@ impl ArweaveClient for ArweaveClientImpl {
                         return Ok(tx_id);
                     }
 
+                    // 4xx client errors are not retryable - fail fast
+                    if status.is_client_error() {
+                        return Err(AdapterError::network_error(
+                            "post",
+                            &format!("Client error: {status}"),
+                            retries,
+                        ));
+                    }
+
+                    // 5xx server errors are retryable
                     if retries >= max_retries {
                         return Err(AdapterError::network_error(
                             "post",
-                            &format!("HTTP error: {}", response.status()),
+                            &format!("HTTP error: {status}"),
                             retries,
                         ));
                     }
@@ -422,7 +445,9 @@ impl ArweaveClient for ArweaveClientImpl {
                     .await
                 {
                     Ok(response) => {
-                        if response.status().is_success() {
+                        let status = response.status();
+
+                        if status.is_success() {
                             break response.json().await.map_err(|e| {
                                 AdapterError::serialization_error(
                                     "query",
@@ -431,10 +456,20 @@ impl ArweaveClient for ArweaveClientImpl {
                             })?;
                         }
 
+                        // 4xx client errors are not retryable - fail fast
+                        if status.is_client_error() {
+                            return Err(AdapterError::network_error(
+                                "query",
+                                &format!("Client error: {status}"),
+                                retries,
+                            ));
+                        }
+
+                        // 5xx server errors are retryable
                         if retries >= max_retries {
                             return Err(AdapterError::network_error(
                                 "query",
-                                &format!("GraphQL request failed: {}", response.status()),
+                                &format!("GraphQL request failed: {status}"),
                                 retries,
                             ));
                         }
