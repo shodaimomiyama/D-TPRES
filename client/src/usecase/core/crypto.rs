@@ -100,6 +100,12 @@ impl SecretKey {
     pub fn is_empty(&self) -> bool {
         self.key_data.is_empty()
     }
+
+    /// Create an empty SecretKey for testing purposes only
+    #[cfg(test)]
+    pub fn empty_for_test() -> Self {
+        Self { key_data: vec![] }
+    }
 }
 
 /// 再暗号化鍵

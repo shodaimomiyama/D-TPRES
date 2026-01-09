@@ -185,6 +185,49 @@ mod tests {
     }
 
     #[test]
+    fn test_share_extractor_owner_keys() {
+        let extractor = ShareExtractor::new();
+        let (owner_sk, owner_pk) = create_test_keys();
+        let (_, requester_pk) = create_test_keys();
+        let owner_pk_bytes = owner_pk.key_data.clone();
+
+        let request = extractor.extract(
+            b"secret".to_vec(),
+            owner_sk,
+            owner_pk,
+            requester_pk,
+            3,
+            5,
+            "owner".to_string(),
+            None,
+        );
+
+        assert!(!request.owner_secret_key.is_empty());
+        assert_eq!(request.owner_public_key.key_data, owner_pk_bytes);
+    }
+
+    #[test]
+    fn test_share_extractor_requester_key() {
+        let extractor = ShareExtractor::new();
+        let (owner_sk, owner_pk) = create_test_keys();
+        let (_, requester_pk) = create_test_keys();
+        let requester_pk_bytes = requester_pk.key_data.clone();
+
+        let request = extractor.extract(
+            b"secret".to_vec(),
+            owner_sk,
+            owner_pk,
+            requester_pk,
+            3,
+            5,
+            "owner".to_string(),
+            None,
+        );
+
+        assert_eq!(request.requester_public_key.key_data, requester_pk_bytes);
+    }
+
+    #[test]
     fn test_share_extractor_with_metadata() {
         let extractor = ShareExtractor::new();
         let (owner_sk, owner_pk) = create_test_keys();
@@ -263,6 +306,17 @@ mod tests {
         let request = extractor.extract(secret_id, requester_sk, "process".to_string());
 
         assert_eq!(request.secret_id.as_str(), "my_secret_id");
+    }
+
+    #[test]
+    fn test_recover_extractor_requester_key() {
+        let extractor = RecoverExtractor::new();
+        let (requester_sk, _) = create_test_keys();
+        let secret_id = SecretId::new("secret");
+
+        let request = extractor.extract(secret_id, requester_sk, "process".to_string());
+
+        assert!(!request.requester_secret_key.is_empty());
     }
 
     #[test]
