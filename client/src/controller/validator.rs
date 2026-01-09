@@ -19,14 +19,14 @@ impl ShareValidator {
 
     /// Validate share request parameters
     ///
-    /// Validation order (deterministic):
+    /// Validation order (deterministic, per design.md):
     /// 1. secret empty check
-    /// 2. owner_secret_key empty check
-    /// 3. requester_public_key empty check
-    /// 4. threshold > 0 check
-    /// 5. threshold >= MIN_THRESHOLD check
-    /// 6. total_shares <= MAX_SHARES check
-    /// 7. threshold <= total_shares check
+    /// 2. threshold > 0 check
+    /// 3. threshold >= MIN_THRESHOLD check
+    /// 4. total_shares <= MAX_SHARES check
+    /// 5. threshold <= total_shares check
+    /// 6. owner_secret_key empty check (AC 1.4)
+    /// 7. requester_public_key empty check (AC 1.5)
     ///
     /// # Arguments
     /// * `secret` - Secret data to be split
@@ -55,25 +55,7 @@ impl ShareValidator {
             ));
         }
 
-        // 2. Owner secret key empty check (AC 1.4)
-        if owner_secret_key.is_empty() {
-            return Err(ValidationError::with_field(
-                error_codes::INVALID_OWNER_KEY,
-                "Owner secret key cannot be empty",
-                "owner_secret_key",
-            ));
-        }
-
-        // 3. Requester public key empty check (AC 1.5)
-        if requester_public_key.key_data.is_empty() {
-            return Err(ValidationError::with_field(
-                error_codes::INVALID_REQUESTER_KEY,
-                "Requester public key cannot be empty",
-                "requester_public_key",
-            ));
-        }
-
-        // 4. Threshold > 0 check
+        // 2. Threshold > 0 check
         if threshold == 0 {
             return Err(ValidationError::with_field(
                 error_codes::INVALID_THRESHOLD,
@@ -82,7 +64,7 @@ impl ShareValidator {
             ));
         }
 
-        // 5. Threshold >= MIN_THRESHOLD check
+        // 3. Threshold >= MIN_THRESHOLD check
         if threshold < MIN_THRESHOLD {
             return Err(ValidationError::with_field(
                 error_codes::THRESHOLD_BELOW_MIN,
@@ -91,7 +73,7 @@ impl ShareValidator {
             ));
         }
 
-        // 6. Total shares <= MAX_SHARES check
+        // 4. Total shares <= MAX_SHARES check
         if total_shares > MAX_SHARES {
             return Err(ValidationError::with_field(
                 error_codes::TOTAL_SHARES_EXCEEDS_MAX,
@@ -100,12 +82,30 @@ impl ShareValidator {
             ));
         }
 
-        // 7. Threshold <= total_shares check
+        // 5. Threshold <= total_shares check
         if threshold > total_shares {
             return Err(ValidationError::with_field(
                 error_codes::THRESHOLD_EXCEEDS_TOTAL,
                 "Threshold (k) cannot exceed total shares (n)",
                 "threshold",
+            ));
+        }
+
+        // 6. Owner secret key empty check (AC 1.4)
+        if owner_secret_key.is_empty() {
+            return Err(ValidationError::with_field(
+                error_codes::INVALID_OWNER_KEY,
+                "Owner secret key cannot be empty",
+                "owner_secret_key",
+            ));
+        }
+
+        // 7. Requester public key empty check (AC 1.5)
+        if requester_public_key.key_data.is_empty() {
+            return Err(ValidationError::with_field(
+                error_codes::INVALID_REQUESTER_KEY,
+                "Requester public key cannot be empty",
+                "requester_public_key",
             ));
         }
 
