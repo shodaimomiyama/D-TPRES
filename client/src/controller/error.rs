@@ -7,11 +7,7 @@ use std::fmt;
 
 use crate::usecase::error::WorkflowError;
 
-/// Minimum threshold value for secret sharing (k >= 2)
-pub const MIN_THRESHOLD: u8 = 2;
-
-/// Maximum number of shares allowed (n <= 20)
-pub const MAX_SHARES: u8 = 20;
+pub use crate::usecase::core::crypto::constants::{MAX_SHARES, MIN_THRESHOLD};
 
 /// Error codes for validation failures
 pub mod error_codes {
@@ -106,7 +102,11 @@ impl std::error::Error for ValidationError {}
 
 impl From<ValidationError> for WorkflowError {
     fn from(err: ValidationError) -> Self {
-        WorkflowError::ValidationError(format!("[{}] {}", err.code, err.message))
+        let msg = match &err.field {
+            Some(field) => format!("[{}] {}: {}", err.code, field, err.message),
+            None => format!("[{}] {}", err.code, err.message),
+        };
+        WorkflowError::ValidationError(msg)
     }
 }
 
@@ -138,6 +138,18 @@ mod tests {
 
         let msg = workflow_err.to_string();
         assert!(msg.contains("[test_code]"));
+        assert!(msg.contains("test message"));
+    }
+
+    #[test]
+    fn test_validation_error_to_workflow_error_with_field() {
+        let val_err = ValidationError::with_field("test_code", "test message", "field_name");
+        let workflow_err: WorkflowError = val_err.into();
+        assert!(matches!(workflow_err, WorkflowError::ValidationError(_)));
+
+        let msg = workflow_err.to_string();
+        assert!(msg.contains("[test_code]"));
+        assert!(msg.contains("field_name"));
         assert!(msg.contains("test message"));
     }
 
