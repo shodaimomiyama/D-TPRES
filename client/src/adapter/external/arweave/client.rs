@@ -1,11 +1,16 @@
-//! Arweave client implementation
+//! Arweave HTTP client implementation
 //!
 //! Provides production implementation of ArweaveClient trait
 //! for Arweave network communication using reqwest HTTP client.
+//!
+//! This module focuses on HTTP operations only. Transaction building,
+//! DeepHash, and Merkle tree calculations are in separate modules.
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 use super::config::ArweaveClientConfig;
+use super::merkle::compute_data_root;
+use super::transaction::{ArweaveTransaction, EncodedTag, build_signature_data};
 
 // =============================================================================
 // GraphQL Response Types
@@ -52,8 +57,6 @@ pub(crate) struct TransactionNode {
 pub(crate) struct BlockInfo {
     #[allow(dead_code)]
     pub height: u64,
-    #[allow(dead_code)]
-    pub timestamp: u64,
 }
 
 /// Pagination info for GraphQL queries
@@ -70,58 +73,17 @@ pub(crate) struct GraphQLError {
 }
 
 // =============================================================================
-// Arweave Transaction Types (for posting)
-// =============================================================================
-
-/// Arweave transaction structure for posting data
-#[derive(Debug, Serialize)]
-pub(crate) struct ArweaveTransaction {
-    /// Transaction format (always 2 for format 2)
-    pub format: u8,
-    /// Transaction ID (empty string, calculated after signing)
-    pub id: String,
-    /// Last anchor transaction ID
-    pub last_tx: String,
-    /// Wallet public key (Base64URL encoded)
-    pub owner: String,
-    /// Tags with Base64URL encoded name/value
-    pub tags: Vec<EncodedTag>,
-    /// Target address (empty for data-only transactions)
-    pub target: String,
-    /// Amount in Winston (0 for data-only transactions)
-    pub quantity: String,
-    /// Base64URL encoded data
-    pub data: String,
-    /// Data size as string
-    pub data_size: String,
-    /// Data root hash
-    pub data_root: String,
-    /// Transaction reward (fee)
-    pub reward: String,
-    /// RSA-PSS signature
-    pub signature: String,
-}
-
-/// Tag with Base64URL encoded name and value
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct EncodedTag {
-    pub name: String,
-    pub value: String,
-}
-
-// =============================================================================
 // Base64URL Encoding Helpers
 // =============================================================================
 
 /// Encode bytes to Base64URL format (no padding)
-pub(crate) fn base64url_encode(bytes: &[u8]) -> String {
+pub fn base64url_encode(bytes: &[u8]) -> String {
     use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
 /// Decode Base64URL format to bytes
-#[allow(dead_code)]
-pub(crate) fn base64url_decode(encoded: &str) -> Result<Vec<u8>, base64::DecodeError> {
+pub fn base64url_decode(encoded: &str) -> Result<Vec<u8>, base64::DecodeError> {
     use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
     URL_SAFE_NO_PAD.decode(encoded)
 }
@@ -195,13 +157,14 @@ impl ArweaveClientImpl {
     }
 
     /// Add a wallet for signing transactions
+    #[must_use]
     pub fn with_wallet(mut self, wallet: ArweaveWallet) -> Self {
         self.wallet = Some(wallet);
         self
     }
 
     /// Check if wallet is configured
-    pub fn has_wallet(&self) -> bool {
+    pub const fn has_wallet(&self) -> bool {
         self.wallet.is_some()
     }
 
@@ -215,7 +178,7 @@ impl ArweaveClientImpl {
     }
 
     /// Build GraphQL query for transaction search
-    fn build_graphql_query(&self, tags: &[Tag], cursor: Option<&str>) -> String {
+    fn build_graphql_query(tags: &[Tag], cursor: Option<&str>) -> String {
         let tags_query: Vec<String> = tags
             .iter()
             .map(|t| {
@@ -237,10 +200,14 @@ impl ArweaveClientImpl {
                 transactions(
                     tags: [{}]
                     first: 100
+                    sort: HEIGHT_DESC
                     {}
                 ) {{
                     edges {{
-                        node {{ id }}
+                        node {{
+                            id
+                            block {{ height }}
+                        }}
                         cursor
                     }}
                     pageInfo {{ hasNextPage }}
@@ -289,7 +256,11 @@ impl ArweaveClientImpl {
     }
 
     fn anchor_read_error(e: reqwest::Error, retries: u32) -> AdapterError {
-        AdapterError::network_error("fetch_anchor", &format!("Failed to read anchor: {e}"), retries)
+        AdapterError::network_error(
+            "fetch_anchor",
+            &format!("Failed to read anchor: {e}"),
+            retries,
+        )
     }
 
     fn anchor_http_error(status: reqwest::StatusCode, retries: u32) -> AdapterError {
@@ -338,7 +309,11 @@ impl ArweaveClientImpl {
     }
 
     fn price_read_error(e: reqwest::Error, retries: u32) -> AdapterError {
-        AdapterError::network_error("fetch_price", &format!("Failed to read price: {e}"), retries)
+        AdapterError::network_error(
+            "fetch_price",
+            &format!("Failed to read price: {e}"),
+            retries,
+        )
     }
 
     fn price_http_error(status: reqwest::StatusCode, retries: u32) -> AdapterError {
@@ -347,62 +322,6 @@ impl ArweaveClientImpl {
 
     fn price_request_error(e: reqwest::Error, retries: u32) -> AdapterError {
         AdapterError::network_error("fetch_price", &format!("Request failed: {e}"), retries)
-    }
-
-    /// Compute data root hash for small data (< 256KB uses single chunk)
-    fn compute_data_root(payload: &[u8]) -> String {
-        if payload.is_empty() {
-            return String::new();
-        }
-
-        let mut hasher = Sha256::new();
-        hasher.update(payload);
-        let hash = hasher.finalize();
-        base64url_encode(&hash)
-    }
-
-    /// Build the signature data for Arweave format 2 transaction
-    fn build_signature_data(tx: &ArweaveTransaction) -> Vec<u8> {
-        let tags_data: Vec<u8> = tx
-            .tags
-            .iter()
-            .flat_map(|tag| {
-                let mut chunk = base64url_decode(&tag.name).unwrap_or_default();
-                chunk.extend(base64url_decode(&tag.value).unwrap_or_default());
-                chunk
-            })
-            .collect();
-
-        let parts: Vec<Vec<u8>> = vec![
-            b"2".to_vec(),
-            base64url_decode(&tx.owner).unwrap_or_default(),
-            base64url_decode(&tx.target).unwrap_or_default(),
-            tx.quantity.as_bytes().to_vec(),
-            tx.reward.as_bytes().to_vec(),
-            base64url_decode(&tx.last_tx).unwrap_or_default(),
-            tags_data,
-            tx.data_size.as_bytes().to_vec(),
-            base64url_decode(&tx.data_root).unwrap_or_default(),
-        ];
-
-        Self::deep_hash(&parts)
-    }
-
-    /// Compute deep hash of data parts (Arweave specific)
-    fn deep_hash(parts: &[Vec<u8>]) -> Vec<u8> {
-        let mut hasher = Sha256::new();
-        hasher.update(b"list");
-        hasher.update(parts.len().to_string().as_bytes());
-
-        for part in parts {
-            let mut part_hasher = Sha256::new();
-            part_hasher.update(b"blob");
-            part_hasher.update(part.len().to_string().as_bytes());
-            part_hasher.update(part);
-            hasher.update(part_hasher.finalize());
-        }
-
-        hasher.finalize().to_vec()
     }
 }
 
@@ -520,8 +439,8 @@ impl ArweaveClient for ArweaveClientImpl {
         // Encode payload to Base64URL
         let encoded_payload = base64url_encode(payload);
 
-        // Compute data root
-        let data_root = Self::compute_data_root(payload);
+        // Compute data root using Merkle tree
+        let data_root = compute_data_root(payload);
 
         // Create unsigned transaction structure
         let mut tx = ArweaveTransaction {
@@ -539,8 +458,8 @@ impl ArweaveClient for ArweaveClientImpl {
             signature: String::new(),
         };
 
-        // Sign the transaction
-        let signature_data = Self::build_signature_data(&tx);
+        // Sign the transaction using DeepHash
+        let signature_data = build_signature_data(&tx);
         let signature_bytes = wallet.sign(&signature_data)?;
         tx.signature = base64url_encode(&signature_bytes);
 
@@ -612,7 +531,7 @@ impl ArweaveClient for ArweaveClientImpl {
         let backoff_ms = self.config.retry_backoff_ms();
 
         loop {
-            let query = self.build_graphql_query(&tags, cursor.as_deref());
+            let query = Self::build_graphql_query(&tags, cursor.as_deref());
             let payload = serde_json::json!({ "query": query });
             let mut retries = 0;
 
