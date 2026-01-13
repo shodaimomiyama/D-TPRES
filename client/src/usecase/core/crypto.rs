@@ -68,7 +68,7 @@ pub struct ShamirShare {
     /// シェアのインデックス（1から開始）
     pub index: u8,
     /// シェアデータ（使用後にゼロ化される）
-    pub data: Vec<u8>,
+    pub share_data: Vec<u8>,
 }
 
 /// Umbral暗号化のカプセル（シリアライズされた不透明トークン）
@@ -76,7 +76,7 @@ pub struct ShamirShare {
 #[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct Capsule {
     /// umbral_pre::Capsuleのシリアライズされた完全なデータ
-    pub data: Vec<u8>,
+    pub capsule_bytes: Vec<u8>,
 }
 
 /// 公開鍵
@@ -99,6 +99,12 @@ impl SecretKey {
     /// Check if the key data is empty
     pub fn is_empty(&self) -> bool {
         self.key_data.is_empty()
+    }
+
+    /// Create an empty SecretKey for testing purposes only
+    #[cfg(test)]
+    pub fn empty_for_test() -> Self {
+        Self { key_data: vec![] }
     }
 }
 
@@ -302,11 +308,9 @@ impl CryptoServiceImpl {
         secret_bytes.as_mut_secret().copy_from_slice(&key.key_data);
 
         // SecretKeyに変換
-        let result = umbral_pre::SecretKey::try_from_be_bytes(&secret_bytes)
-            .map_err(|_| ServiceError::crypto_error("Failed to deserialize secret key"));
-
         // secret_bytesは自動的にZeroizeされる（SecretBoxのDrop実装により）
-        result
+        umbral_pre::SecretKey::try_from_be_bytes(&secret_bytes)
+            .map_err(|_| ServiceError::crypto_error("Failed to deserialize secret key"))
     }
 
     /// PublicKeyからumbral_pre::PublicKeyを復元
@@ -317,7 +321,7 @@ impl CryptoServiceImpl {
 
     /// Capsuleからumbral_pre::Capsuleを復元
     fn deserialize_capsule(&self, capsule: &Capsule) -> ServiceResult<umbral_pre::Capsule> {
-        bincode::deserialize(&capsule.data)
+        bincode::deserialize(&capsule.capsule_bytes)
             .map_err(|_| ServiceError::crypto_error("Failed to deserialize capsule"))
     }
 }
@@ -372,7 +376,7 @@ impl CryptoService for CryptoServiceImpl {
         for (index, share) in shares.into_iter().enumerate() {
             result.push(ShamirShare {
                 index: (index + 1) as u8, // 1から開始
-                data: share,
+                share_data: share,
             });
         }
 
@@ -392,7 +396,10 @@ impl CryptoService for CryptoServiceImpl {
         }
 
         // ShamirShare型からVec<u8>へ変換（shamirsecretsharing::ShareはVec<u8>型）
-        let share_vecs: Vec<Vec<u8>> = shares.iter().map(|s| s.data.as_slice().to_vec()).collect();
+        let share_vecs: Vec<Vec<u8>> = shares
+            .iter()
+            .map(|s| s.share_data.as_slice().to_vec())
+            .collect();
 
         // ライブラリを使用してシェアを結合
         let recovered = combine_shares(&share_vecs)
@@ -400,19 +407,19 @@ impl CryptoService for CryptoServiceImpl {
 
         // 復元されたデータを処理
         match recovered {
-            Some(data) => {
+            Some(recovered_bytes) => {
                 // パディングを除去して元のデータを取得
-                if data.is_empty() {
+                if recovered_bytes.is_empty() {
                     return Err(ServiceError::crypto_error("Recovered data is empty"));
                 }
 
-                let original_len = data[0] as usize;
+                let original_len = recovered_bytes[0] as usize;
                 if original_len == 0 || original_len > DATA_SIZE - 1 {
                     return Err(ServiceError::crypto_error("Invalid recovered data format"));
                 }
 
                 // 元のデータを抽出
-                let result = data[1..original_len + 1].to_vec();
+                let result = recovered_bytes[1..original_len + 1].to_vec();
                 Ok(result)
             }
             None => Err(ServiceError::crypto_error(
@@ -443,11 +450,11 @@ impl CryptoService for CryptoServiceImpl {
             .map_err(|_| ServiceError::crypto_error("Encryption failed"))?;
 
         // Capsuleをシリアライズして保存
-        let capsule_bytes: Vec<u8> = bincode::serialize(&umbral_capsule)
+        let serialized_capsule: Vec<u8> = bincode::serialize(&umbral_capsule)
             .map_err(|_| ServiceError::crypto_error("Failed to serialize capsule"))?;
 
         let capsule: Capsule = Capsule {
-            data: capsule_bytes,
+            capsule_bytes: serialized_capsule,
         };
 
         // ciphertextをVec<u8>に変換
@@ -579,7 +586,7 @@ impl CryptoService for CryptoServiceImpl {
             return Err(ServiceError::validation_error("Invalid key fragment"));
         }
 
-        if capsule.data.is_empty() {
+        if capsule.capsule_bytes.is_empty() {
             return Err(ServiceError::validation_error("Invalid capsule"));
         }
 
@@ -656,7 +663,7 @@ impl CryptoService for CryptoServiceImpl {
             ));
         }
 
-        if original_capsule.data.is_empty() {
+        if original_capsule.capsule_bytes.is_empty() {
             return Err(ServiceError::validation_error("Invalid original capsule"));
         }
 
@@ -831,7 +838,7 @@ impl CryptoService for CryptoServiceImpl {
         requester_secret_key: &SecretKey,
     ) -> ServiceResult<Vec<u8>> {
         // Input validation
-        if capsule.data.is_empty() {
+        if capsule.capsule_bytes.is_empty() {
             return Err(ServiceError::validation_error("Capsule cannot be empty"));
         }
 
@@ -1049,10 +1056,10 @@ mod tests {
         println!("\n   シェアの詳細:");
         for (i, share) in shares.iter().enumerate() {
             println!("   Share {} (index={}):", i + 1, share.index);
-            println!("     - サイズ: {} bytes", share.data.len());
+            println!("     - サイズ: {} bytes", share.share_data.len());
             // 最初の16バイトだけを表示
             print!("     - データ先頭 (16進数): ");
-            for byte in share.data.iter().take(16) {
+            for byte in share.share_data.iter().take(16) {
                 print!("{:02x} ", byte);
             }
             println!("...");
@@ -1173,7 +1180,7 @@ mod tests {
             .expect("Failed to create capsule");
 
         println!("   平文: \"{}\"", std::str::from_utf8(plaintext).unwrap());
-        println!("   カプセルサイズ: {} bytes", capsule.data.len());
+        println!("   カプセルサイズ: {} bytes", capsule.capsule_bytes.len());
         println!("   暗号文サイズ: {} bytes", ciphertext.len());
 
         // Step 3: AliceがBobへの再暗号化鍵を生成
@@ -1355,7 +1362,7 @@ mod tests {
         // テスト4: 不正なカプセルでエラー
         println!("   3-3. 不正なカプセル:");
         let invalid_capsule = Capsule {
-            data: vec![0u8; 100], // ダミーのカプセル
+            capsule_bytes: vec![0u8; 100], // ダミーのカプセル
         };
         let result = service.combine_and_decrypt(&cfrags, &bob_sk, &invalid_capsule, &ciphertext);
         assert!(result.is_err());
@@ -1436,12 +1443,12 @@ mod tests {
             .expect("Failed to create capsule");
 
         println!("   ✓ カプセル生成成功");
-        println!("   ✓ カプセルサイズ: {} bytes", capsule.data.len());
+        println!("   ✓ カプセルサイズ: {} bytes", capsule.capsule_bytes.len());
         println!("   ✓ 暗号文サイズ: {} bytes", ciphertext.len());
 
         // カプセルデータの詳細ログ出力
         println!("\n   カプセルデータの詳細 (16進数):");
-        for (i, chunk) in capsule.data.chunks(16).enumerate() {
+        for (i, chunk) in capsule.capsule_bytes.chunks(16).enumerate() {
             print!("     {:04x}: ", i * 16);
             for byte in chunk {
                 print!("{:02x} ", byte);
@@ -1474,7 +1481,10 @@ mod tests {
             println!();
         }
 
-        assert!(!capsule.data.is_empty(), "Capsule should not be empty");
+        assert!(
+            !capsule.capsule_bytes.is_empty(),
+            "Capsule should not be empty"
+        );
         assert!(!ciphertext.is_empty(), "Ciphertext should not be empty");
         assert_ne!(
             plaintext,
@@ -1518,21 +1528,21 @@ mod tests {
             .expect("Failed to create second capsule");
 
         assert_ne!(
-            capsule1.data, capsule2.data,
+            capsule1.capsule_bytes, capsule2.capsule_bytes,
             "Capsules should be different due to randomness"
         );
 
         // ランダム性を視覚的に確認
         println!("\n   カプセル1の先頭16バイト:");
         print!("     ");
-        for byte in capsule1.data.iter().take(16) {
+        for byte in capsule1.capsule_bytes.iter().take(16) {
             print!("{:02x} ", byte);
         }
         println!();
 
         println!("   カプセル2の先頭16バイト:");
         print!("     ");
-        for byte in capsule2.data.iter().take(16) {
+        for byte in capsule2.capsule_bytes.iter().take(16) {
             print!("{:02x} ", byte);
         }
         println!();
@@ -1555,23 +1565,29 @@ mod tests {
             .expect("Failed to encrypt large data");
 
         println!("   ✓ 大容量データの暗号化成功");
-        println!("   ✓ カプセルサイズ: {} bytes", large_capsule.data.len());
+        println!(
+            "   ✓ カプセルサイズ: {} bytes",
+            large_capsule.capsule_bytes.len()
+        );
         println!("   ✓ 暗号文サイズ: {} bytes", large_ciphertext.len());
 
         // 大容量データでもカプセルサイズが一定であることを確認
         println!("\n   大容量データ用カプセルのサイズ確認:");
-        println!("     通常データ用カプセル: {} bytes", capsule.data.len());
+        println!(
+            "     通常データ用カプセル: {} bytes",
+            capsule.capsule_bytes.len()
+        );
         println!(
             "     大容量データ用カプセル: {} bytes",
-            large_capsule.data.len()
+            large_capsule.capsule_bytes.len()
         );
         assert_eq!(
-            capsule.data.len(),
-            large_capsule.data.len(),
+            capsule.capsule_bytes.len(),
+            large_capsule.capsule_bytes.len(),
             "Capsule size should be constant regardless of plaintext size"
         );
 
-        assert!(!large_capsule.data.is_empty());
+        assert!(!large_capsule.capsule_bytes.is_empty());
         // 暗号化にはオーバーヘッドがあるため、暗号文は平文より大きくなる
         assert!(
             large_ciphertext.len() >= large_data.len(),
@@ -1601,7 +1617,7 @@ mod tests {
         println!("   ✓ 32バイトの鍵を生成");
 
         // Test with various plaintext sizes
-        let test_cases = vec![
+        let test_cases = [
             b"Hello, World!".to_vec(),
             b"".to_vec(),       // Empty plaintext
             vec![0x42u8; 1024], // 1KB

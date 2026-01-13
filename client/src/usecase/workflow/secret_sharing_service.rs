@@ -165,7 +165,7 @@ impl<C: CryptoService> SecretSharingWorkflowServiceImpl<C> {
             .iter()
             .map(|share| {
                 self.crypto_service
-                    .aes_gcm_encrypt(symmetric_key, &share.data)
+                    .aes_gcm_encrypt(symmetric_key, &share.share_data)
                     .map_err(WorkflowError::from)
             })
             .collect()
@@ -519,11 +519,11 @@ mod tests {
         let shares = vec![
             ShamirShare {
                 index: 1,
-                data: b"share data 1".to_vec(),
+                share_data: b"share data 1".to_vec(),
             },
             ShamirShare {
                 index: 2,
-                data: b"share data 2".to_vec(),
+                share_data: b"share data 2".to_vec(),
             },
         ];
         println!("  Encrypting {} shares with AES-GCM...", shares.len());
@@ -539,10 +539,10 @@ mod tests {
             println!(
                 "  Share {}: {} bytes -> {} bytes (encrypted)",
                 i,
-                shares[i].data.len(),
+                shares[i].share_data.len(),
                 enc.len()
             );
-            assert!(enc.len() > shares[i].data.len());
+            assert!(enc.len() > shares[i].share_data.len());
         }
         println!("  [PASS] All shares encrypted successfully");
     }
@@ -561,9 +561,9 @@ mod tests {
         assert!(result.is_ok());
 
         let (capsule, ciphertext) = result.unwrap();
-        println!("  Capsule size: {} bytes", capsule.data.len());
+        println!("  Capsule size: {} bytes", capsule.capsule_bytes.len());
         println!("  Ciphertext size: {} bytes", ciphertext.len());
-        assert!(!capsule.data.is_empty());
+        assert!(!capsule.capsule_bytes.is_empty());
         assert!(!ciphertext.is_empty());
         println!("  [PASS] PRE capsule created successfully");
     }
