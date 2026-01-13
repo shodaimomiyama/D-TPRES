@@ -39,7 +39,7 @@ fn test_phase3_integration_aes_decryption_roundtrip() {
     let symmetric_key = crypto.generate_symmetric_key().unwrap();
     println!("  Generated {} byte symmetric key", symmetric_key.len());
 
-    let original_shares = vec![
+    let original_shares = [
         b"share_data_1_for_testing".to_vec(),
         b"share_data_2_for_testing".to_vec(),
         b"share_data_3_for_testing".to_vec(),
@@ -118,7 +118,11 @@ fn test_phase3_integration_shamir_reconstruction() {
     let shares = crypto.split_secret_shamir(original_secret, 3, 5).unwrap();
     println!("  Generated {} shares", shares.len());
     for share in &shares {
-        println!("  Share index {}: {} bytes", share.index, share.data.len());
+        println!(
+            "  Share index {}: {} bytes",
+            share.index,
+            share.share_data.len()
+        );
     }
 
     println!("\n[Step 3] Reconstruct with exactly k=3 shares");
@@ -324,10 +328,10 @@ fn test_phase3_integration_pre_capsule_creation() {
     let (capsule, ciphertext) = crypto
         .create_pre_capsule(&owner_pk, &symmetric_key)
         .unwrap();
-    println!("  Capsule: {} bytes", capsule.data.len());
+    println!("  Capsule: {} bytes", capsule.capsule_bytes.len());
     println!("  Ciphertext: {} bytes", ciphertext.len());
 
-    assert!(!capsule.data.is_empty());
+    assert!(!capsule.capsule_bytes.is_empty());
     assert!(!ciphertext.is_empty());
 
     println!("\n[PASS] PRE capsule creation works correctly");

@@ -166,9 +166,15 @@ fn test_phase1_integration_crypto_operations_valid() {
     let (capsule, ciphertext) = crypto
         .create_pre_capsule(&owner_pk, &symmetric_key)
         .unwrap();
-    assert!(!capsule.data.is_empty(), "Capsule should have data");
+    assert!(
+        !capsule.capsule_bytes.is_empty(),
+        "Capsule should have data"
+    );
     assert!(!ciphertext.is_empty(), "Ciphertext should not be empty");
-    println!("  Created PRE capsule: {} bytes", capsule.data.len());
+    println!(
+        "  Created PRE capsule: {} bytes",
+        capsule.capsule_bytes.len()
+    );
     println!("  Capsule ciphertext: {} bytes", ciphertext.len());
 
     println!("\n[Step 5] Testing kFrag generation");

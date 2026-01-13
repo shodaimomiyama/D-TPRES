@@ -152,15 +152,15 @@ impl ArweaveStorageServiceImpl {
     }
 
     /// データサイズを検証
-    fn validate_data_size(&self, data: &[u8]) -> ServiceResult<()> {
-        if data.is_empty() {
+    fn validate_data_size(&self, payload: &[u8]) -> ServiceResult<()> {
+        if payload.is_empty() {
             return Err(ServiceError::validation_error("Data cannot be empty"));
         }
 
-        if data.len() > self.config.max_transaction_size {
+        if payload.len() > self.config.max_transaction_size {
             return Err(ServiceError::validation_error(format!(
                 "Data size {} exceeds maximum allowed size {}",
-                data.len(),
+                payload.len(),
                 self.config.max_transaction_size
             )));
         }
@@ -191,16 +191,16 @@ impl ArweaveStorageServiceImpl {
 }
 
 impl ArweaveStorageService for ArweaveStorageServiceImpl {
-    fn store_data(&self, data: &[u8], tags: Vec<Tag>) -> ServiceResult<String> {
+    fn store_data(&self, payload: &[u8], tags: Vec<Tag>) -> ServiceResult<String> {
         // 入力検証
-        self.validate_data_size(data)?;
+        self.validate_data_size(payload)?;
         self.validate_tags(&tags)?;
 
         // トランザクション作成
         let tx_id = self.generate_transaction_id();
         let transaction = ArweaveTransaction {
             id: tx_id.clone(),
-            data: data.to_vec(),
+            data: payload.to_vec(),
             tags,
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -320,8 +320,8 @@ impl ArweaveStorageService for ArweaveStorageServiceImpl {
         let mut successful = Vec::new();
         let mut failed = Vec::new();
 
-        for (data, tags) in items {
-            match self.store_data(&data, tags) {
+        for (item_payload, tags) in items {
+            match self.store_data(&item_payload, tags) {
                 Ok(tx_id) => successful.push(tx_id),
                 Err(e) => failed.push((String::new(), e.to_string())),
             }

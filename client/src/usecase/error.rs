@@ -68,31 +68,31 @@ pub enum BusinessException {
 pub enum SystemException {
     /// Cryptographic operation errors
     #[error("Crypto error: {0}")]
-    CryptoError(String),
+    Crypto(String),
 
     /// Storage operation errors
     #[error("Storage error: {0}")]
-    StorageError(String),
+    Storage(String),
 
     /// Network operation errors
     #[error("Network error: {0}")]
-    NetworkError(String),
+    Network(String),
 
     /// Internal system errors
     #[error("Internal error: {0}")]
-    InternalError(String),
+    Internal(String),
 
     /// Repository operation errors
     #[error("Repository error: {0}")]
-    RepositoryError(String),
+    Repository(String),
 
     /// Serialization/Deserialization errors
     #[error("Serialization error: {0}")]
-    SerializationError(String),
+    Serialization(String),
 
     /// AO Network specific errors
     #[error("AO Network error: {0}")]
-    AONetworkError(String),
+    AONetwork(String),
 }
 
 /// Conversion from domain errors to service errors
@@ -145,24 +145,24 @@ impl From<DomainError> for ServiceError {
                 )))
             }
             DomainError::CryptographicError { operation, details } => {
-                ServiceError::System(SystemException::CryptoError(format!(
+                ServiceError::System(SystemException::Crypto(format!(
                     "Crypto operation '{}' failed: {}",
                     operation, details
                 )))
             }
             DomainError::StorageError { operation, details } => {
-                ServiceError::System(SystemException::StorageError(format!(
+                ServiceError::System(SystemException::Storage(format!(
                     "Storage operation '{}' failed: {}",
                     operation, details
                 )))
             }
             DomainError::SerializationError { operation, details } => {
-                ServiceError::System(SystemException::SerializationError(format!(
+                ServiceError::System(SystemException::Serialization(format!(
                     "Serialization operation '{}' failed: {}",
                     operation, details
                 )))
             }
-            _ => ServiceError::System(SystemException::InternalError(format!(
+            _ => ServiceError::System(SystemException::Internal(format!(
                 "Unexpected domain error: {:?}",
                 err
             ))),
@@ -204,17 +204,17 @@ impl ServiceError {
 
     /// Create a crypto error
     pub fn crypto_error(message: impl Into<String>) -> Self {
-        ServiceError::System(SystemException::CryptoError(message.into()))
+        ServiceError::System(SystemException::Crypto(message.into()))
     }
 
     /// Create a storage error
     pub fn storage_error(message: impl Into<String>) -> Self {
-        ServiceError::System(SystemException::StorageError(message.into()))
+        ServiceError::System(SystemException::Storage(message.into()))
     }
 
     /// Create an AO network error
     pub fn ao_network_error(message: impl Into<String>) -> Self {
-        ServiceError::System(SystemException::AONetworkError(message.into()))
+        ServiceError::System(SystemException::AONetwork(message.into()))
     }
 }
 
@@ -274,9 +274,9 @@ impl From<ServiceError> for WorkflowError {
                 other => WorkflowError::ValidationError(other.to_string()),
             },
             ServiceError::System(system_err) => match system_err {
-                SystemException::CryptoError(msg) => WorkflowError::CryptoError(msg),
-                SystemException::StorageError(msg) => WorkflowError::StorageError(msg),
-                SystemException::AONetworkError(msg) => WorkflowError::AOCommunicationError(msg),
+                SystemException::Crypto(msg) => WorkflowError::CryptoError(msg),
+                SystemException::Storage(msg) => WorkflowError::StorageError(msg),
+                SystemException::AONetwork(msg) => WorkflowError::AOCommunicationError(msg),
                 other => WorkflowError::StorageError(other.to_string()),
             },
         }
@@ -512,7 +512,7 @@ mod tests {
     fn test_workflow_error_from_other_system() {
         // Test that other system exceptions convert to StorageError
         let service_err =
-            ServiceError::System(SystemException::NetworkError("Connection refused".into()));
+            ServiceError::System(SystemException::Network("Connection refused".into()));
         let workflow_err: WorkflowError = service_err.into();
 
         // Should convert to StorageError as fallback
