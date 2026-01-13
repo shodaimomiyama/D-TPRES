@@ -38,7 +38,11 @@ fn test_roundtrip_shamir_reconstruction() {
     let shares = crypto.split_secret_shamir(&secret_data, 3, 5).unwrap();
     println!("  Generated {} Shamir shares", shares.len());
     for share in &shares {
-        println!("  Share index {}: {} bytes", share.index, share.data.len());
+        println!(
+            "  Share index {}: {} bytes",
+            share.index,
+            share.share_data.len()
+        );
     }
 
     println!("\n[Step 3] PHASE 3 - Reconstruct with exactly k=3 shares");
@@ -77,7 +81,7 @@ fn test_roundtrip_aes_encryption_decryption() {
 
     let crypto = Arc::new(CryptoServiceImpl::new());
 
-    let test_data = vec![
+    let test_data = [
         b"Short message".to_vec(),
         b"This is a longer message for testing AES-GCM encryption".to_vec(),
         vec![0xAB; 100], // Binary data
@@ -146,7 +150,7 @@ fn test_roundtrip_complete_phase1_to_phase3_crypto_flow() {
     let (capsule, capsule_ciphertext) = crypto
         .create_pre_capsule(&owner_pk, &symmetric_key)
         .unwrap();
-    println!("  Capsule created: {} bytes", capsule.data.len());
+    println!("  Capsule created: {} bytes", capsule.capsule_bytes.len());
     println!("  Capsule ciphertext: {} bytes", capsule_ciphertext.len());
 
     println!("\n[P1-4] Split symmetric key with Shamir (k=3, n=5)");
@@ -359,7 +363,7 @@ fn test_roundtrip_keypair_generation_consistency() {
 
         // Create capsule with this owner's key
         let (capsule, _) = crypto.create_pre_capsule(owner_pk, &symmetric_key).unwrap();
-        assert!(!capsule.data.is_empty());
+        assert!(!capsule.capsule_bytes.is_empty());
 
         // Generate kFrags
         let reenc_key = crypto
