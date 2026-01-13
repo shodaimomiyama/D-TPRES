@@ -26,8 +26,7 @@ fn test_roundtrip_shamir_reconstruction() {
     let crypto = Arc::new(CryptoServiceImpl::new());
 
     let original_secret = b"Top secret message for roundtrip test!";
-    // Limit to 63 bytes for Shamir
-    let secret_data: Vec<u8> = original_secret.iter().take(63).copied().collect();
+    let secret_data: Vec<u8> = original_secret.to_vec();
     println!(
         "\n[Step 1] Original secret: {:?}",
         String::from_utf8_lossy(&secret_data)
@@ -115,7 +114,7 @@ fn test_roundtrip_complete_phase1_to_phase3_crypto_flow() {
     let crypto = Arc::new(CryptoServiceImpl::new());
 
     let original_secret = b"Complete workflow test secret!";
-    let secret_data: Vec<u8> = original_secret.iter().take(63).copied().collect();
+    let secret_data: Vec<u8> = original_secret.to_vec();
     println!(
         "\n[Original Secret] {:?}",
         String::from_utf8_lossy(&secret_data)
@@ -391,7 +390,7 @@ fn test_roundtrip_workflow_services_integration() {
     let (_requester_sk, requester_pk) = crypto.generate_keypair().unwrap();
 
     let original_secret = b"Integration test secret!";
-    let secret_data: Vec<u8> = original_secret.iter().take(63).copied().collect();
+    let secret_data: Vec<u8> = original_secret.to_vec();
 
     println!("\n[Step 1] Create SecretSharingRequest");
     let request = SecretSharingRequest {
