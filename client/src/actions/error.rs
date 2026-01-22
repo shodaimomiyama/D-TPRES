@@ -99,6 +99,7 @@ impl From<WorkflowError> for ActionError {
                 message: msg,
             },
             WorkflowError::ResourceNotFound(resource) => ActionError::ResourceNotFound { resource },
+            WorkflowError::CryptoError(msg) => ActionError::CryptoError { message: msg },
             _ => ActionError::WorkflowFailed {
                 message: err.to_string(),
             },
@@ -238,10 +239,10 @@ mod tests {
         let action_err: ActionError = workflow_err.into();
 
         match action_err {
-            ActionError::WorkflowFailed { message } => {
-                assert!(message.contains("crypto"));
+            ActionError::CryptoError { message } => {
+                assert_eq!(message, "crypto failed");
             }
-            _ => panic!("Expected WorkflowFailed"),
+            _ => panic!("Expected CryptoError"),
         }
     }
 }
