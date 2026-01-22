@@ -42,7 +42,8 @@
       "mcp__spec-workflow__spec-workflow-guide",
       "mcp__spec-workflow__spec-status",
       "mcp__ide__getDiagnostics",
-      "WebFetch(domain:raw.githubusercontent.com)"
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(gh api:*)"
     ],
     "deny": []
   },

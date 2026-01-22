@@ -222,6 +222,48 @@ PR #48のコードレビューで指摘されたWASM互換性問題を修正し�
 
 ---
 
+## PR #48 コードレビュー対応タスク
+
+PR #48のコードレビューで指摘された問題を修正します。
+
+- [x] 21. Base64URLデコードエラーハンドリング修正
+  - File: `client/src/adapter/external/arweave/deep_hash.rs`, `client/src/adapter/external/arweave/transaction.rs`, `client/src/adapter/external/arweave/client.rs`
+  - `unwrap_or_default()`を`Result`型に変更
+  - `build_signature_message`と`build_signature_data`の戻り値を`Result<Vec<u8>, AdapterError>`に変更
+  - エラー伝播の適切な実装（`?`演算子使用）
+  - 不正なBase64URL入力に対するテスト追加
+  - Purpose: 不正な入力に対する堅牢性向上
+  - _Requirements: 6.1 (Error Handling)_
+  - _PR Review: r2715792491, r2715792493_
+
+- [x] 22. DeepHash empty list処理修正
+  - File: `client/src/adapter/external/arweave/deep_hash.rs`
+  - Arweave-js参照実装に準拠した修正
+  - Empty list: `deep_hash_blob(&[])` → `SHA-384("list0")`
+  - `test_deep_hash_empty_list`テストを修正（empty list ≠ empty blob を検証）
+  - Purpose: Arweave仕様への厳密準拠
+  - _Requirements: Arweave specification compliance_
+  - _PR Review: r2716873727_
+
+- [x] 23. Transaction ID返却値修正
+  - File: `client/src/adapter/external/arweave/client.rs`
+  - POST成功時: `response.text()` → `tx.id.clone()`
+  - Arweave `/tx` APIは"OK"を返すため、事前計算済みのTX IDを返却
+  - TX ID = Base64URL(SHA-256(signature))
+  - Purpose: 正確なTransaction ID取得
+  - _Requirements: 5.3 (Transaction ID return)_
+  - _PR Review: r2716873737_
+
+- [ ] 24. Arweave POST統合テストの追加
+  - File: `client/src/adapter/external/arweave/tests.rs`
+  - 実際のArweaveネットワークへのPOSTテスト
+  - `ARWEAVE_INTEGRATION_TESTS=true`と`ARWEAVE_WALLET_PATH`が必要
+  - テスト用の小さいペイロードを使用
+  - Purpose: E2E動作検証
+  - _Requirements: Integration testing_
+
+---
+
 ## タスク依存関係
 
 ```mermaid
