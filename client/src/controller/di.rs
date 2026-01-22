@@ -2,25 +2,28 @@
 //!
 //! Provides centralized access to Controller layer components.
 
+use std::sync::Arc;
+
 use crate::controller::extractor::{RecoverExtractor, ShareExtractor};
 use crate::controller::validator::{RecoverValidator, ShareValidator};
+use crate::usecase::core::crypto::CryptoService;
 
 /// Container for Controller layer components
 ///
 /// Aggregates all Controller layer components (validators and extractors)
 /// for simplified access from the Actions layer.
-pub struct ControllerContainer {
-    share_validator: ShareValidator,
+pub struct ControllerContainer<C: CryptoService> {
+    share_validator: ShareValidator<C>,
     recover_validator: RecoverValidator,
     share_extractor: ShareExtractor,
     recover_extractor: RecoverExtractor,
 }
 
-impl ControllerContainer {
-    /// Create a new ControllerContainer with default components
-    pub fn new() -> Self {
+impl<C: CryptoService> ControllerContainer<C> {
+    /// Create a new ControllerContainer with CryptoService for key validation
+    pub fn new(crypto_service: Arc<C>) -> Self {
         Self {
-            share_validator: ShareValidator::new(),
+            share_validator: ShareValidator::new(crypto_service),
             recover_validator: RecoverValidator::new(),
             share_extractor: ShareExtractor::new(),
             recover_extractor: RecoverExtractor::new(),
@@ -28,7 +31,7 @@ impl ControllerContainer {
     }
 
     /// Get reference to ShareValidator
-    pub fn share_validator(&self) -> &ShareValidator {
+    pub fn share_validator(&self) -> &ShareValidator<C> {
         &self.share_validator
     }
 
@@ -48,16 +51,14 @@ impl ControllerContainer {
     }
 }
 
-impl Default for ControllerContainer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
+
+    fn create_crypto_service() -> Arc<CryptoServiceImpl> {
+        Arc::new(CryptoServiceImpl::new())
+    }
 
     fn create_test_keys() -> (
         crate::usecase::core::crypto::SecretKey,
@@ -71,48 +72,46 @@ mod tests {
 
     #[test]
     fn test_container_new() {
-        let container = ControllerContainer::new();
+        let crypto_service = create_crypto_service();
+        let container = ControllerContainer::new(crypto_service);
         // Verify container was created successfully by using its components
-        let (owner_sk, _) = create_test_keys();
+        let (owner_sk, owner_pk) = create_test_keys();
         let (_, requester_pk) = create_test_keys();
 
-        let result =
-            container
-                .share_validator()
-                .validate(b"secret", 3, 5, &owner_sk, &requester_pk);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_container_default() {
-        let container: ControllerContainer = Default::default();
-        let (owner_sk, _) = create_test_keys();
-        let (_, requester_pk) = create_test_keys();
-
-        let result =
-            container
-                .share_validator()
-                .validate(b"secret", 3, 5, &owner_sk, &requester_pk);
+        let result = container.share_validator().validate(
+            b"secret",
+            3,
+            5,
+            &owner_sk,
+            &owner_pk,
+            &requester_pk,
+        );
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_container_share_validator() {
-        let container = ControllerContainer::new();
-        let (owner_sk, _) = create_test_keys();
+        let crypto_service = create_crypto_service();
+        let container = ControllerContainer::new(crypto_service);
+        let (owner_sk, owner_pk) = create_test_keys();
         let (_, requester_pk) = create_test_keys();
 
         // Test invalid threshold
-        let result =
-            container
-                .share_validator()
-                .validate(b"secret", 0, 5, &owner_sk, &requester_pk);
+        let result = container.share_validator().validate(
+            b"secret",
+            0,
+            5,
+            &owner_sk,
+            &owner_pk,
+            &requester_pk,
+        );
         assert!(result.is_err());
     }
 
     #[test]
     fn test_container_recover_validator() {
-        let container = ControllerContainer::new();
+        let crypto_service = create_crypto_service();
+        let container = ControllerContainer::new(crypto_service);
         let (requester_sk, _) = create_test_keys();
 
         // Test valid parameters
@@ -131,7 +130,8 @@ mod tests {
 
     #[test]
     fn test_container_share_extractor() {
-        let container = ControllerContainer::new();
+        let crypto_service = create_crypto_service();
+        let container = ControllerContainer::new(crypto_service);
         let (owner_sk, owner_pk) = create_test_keys();
         let (_, requester_pk) = create_test_keys();
 
@@ -152,7 +152,8 @@ mod tests {
 
     #[test]
     fn test_container_recover_extractor() {
-        let container = ControllerContainer::new();
+        let crypto_service = create_crypto_service();
+        let container = ControllerContainer::new(crypto_service);
         let (requester_sk, _) = create_test_keys();
         let secret_id = crate::domain::value_objects::SecretId::new("test_secret");
 
