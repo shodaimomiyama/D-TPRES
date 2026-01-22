@@ -229,10 +229,11 @@ impl ArweaveClientImpl {
             let result = self.http_client.get(&url).send().await;
             let should_retry = match result {
                 Ok(response) if response.status().is_success() => {
-                    return response
+                    let text = response
                         .text()
                         .await
-                        .map_err(|e| Self::anchor_read_error(e, retries));
+                        .map_err(|e| Self::anchor_read_error(e, retries))?;
+                    return Ok(text.trim().to_string());
                 }
                 Ok(response) => {
                     if retries >= max_retries {
@@ -282,10 +283,11 @@ impl ArweaveClientImpl {
             let result = self.http_client.get(&url).send().await;
             let should_retry = match result {
                 Ok(response) if response.status().is_success() => {
-                    return response
+                    let text = response
                         .text()
                         .await
-                        .map_err(|e| Self::price_read_error(e, retries));
+                        .map_err(|e| Self::price_read_error(e, retries))?;
+                    return Ok(text.trim().to_string());
                 }
                 Ok(response) => {
                     if retries >= max_retries {
