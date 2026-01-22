@@ -69,14 +69,12 @@ fn deep_hash_blob(blob: &[u8]) -> Vec<u8> {
 /// - For blobs: `SHA-384(SHA-384("blob" + len) || SHA-384(data))`
 /// - For lists: Start with `SHA-384("list" + len)`, then accumulate:
 ///   `SHA-384(acc || deep_hash(item))` for each item
+///
+/// Empty lists produce `SHA-384("list0")` per Arweave spec (not treated as empty blob).
 pub fn deep_hash(item: &DeepHashItem) -> Vec<u8> {
     match item {
         DeepHashItem::Blob(bytes) => deep_hash_blob(bytes),
         DeepHashItem::List(items) => {
-            if items.is_empty() {
-                return deep_hash_blob(&[]);
-            }
-
             let tag = concat_buffers(&[b"list", items.len().to_string().as_bytes()]);
             let mut acc = sha384(&tag);
 
@@ -181,9 +179,10 @@ mod tests {
     #[test]
     fn test_deep_hash_empty_list() {
         let result = deep_hash(&DeepHashItem::List(vec![]));
-        // Empty list should be treated as empty blob
+        // Per Arweave spec: empty list produces SHA-384("list0"), NOT treated as empty blob
         let blob_result = deep_hash(&DeepHashItem::Blob(vec![]));
-        assert_eq!(result, blob_result);
+        assert_ne!(result, blob_result); // Empty list != empty blob
+        assert_eq!(result.len(), 48); // SHA-384 produces 48 bytes
     }
 
     #[test]
