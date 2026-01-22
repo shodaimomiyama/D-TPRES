@@ -59,6 +59,8 @@ pub use di::{ActionsContainer, DefaultActionsContainer};
 pub use error::{ActionError, ActionResult};
 pub use options::{RecoverOptions, ShareOptions};
 
+use zeroize::Zeroizing;
+
 use crate::domain::value_objects::SecretId;
 use crate::usecase::core::crypto::{CryptoService, PublicKey, SecretKey};
 use crate::usecase::dto::{SecretRecoveryResult, SecretSharingResult};
@@ -114,6 +116,9 @@ impl<C: CryptoService> ActionsContainer<C> {
         owner_process_id: String,
         options: Option<ShareOptions>,
     ) -> ActionResult<SecretSharingResult> {
+        // Wrap secret in Zeroizing to ensure cleanup on early returns
+        let mut secret = Zeroizing::new(secret);
+
         // Step 1: Validate parameters via Controller layer
         self.controller().share_validator().validate(
             &secret,
@@ -125,9 +130,10 @@ impl<C: CryptoService> ActionsContainer<C> {
         )?;
 
         // Step 2: Extract DTO via Controller layer
+        // Take ownership from Zeroizing wrapper (leaves empty vec, which is a no-op for zeroize)
         let metadata = options.and_then(|o| o.metadata);
         let request = self.controller().share_extractor().extract(
-            secret,
+            std::mem::take(&mut *secret),
             owner_secret_key,
             owner_public_key,
             requester_public_key,
