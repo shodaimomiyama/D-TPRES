@@ -41,7 +41,9 @@
       "Bash(xargs:*)",
       "mcp__spec-workflow__spec-workflow-guide",
       "mcp__spec-workflow__spec-status",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(tree:*)",
+      "Bash(gh label list:*)"
     ],
     "deny": []
   },

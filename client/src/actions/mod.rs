@@ -120,6 +120,7 @@ impl<C: CryptoService> ActionsContainer<C> {
             threshold,
             total_shares,
             &owner_secret_key,
+            &owner_public_key,
             &requester_public_key,
         )?;
 

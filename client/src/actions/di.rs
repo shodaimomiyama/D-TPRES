@@ -13,7 +13,7 @@ use crate::usecase::workflow::container::WorkflowServiceContainer;
 /// Aggregates Controller layer, WorkflowService layer, and CryptoService
 /// for simplified access from Actions functions (share, recover, generateKeyPair).
 pub struct ActionsContainer<C: CryptoService> {
-    controller: ControllerContainer,
+    controller: ControllerContainer<C>,
     workflow_services: WorkflowServiceContainer<C>,
     crypto_service: Arc<C>,
 }
@@ -24,7 +24,7 @@ impl<C: CryptoService> ActionsContainer<C> {
     /// For testing or custom configurations where specific implementations
     /// need to be injected.
     pub fn with_dependencies(
-        controller: ControllerContainer,
+        controller: ControllerContainer<C>,
         workflow_services: WorkflowServiceContainer<C>,
         crypto_service: Arc<C>,
     ) -> Self {
@@ -36,7 +36,7 @@ impl<C: CryptoService> ActionsContainer<C> {
     }
 
     /// Get reference to ControllerContainer
-    pub fn controller(&self) -> &ControllerContainer {
+    pub fn controller(&self) -> &ControllerContainer<C> {
         &self.controller
     }
 
@@ -63,7 +63,7 @@ impl DefaultActionsContainer {
     /// Create a new ActionsContainer with default components
     pub fn new() -> Self {
         let crypto_service = Arc::new(CryptoServiceImpl::new());
-        let controller = ControllerContainer::new();
+        let controller = ControllerContainer::new(Arc::clone(&crypto_service));
         let workflow_services = WorkflowServiceContainer::new(Arc::clone(&crypto_service));
 
         Self {
@@ -107,13 +107,17 @@ mod tests {
         let controller = container.controller();
 
         // Verify controller is accessible
-        let (owner_sk, _) = container.crypto_service().generate_keypair().unwrap();
+        let (owner_sk, owner_pk) = container.crypto_service().generate_keypair().unwrap();
         let (_, requester_pk) = container.crypto_service().generate_keypair().unwrap();
 
-        let result =
-            controller
-                .share_validator()
-                .validate(b"secret", 3, 5, &owner_sk, &requester_pk);
+        let result = controller.share_validator().validate(
+            b"secret",
+            3,
+            5,
+            &owner_sk,
+            &owner_pk,
+            &requester_pk,
+        );
         assert!(result.is_ok());
     }
 
@@ -149,7 +153,7 @@ mod tests {
     #[test]
     fn test_container_with_dependencies() {
         let crypto_service = Arc::new(CryptoServiceImpl::new());
-        let controller = ControllerContainer::new();
+        let controller = ControllerContainer::new(Arc::clone(&crypto_service));
         let workflow_services = WorkflowServiceContainer::new(Arc::clone(&crypto_service));
 
         let container =
@@ -176,6 +180,7 @@ mod tests {
             3,
             5,
             &owner_sk,
+            &owner_pk,
             &requester_pk,
         );
         assert!(validate_result.is_ok());
