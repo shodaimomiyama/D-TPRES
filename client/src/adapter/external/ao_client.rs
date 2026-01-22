@@ -391,9 +391,13 @@ impl AOClient for MockAOClient {
                 kfrag_id,
                 capsule_id,
             } => {
-                let cfrag_data = self.get_cfrag(process_id, kfrag_id, capsule_id);
+                let cfrag_data = self
+                    .get_cfrag(process_id, kfrag_id, capsule_id)
+                    .ok_or_else(|| {
+                        AOCommunicationError::execution_error(process_id, "CFrag not ready")
+                    })?;
                 let response = GetCFragResponse {
-                    cfrag: Binary::from(cfrag_data.unwrap_or_default()),
+                    cfrag: Binary::from(cfrag_data),
                     meta: BlobMeta {
                         size: 0,
                         created_at: "2024-01-01T00:00:00Z".to_string(),
@@ -632,11 +636,10 @@ mod tests {
             )
             .await;
 
-        assert!(result.is_ok());
-        let binary = result.unwrap();
-        let response: GetCFragResponse = serde_json::from_slice(binary.as_slice()).unwrap();
-        // If cfrag was not found, it should be empty
-        assert!(response.cfrag.is_empty());
+        // CFrag not found should return an error
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("CFrag not ready"));
     }
 
     #[tokio::test]
