@@ -23,9 +23,9 @@
 //!
 //! # Example
 //! ```rust,ignore
-//! use dtpres_client::actions::{ActionsContainer, ShareOptions};
+//! use dtpres_client::actions::{DefaultActionsContainer, ShareOptions};
 //!
-//! let container = ActionsContainer::new();
+//! let container = DefaultActionsContainer::new();
 //!
 //! // Generate key pairs
 //! let (owner_sk, owner_pk) = container.generate_keypair()?;
@@ -37,6 +37,7 @@
 //!     3,  // threshold
 //!     5,  // total_shares
 //!     owner_sk,
+//!     owner_pk,
 //!     requester_pk,
 //!     "owner_process_123".to_string(),
 //!     None,

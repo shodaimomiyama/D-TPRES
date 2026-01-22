@@ -13,10 +13,10 @@
 //!
 //! # Quick Start
 //! ```rust,ignore
-//! use dtpres_client::actions::{ActionsContainer, ShareOptions};
+//! use dtpres_client::actions::{DefaultActionsContainer, ShareOptions};
 //!
 //! // Create container
-//! let container = ActionsContainer::new();
+//! let container = DefaultActionsContainer::new();
 //!
 //! // Generate keys
 //! let (owner_sk, owner_pk) = container.generate_keypair()?;
@@ -26,7 +26,9 @@
 //! let result = container.share(
 //!     b"my secret".to_vec(),
 //!     3, 5,  // 3-of-5 threshold
-//!     owner_sk, requester_pk,
+//!     owner_sk,
+//!     owner_pk,
+//!     requester_pk,
 //!     "owner_process".to_string(),
 //!     None,
 //! )?;
