@@ -564,4 +564,73 @@ mod integration_tests {
             Err(e) => println!("Error: {:?}", e),
         }
     }
+
+    /// Integration test for posting data to Arweave.
+    ///
+    /// **WARNING**: This test uploads data to Arweave mainnet.
+    /// - Transaction fees (AR) will be charged
+    /// - Uploaded data is permanent and cannot be deleted
+    /// - Use small test payloads to minimize costs
+    ///
+    /// Requirements:
+    /// - ARWEAVE_INTEGRATION_TESTS=true
+    /// - ARWEAVE_WALLET_PATH pointing to a funded JWK wallet file
+    #[tokio::test]
+    async fn test_post_transaction_to_arweave() {
+        if !is_integration_test_enabled() {
+            println!("Skipping: set ARWEAVE_INTEGRATION_TESTS=true in .env to run");
+            return;
+        }
+
+        let wallet = match try_load_wallet_from_env() {
+            Some(w) => w,
+            None => {
+                println!("Skipping: ARWEAVE_WALLET_PATH not set or wallet load failed");
+                return;
+            }
+        };
+
+        println!("\n=== Integration Test: post_transaction_to_arweave ===");
+        println!("WARNING: This test uploads data to Arweave mainnet!");
+
+        let config = ArweaveClientConfig::default();
+        println!("Gateway: {}", config.gateway_url());
+
+        let client = ArweaveClientImpl::new(config).unwrap().with_wallet(wallet);
+
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let payload = format!("D-TPRES integration test @ {}", timestamp);
+        let payload_bytes = payload.as_bytes();
+
+        let tags = vec![
+            Tag::new("App-Name", "D-TPRES-Test"),
+            Tag::new("Content-Type", "text/plain"),
+            Tag::new("Test-Timestamp", &timestamp.to_string()),
+        ];
+
+        println!("Payload: \"{}\" ({} bytes)", payload, payload_bytes.len());
+        println!("Tags: {:?}", tags);
+
+        let result = client.post(payload_bytes, tags).await;
+
+        match &result {
+            Ok(tx_id) => {
+                println!("SUCCESS!");
+                println!("  Transaction ID: {}", tx_id);
+                println!("  View at: https://arweave.net/{}", tx_id);
+                println!("  Explorer: https://viewblock.io/arweave/tx/{}", tx_id);
+
+                assert!(!tx_id.is_empty());
+                assert_eq!(tx_id.len(), 43);
+            }
+            Err(e) => {
+                println!("POST failed: {:?}", e);
+            }
+        }
+
+        assert!(result.is_ok(), "POST should succeed with valid wallet");
+    }
 }

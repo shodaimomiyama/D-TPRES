@@ -254,11 +254,12 @@ PR #48のコードレビューで指摘された問題を修正します。
   - _Requirements: 5.3 (Transaction ID return)_
   - _PR Review: r2716873737_
 
-- [ ] 24. Arweave POST統合テストの追加
+- [x] 24. Arweave POST統合テストの追加
   - File: `client/src/adapter/external/arweave/tests.rs`
   - 実際のArweaveネットワークへのPOSTテスト
   - `ARWEAVE_INTEGRATION_TESTS=true`と`ARWEAVE_WALLET_PATH`が必要
-  - テスト用の小さいペイロードを使用
+  - テスト用の小さいペイロード（タイムスタンプ付き）を使用
+  - トランザクションID検証（43文字、非空）
   - Purpose: E2E動作検証
   - _Requirements: Integration testing_
 
