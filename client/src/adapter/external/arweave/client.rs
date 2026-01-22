@@ -459,7 +459,7 @@ impl ArweaveClient for ArweaveClientImpl {
         };
 
         // Sign the transaction using DeepHash
-        let signature_data = build_signature_data(&tx);
+        let signature_data = build_signature_data(&tx)?;
         let signature_bytes = wallet.sign(&signature_data)?;
         tx.signature = base64url_encode(&signature_bytes);
 

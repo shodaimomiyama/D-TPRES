@@ -7,6 +7,8 @@
 
 use sha2::{Digest, Sha384};
 
+use crate::adapter::errors::AdapterError;
+
 use super::client::base64url_decode;
 use super::transaction::EncodedTag;
 
@@ -108,6 +110,10 @@ pub fn deep_hash(item: &DeepHashItem) -> Vec<u8> {
 ///   data_root                               // decoded bytes
 /// ]
 /// ```
+///
+/// # Errors
+///
+/// Returns `AdapterError::ValidationError` if any tag name or value fails Base64URL decoding.
 #[allow(clippy::too_many_arguments)]
 pub fn build_signature_message(
     owner: &[u8],
@@ -118,19 +124,27 @@ pub fn build_signature_message(
     tags: &[EncodedTag],
     data_size: &str,
     data_root: &[u8],
-) -> Vec<u8> {
+) -> Result<Vec<u8>, AdapterError> {
     // Build tags as nested list: [[name1, value1], [name2, value2], ...]
-    let tag_pairs: Vec<DeepHashItem> = tags
-        .iter()
-        .map(|tag| {
-            let name_bytes = base64url_decode(&tag.name).unwrap_or_default();
-            let value_bytes = base64url_decode(&tag.value).unwrap_or_default();
-            DeepHashItem::List(vec![
-                DeepHashItem::Blob(name_bytes),
-                DeepHashItem::Blob(value_bytes),
-            ])
-        })
-        .collect();
+    let mut tag_pairs: Vec<DeepHashItem> = Vec::with_capacity(tags.len());
+    for (i, tag) in tags.iter().enumerate() {
+        let name_bytes = base64url_decode(&tag.name).map_err(|e| {
+            AdapterError::validation_error(
+                "build_signature_message",
+                &format!("Invalid Base64URL in tag[{}].name: {}", i, e),
+            )
+        })?;
+        let value_bytes = base64url_decode(&tag.value).map_err(|e| {
+            AdapterError::validation_error(
+                "build_signature_message",
+                &format!("Invalid Base64URL in tag[{}].value: {}", i, e),
+            )
+        })?;
+        tag_pairs.push(DeepHashItem::List(vec![
+            DeepHashItem::Blob(name_bytes),
+            DeepHashItem::Blob(value_bytes),
+        ]));
+    }
 
     // Build the complete signature message structure
     let structure = DeepHashItem::List(vec![
@@ -145,7 +159,7 @@ pub fn build_signature_message(
         DeepHashItem::Blob(data_root.to_vec()),
     ]);
 
-    deep_hash(&structure)
+    Ok(deep_hash(&structure))
 }
 
 #[cfg(test)]
@@ -230,7 +244,8 @@ mod tests {
             &[],
             "100",
             b"data_root",
-        );
+        )
+        .expect("Should succeed with empty tags");
         assert_eq!(result.len(), 48);
     }
 
@@ -252,7 +267,54 @@ mod tests {
             &tags,
             "100",
             b"data_root",
-        );
+        )
+        .expect("Should succeed with valid tags");
         assert_eq!(result.len(), 48);
+    }
+
+    #[test]
+    fn test_build_signature_message_invalid_tag_name() {
+        let tags = vec![EncodedTag {
+            name: "!!!invalid-base64!!!".to_string(),
+            value: "dGVzdA".to_string(),
+        }];
+
+        let result = build_signature_message(
+            b"owner",
+            b"target",
+            "0",
+            "1000",
+            b"last_tx",
+            &tags,
+            "100",
+            b"data_root",
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AdapterError::ValidationError { .. }));
+    }
+
+    #[test]
+    fn test_build_signature_message_invalid_tag_value() {
+        use crate::adapter::external::arweave::client::base64url_encode;
+
+        let tags = vec![EncodedTag {
+            name: base64url_encode(b"Content-Type"),
+            value: "!!!invalid-base64!!!".to_string(),
+        }];
+
+        let result = build_signature_message(
+            b"owner",
+            b"target",
+            "0",
+            "1000",
+            b"last_tx",
+            &tags,
+            "100",
+            b"data_root",
+        );
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, AdapterError::ValidationError { .. }));
     }
 }
