@@ -1,0 +1,29 @@
+{
+  "id": "approval_1769087637378_1l6ii8nvp",
+  "title": "Phase 1: Requirements - AO Network通信基盤 (Interface + Mock版)",
+  "filePath": ".spec-workflow/specs/ao-network-communication/requirements.md",
+  "type": "document",
+  "status": "needs-revision",
+  "createdAt": "2026-01-22T13:13:57.379Z",
+  "category": "spec",
+  "categoryName": "ao-network-communication",
+  "response": "Feedback Summary (1 comments):\n\nSpecific Text Comments:\n1. \"**別Issue（#51, #52）で対応:**\n- ProductionAOClient実装（HT...\": エンドポイント実装は、51,52とは異なるissueに切った方が良くないですか？\n",
+  "annotations": "{\n  \"decision\": \"needs-revision\",\n  \"comments\": [\n    {\n      \"type\": \"selection\",\n      \"comment\": \"エンドポイント実装は、51,52とは異なるissueに切った方が良くないですか？\",\n      \"timestamp\": \"2026-01-22T13:16:20.433Z\",\n      \"selectedText\": \"**別Issue（#51, #52）で対応:**\\n- ProductionAOClient実装（HTTP直接通信）\\n- 実際のAO Network（MU/CU）との通信\",\n      \"highlightColor\": {\n        \"bg\": \"rgba(255, 235, 59, 0.3)\",\n        \"border\": \"#FFEB3B\",\n        \"name\": \"#ffeb3b\"\n      },\n      \"id\": \"comment_1769087780433_w1ffbfqaa\",\n      \"startOffset\": 641,\n      \"endOffset\": 725\n    }\n  ],\n  \"summary\": \"Feedback Summary (1 comments):\\n\\nSpecific Text Comments:\\n1. \\\"**別Issue（#51, #52）で対応:**\\n- ProductionAOClient実装（HT...\\\": エンドポイント実装は、51,52とは異なるissueに切った方が良くないですか？\\n\",\n  \"timestamp\": \"2026-01-22T13:24:08.437Z\"\n}",
+  "respondedAt": "2026-01-22T13:24:08.488Z",
+  "comments": [
+    {
+      "type": "selection",
+      "comment": "エンドポイント実装は、51,52とは異なるissueに切った方が良くないですか？",
+      "timestamp": "2026-01-22T13:16:20.433Z",
+      "selectedText": "**別Issue（#51, #52）で対応:**\n- ProductionAOClient実装（HTTP直接通信）\n- 実際のAO Network（MU/CU）との通信",
+      "highlightColor": {
+        "bg": "rgba(255, 235, 59, 0.3)",
+        "border": "#FFEB3B",
+        "name": "#ffeb3b"
+      },
+      "id": "comment_1769087780433_w1ffbfqaa",
+      "startOffset": 641,
+      "endOffset": 725
+    }
+  ]
+}
