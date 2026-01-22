@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::adapter::errors::AdapterError;
+
 use super::client::base64url_decode;
 use super::deep_hash::build_signature_message;
 
@@ -55,11 +57,23 @@ pub struct EncodedTag {
 /// Build the signature data for an Arweave format 2 transaction
 ///
 /// This function constructs the message that needs to be signed using DeepHash.
-pub fn build_signature_data(tx: &ArweaveTransaction) -> Vec<u8> {
-    let owner_bytes = base64url_decode(&tx.owner).unwrap_or_default();
-    let target_bytes = base64url_decode(&tx.target).unwrap_or_default();
-    let last_tx_bytes = base64url_decode(&tx.last_tx).unwrap_or_default();
-    let data_root_bytes = base64url_decode(&tx.data_root).unwrap_or_default();
+///
+/// # Errors
+///
+/// Returns `AdapterError::ValidationError` if any Base64URL field fails to decode.
+pub fn build_signature_data(tx: &ArweaveTransaction) -> Result<Vec<u8>, AdapterError> {
+    let owner_bytes = base64url_decode(&tx.owner).map_err(|e| {
+        AdapterError::validation_error("build_signature_data", &format!("Invalid owner: {e}"))
+    })?;
+    let target_bytes = base64url_decode(&tx.target).map_err(|e| {
+        AdapterError::validation_error("build_signature_data", &format!("Invalid target: {e}"))
+    })?;
+    let last_tx_bytes = base64url_decode(&tx.last_tx).map_err(|e| {
+        AdapterError::validation_error("build_signature_data", &format!("Invalid last_tx: {e}"))
+    })?;
+    let data_root_bytes = base64url_decode(&tx.data_root).map_err(|e| {
+        AdapterError::validation_error("build_signature_data", &format!("Invalid data_root: {e}"))
+    })?;
 
     build_signature_message(
         &owner_bytes,
