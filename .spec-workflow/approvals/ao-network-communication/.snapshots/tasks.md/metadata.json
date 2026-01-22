@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/ao-network-communication/tasks.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-01-22T14:08:05.813Z",
+      "trigger": "initial",
+      "approvalId": "approval_1769090885794_c9xcmjbap",
+      "approvalTitle": "Tasks - AO Network通信基盤（13タスク）"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-01-22T14:09:44.437Z",
+      "trigger": "approved",
+      "approvalId": "approval_1769090885794_c9xcmjbap",
+      "approvalTitle": "Tasks - AO Network通信基盤（13タスク）"
+    }
+  ]
+}
