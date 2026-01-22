@@ -480,14 +480,10 @@ impl ArweaveClient for ArweaveClientImpl {
                     let status = response.status();
 
                     if status.is_success() {
-                        let tx_id: String = response.text().await.map_err(|e| {
-                            AdapterError::network_error(
-                                "post",
-                                &format!("Failed to read response: {e}"),
-                                retries,
-                            )
-                        })?;
-                        return Ok(tx_id);
+                        // Consume response body (Arweave returns "OK" or empty, not the TX ID)
+                        let _ = response.text().await;
+                        // Return pre-calculated transaction ID (SHA-256 hash of signature)
+                        return Ok(tx.id.clone());
                     }
 
                     // 4xx client errors are not retryable - fail fast
