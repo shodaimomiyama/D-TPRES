@@ -42,6 +42,8 @@
       "mcp__spec-workflow__spec-workflow-guide",
       "mcp__spec-workflow__spec-status",
       "mcp__ide__getDiagnostics",
+      "Bash(gh issue view:*)",
+      "WebFetch(domain:cookbook_ao.arweave.net)",
       "Bash(tree:*)",
       "Bash(gh label list:*)"
     ],
