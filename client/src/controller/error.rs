@@ -37,6 +37,12 @@ pub mod error_codes {
 
     /// Process ID is invalid or empty
     pub const INVALID_PROCESS_ID: &str = "invalid_process_id";
+
+    /// Owner public key is invalid or empty
+    pub const INVALID_OWNER_PUBLIC_KEY: &str = "invalid_owner_public_key";
+
+    /// Owner secret key and public key do not match
+    pub const KEY_MISMATCH: &str = "key_mismatch";
 }
 
 /// Controller layer validation error

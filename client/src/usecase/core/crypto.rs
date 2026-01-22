@@ -211,6 +211,15 @@ pub trait CryptoService: Send + Sync {
     /// 鍵ペアの生成
     fn generate_keypair(&self) -> ServiceResult<(SecretKey, PublicKey)>;
 
+    /// 秘密鍵から公開鍵を導出
+    ///
+    /// # Arguments
+    /// * `secret_key` - 公開鍵を導出する秘密鍵
+    ///
+    /// # Returns
+    /// * `ServiceResult<PublicKey>` - 導出された公開鍵
+    fn derive_public_key(&self, secret_key: &SecretKey) -> ServiceResult<PublicKey>;
+
     /// AES-256-GCM暗号化
     ///
     /// 12バイトのランダムnonceを生成し、暗号文の先頭に付加して返します。
@@ -757,6 +766,20 @@ impl CryptoService for CryptoServiceImpl {
         let public_key: PublicKey = PublicKey { key_data: pk_bytes };
 
         Ok((secret_key, public_key))
+    }
+
+    fn derive_public_key(&self, secret_key: &SecretKey) -> ServiceResult<PublicKey> {
+        // Deserialize the secret key
+        let umbral_sk = self.deserialize_secret_key(secret_key)?;
+
+        // Derive the public key
+        let umbral_pk: umbral_pre::PublicKey = umbral_sk.public_key();
+
+        // Serialize the public key
+        let pk_bytes: Vec<u8> = bincode::serialize(&umbral_pk)
+            .map_err(|_| ServiceError::crypto_error("Failed to serialize public key"))?;
+
+        Ok(PublicKey { key_data: pk_bytes })
     }
 
     fn aes_gcm_encrypt(&self, key: &[u8], plaintext: &[u8]) -> ServiceResult<Vec<u8>> {
