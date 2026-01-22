@@ -6,7 +6,7 @@ AO Network通信基盤（Issue #47）の実装タスク。AOClient trait + MockA
 
 ---
 
-- [-] 1. Create AO Message types for client
+- [x] 1. Create AO Message types for client
   - File: `client/src/adapter/external/ao_message.rs`
   - Define ExecuteMsg, QueryMsg, Binary, AOResponse, AOMessageTags types
   - Implement ValidateMessage trait for message validation
@@ -26,7 +26,7 @@ AO Network通信基盤（Issue #47）の実装タスク。AOClient trait + MockA
 
 ---
 
-- [ ] 2. Create external module structure
+- [x] 2. Create external module structure
   - File: `client/src/adapter/external/mod.rs`
   - File: `client/src/adapter/mod.rs` (modify)
   - Set up external module exports and integrate into adapter module
@@ -46,7 +46,7 @@ AO Network通信基盤（Issue #47）の実装タスク。AOClient trait + MockA
 
 ---
 
-- [ ] 3. Create AOCommunicationError type
+- [x] 3. Create AOCommunicationError type
   - File: `client/src/adapter/errors.rs` (modify)
   - Add AOCommunicationError enum with all error variants
   - Implement From<AOCommunicationError> for AdapterError conversion
@@ -66,7 +66,7 @@ AO Network通信基盤（Issue #47）の実装タスク。AOClient trait + MockA
 
 ---
 
-- [ ] 4. Create AOClient trait
+- [x] 4. Create AOClient trait
   - File: `client/src/adapter/external/ao_client.rs`
   - Define AOClient async trait with execute, query, dry_run methods
   - Purpose: Establish abstract interface for AO Network communication
@@ -85,7 +85,7 @@ AO Network通信基盤（Issue #47）の実装タスク。AOClient trait + MockA
 
 ---
 
-- [ ] 5. Implement MockAOClient
+- [x] 5. Implement MockAOClient
   - File: `client/src/adapter/external/ao_client.rs` (continue)
   - Implement MockAOClient with in-memory storage for kFrags/cFrags
   - Add MockConfig for delay simulation and error injection
@@ -105,7 +105,7 @@ AO Network通信基盤（Issue #47）の実装タスク。AOClient trait + MockA
 
 ---
 
-- [ ] 6. Add AOClient unit tests
+- [x] 6. Add AOClient unit tests
   - File: `client/src/adapter/external/ao_client.rs` (tests module)
   - Write comprehensive unit tests for AOClient trait and MockAOClient
   - Purpose: Ensure AOClient implementation reliability
@@ -124,7 +124,7 @@ AO Network通信基盤（Issue #47）の実装タスク。AOClient trait + MockA
 
 ---
 
-- [ ] 7. Extend KFragRepository with AO methods
+- [x] 7. Extend KFragRepository with AO methods
   - File: `client/src/repositories/kfrag_interface.rs` (modify)
   - Add send_to_ao_process and batch_send_to_ao_process methods to trait
   - Update MockKFragRepository with new methods
@@ -144,7 +144,7 @@ AO Network通信基盤（Issue #47）の実装タスク。AOClient trait + MockA
 
 ---
 
-- [ ] 8. Extend CFragRepository with AO methods
+- [x] 8. Extend CFragRepository with AO methods
   - File: `client/src/repositories/cfrag_interface.rs` (modify)
   - Add retrieve_from_ao_process method to trait
   - Update MockCFragRepository with new method
@@ -164,7 +164,7 @@ AO Network通信基盤（Issue #47）の実装タスク。AOClient trait + MockA
 
 ---
 
-- [ ] 9. Implement ArweaveKFragRepository AOClient integration
+- [x] 9. Implement ArweaveKFragRepository AOClient integration
   - File: `client/src/adapter/repository_impl/kfrag_impl.rs` (modify)
   - Add AOClient generic parameter and implement send_to_ao_process methods
   - Build and validate ExecuteMsg::DelegateKFrag messages
@@ -184,7 +184,7 @@ AO Network通信基盤（Issue #47）の実装タスク。AOClient trait + MockA
 
 ---
 
-- [ ] 10. Implement ArweaveCFragRepository AOClient integration
+- [x] 10. Implement ArweaveCFragRepository AOClient integration
   - File: `client/src/adapter/repository_impl/cfrag_impl.rs` (modify)
   - Add AOClient generic parameter and implement retrieve_from_ao_process method
   - Build and validate QueryMsg::GetCFrag messages
@@ -204,7 +204,7 @@ AO Network通信基盤（Issue #47）の実装タスク。AOClient trait + MockA
 
 ---
 
-- [ ] 11. Add AOCommunicationError unit tests
+- [x] 11. Add AOCommunicationError unit tests
   - File: `client/src/adapter/errors.rs` (tests module)
   - Write unit tests for AOCommunicationError variants and conversions
   - Purpose: Ensure error handling reliability
@@ -223,7 +223,7 @@ AO Network通信基盤（Issue #47）の実装タスク。AOClient trait + MockA
 
 ---
 
-- [ ] 12. Add Repository integration tests
+- [x] 12. Add Repository integration tests
   - File: `client/src/adapter/repository_impl/kfrag_impl.rs` (tests)
   - File: `client/src/adapter/repository_impl/cfrag_impl.rs` (tests)
   - Write integration tests using MockAOClient
@@ -243,7 +243,7 @@ AO Network通信基盤（Issue #47）の実装タスク。AOClient trait + MockA
 
 ---
 
-- [ ] 13. Final integration and make check
+- [x] 13. Final integration and make check
   - Run `make check`, `make lint`, `make test`
   - Fix any compilation errors or warnings
   - Verify all modules properly export types
