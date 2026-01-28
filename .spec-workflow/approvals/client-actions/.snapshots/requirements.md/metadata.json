@@ -1,0 +1,22 @@
+{
+  "filePath": ".spec-workflow/specs/client-actions/requirements.md",
+  "currentVersion": 2,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-01-19T03:03:12.693Z",
+      "trigger": "initial",
+      "approvalId": "approval_1768791792687_uxefwywn7",
+      "approvalTitle": "client-actions Requirements Document"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2026-01-19T03:13:38.711Z",
+      "trigger": "approved",
+      "approvalId": "approval_1768791792687_uxefwywn7",
+      "approvalTitle": "client-actions Requirements Document"
+    }
+  ]
+}

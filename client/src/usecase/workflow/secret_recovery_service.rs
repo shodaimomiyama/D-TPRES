@@ -200,7 +200,7 @@ impl<C: CryptoService> SecretRecoveryWorkflowServiceImpl<C> {
 
                 Ok(ShamirShare {
                     index,
-                    data: decrypted_data,
+                    share_data: decrypted_data,
                 })
             })
             .collect()
@@ -588,7 +588,7 @@ mod tests {
         println!("  Generated symmetric key");
 
         // Encrypt some test data
-        let original_data = vec![b"share1".to_vec(), b"share2".to_vec()];
+        let original_data = [b"share1".to_vec(), b"share2".to_vec()];
         println!(
             "  Original data: {:?}",
             original_data
@@ -614,14 +614,14 @@ mod tests {
         // Verify decrypted data matches original
         println!(
             "  Decrypted[0]: {:?}",
-            String::from_utf8_lossy(&decrypted[0].data)
+            String::from_utf8_lossy(&decrypted[0].share_data)
         );
         println!(
             "  Decrypted[1]: {:?}",
-            String::from_utf8_lossy(&decrypted[1].data)
+            String::from_utf8_lossy(&decrypted[1].share_data)
         );
-        assert_eq!(decrypted[0].data, b"share1");
-        assert_eq!(decrypted[1].data, b"share2");
+        assert_eq!(decrypted[0].share_data, b"share1");
+        assert_eq!(decrypted[1].share_data, b"share2");
         println!("  [PASS] Decryption roundtrip successful");
     }
 
