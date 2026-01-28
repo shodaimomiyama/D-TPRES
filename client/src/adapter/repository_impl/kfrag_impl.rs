@@ -288,26 +288,6 @@ impl<C: ArweaveClient> KFragRepository for ArweaveKFragRepository<C> {
 
         Ok(())
     }
-
-    async fn send_to_ao_process(&self, _process_id: &str, _kfrag: &KFrag) -> DomainResult<()> {
-        // AO integration will be implemented in Task 9
-        Err(crate::domain::errors::DomainError::StorageError {
-            operation: "send_to_ao_process".to_string(),
-            details: "AO integration not yet implemented".to_string(),
-        })
-    }
-
-    async fn batch_send_to_ao_process(
-        &self,
-        _process_id: &str,
-        _kfrags: &[KFrag],
-    ) -> DomainResult<Vec<KFragId>> {
-        // AO integration will be implemented in Task 9
-        Err(crate::domain::errors::DomainError::StorageError {
-            operation: "batch_send_to_ao_process".to_string(),
-            details: "AO integration not yet implemented".to_string(),
-        })
-    }
 }
 
 #[cfg(test)]

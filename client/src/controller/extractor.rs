@@ -10,6 +10,7 @@ use crate::usecase::dto::{SecretMetadata, SecretRecoveryRequest, SecretSharingRe
 ///
 /// Converts validated parameters into SecretSharingRequest.
 /// Does not perform validation - that is the Validator's responsibility.
+#[non_exhaustive]
 pub struct ShareExtractor;
 
 impl ShareExtractor {
@@ -67,6 +68,7 @@ impl Default for ShareExtractor {
 ///
 /// Converts validated parameters into SecretRecoveryRequest.
 /// Does not perform validation - that is the Validator's responsibility.
+#[non_exhaustive]
 pub struct RecoverExtractor;
 
 impl RecoverExtractor {
@@ -105,6 +107,7 @@ impl Default for RecoverExtractor {
 }
 
 #[cfg(test)]
+#[allow(clippy::default_constructed_unit_structs, clippy::redundant_clone)]
 mod tests {
     use super::*;
     use crate::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
@@ -236,7 +239,7 @@ mod tests {
         let metadata = SecretMetadata {
             name: Some("Test Secret".to_string()),
             description: Some("A test secret for unit testing".to_string()),
-            expires_at: Some(1735689600),
+            expires_at: Some(1_735_689_600),
             tags: vec!["test".to_string(), "unit".to_string()],
         };
 

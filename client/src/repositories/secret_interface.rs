@@ -24,6 +24,11 @@ pub trait SecretRepository: Repository<Secret, SecretId> {}
 pub trait SecretRepository: Repository<Secret, SecretId> {}
 
 #[cfg(test)]
+#[allow(
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 mod tests {
     use super::*;
     use crate::domain::errors::DomainResult;

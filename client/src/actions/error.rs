@@ -5,6 +5,7 @@ use crate::usecase::error::WorkflowError;
 
 /// Actions層のエラー型
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum ActionError {
     /// Controller層でのバリデーション失敗
     ValidationFailed {
@@ -33,7 +34,7 @@ pub enum ActionError {
 impl ActionError {
     /// ValidationFailed を作成
     pub fn validation_failed(code: impl Into<String>, message: impl Into<String>) -> Self {
-        ActionError::ValidationFailed {
+        Self::ValidationFailed {
             code: code.into(),
             message: message.into(),
         }
@@ -41,21 +42,21 @@ impl ActionError {
 
     /// WorkflowFailed を作成
     pub fn workflow_failed(message: impl Into<String>) -> Self {
-        ActionError::WorkflowFailed {
+        Self::WorkflowFailed {
             message: message.into(),
         }
     }
 
     /// ResourceNotFound を作成
     pub fn resource_not_found(resource: impl Into<String>) -> Self {
-        ActionError::ResourceNotFound {
+        Self::ResourceNotFound {
             resource: resource.into(),
         }
     }
 
     /// CryptoError を作成
     pub fn crypto_error(message: impl Into<String>) -> Self {
-        ActionError::CryptoError {
+        Self::CryptoError {
             message: message.into(),
         }
     }
@@ -64,17 +65,17 @@ impl ActionError {
 impl fmt::Display for ActionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ActionError::ValidationFailed { code, message } => {
-                write!(f, "Validation failed [{}]: {}", code, message)
+            Self::ValidationFailed { code, message } => {
+                write!(f, "Validation failed [{code}]: {message}")
             }
-            ActionError::WorkflowFailed { message } => {
-                write!(f, "Workflow failed: {}", message)
+            Self::WorkflowFailed { message } => {
+                write!(f, "Workflow failed: {message}")
             }
-            ActionError::ResourceNotFound { resource } => {
-                write!(f, "Resource not found: {}", resource)
+            Self::ResourceNotFound { resource } => {
+                write!(f, "Resource not found: {resource}")
             }
-            ActionError::CryptoError { message } => {
-                write!(f, "Crypto error: {}", message)
+            Self::CryptoError { message } => {
+                write!(f, "Crypto error: {message}")
             }
         }
     }
@@ -84,7 +85,7 @@ impl std::error::Error for ActionError {}
 
 impl From<ValidationError> for ActionError {
     fn from(err: ValidationError) -> Self {
-        ActionError::ValidationFailed {
+        Self::ValidationFailed {
             code: err.code().to_string(),
             message: err.message().to_string(),
         }
@@ -94,13 +95,13 @@ impl From<ValidationError> for ActionError {
 impl From<WorkflowError> for ActionError {
     fn from(err: WorkflowError) -> Self {
         match err {
-            WorkflowError::ValidationError(msg) => ActionError::ValidationFailed {
+            WorkflowError::ValidationError(msg) => Self::ValidationFailed {
                 code: "workflow_validation".to_string(),
                 message: msg,
             },
-            WorkflowError::ResourceNotFound(resource) => ActionError::ResourceNotFound { resource },
-            WorkflowError::CryptoError(msg) => ActionError::CryptoError { message: msg },
-            _ => ActionError::WorkflowFailed {
+            WorkflowError::ResourceNotFound(resource) => Self::ResourceNotFound { resource },
+            WorkflowError::CryptoError(msg) => Self::CryptoError { message: msg },
+            _ => Self::WorkflowFailed {
                 message: err.to_string(),
             },
         }
@@ -162,7 +163,7 @@ mod tests {
     #[test]
     fn test_action_error_display_validation_failed() {
         let err = ActionError::validation_failed("test", "Test error");
-        let display = format!("{}", err);
+        let display = err.to_string();
         assert!(display.contains("test"));
         assert!(display.contains("Test error"));
         assert!(display.contains("Validation failed"));
@@ -171,7 +172,7 @@ mod tests {
     #[test]
     fn test_action_error_display_workflow_failed() {
         let err = ActionError::workflow_failed("workflow error");
-        let display = format!("{}", err);
+        let display = err.to_string();
         assert!(display.contains("Workflow failed"));
         assert!(display.contains("workflow error"));
     }
@@ -179,7 +180,7 @@ mod tests {
     #[test]
     fn test_action_error_display_resource_not_found() {
         let err = ActionError::resource_not_found("secret");
-        let display = format!("{}", err);
+        let display = err.to_string();
         assert!(display.contains("Resource not found"));
         assert!(display.contains("secret"));
     }
@@ -187,7 +188,7 @@ mod tests {
     #[test]
     fn test_action_error_display_crypto_error() {
         let err = ActionError::crypto_error("crypto failed");
-        let display = format!("{}", err);
+        let display = err.to_string();
         assert!(display.contains("Crypto error"));
         assert!(display.contains("crypto failed"));
     }

@@ -261,7 +261,13 @@ impl<C: CryptoService> SecretSharingWorkflowService for SecretSharingWorkflowSer
 }
 
 #[cfg(test)]
-#[allow(clippy::indexing_slicing, clippy::redundant_clone)]
+#[allow(
+    clippy::uninlined_format_args,
+    clippy::indexing_slicing,
+    clippy::redundant_clone,
+    clippy::cast_possible_truncation,
+    clippy::arithmetic_side_effects
+)]
 mod tests {
     use super::*;
     use crate::usecase::core::crypto::CryptoServiceImpl;

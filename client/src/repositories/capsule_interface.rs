@@ -32,6 +32,7 @@ pub trait CapsuleRepository: Repository<Capsule, CapsuleId> {
 }
 
 #[cfg(test)]
+#[allow(clippy::indexing_slicing)]
 mod tests {
     use super::*;
     use std::collections::HashMap;

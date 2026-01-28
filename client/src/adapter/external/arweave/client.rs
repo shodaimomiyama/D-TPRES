@@ -122,6 +122,11 @@ pub struct ArweaveClientImpl {
     wallet: Option<ArweaveWallet>,
 }
 
+#[allow(
+    clippy::large_futures,
+    clippy::arithmetic_side_effects,
+    clippy::needless_pass_by_value
+)]
 impl ArweaveClientImpl {
     /// Create a new ArweaveClientImpl with the given configuration
     pub fn new(config: ArweaveClientConfig) -> Result<Self, AdapterError> {
@@ -327,6 +332,7 @@ impl ArweaveClientImpl {
     }
 }
 
+#[allow(clippy::large_futures, clippy::arithmetic_side_effects)]
 #[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
 #[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl ArweaveClient for ArweaveClientImpl {

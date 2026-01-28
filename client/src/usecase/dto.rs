@@ -17,6 +17,7 @@ use crate::usecase::core::crypto::{PublicKey, SecretKey};
 /// Contains all parameters needed to split and distribute a secret.
 /// Sensitive data (secret, owner_secret_key) is zeroized on drop.
 #[derive(Debug)]
+#[allow(clippy::exhaustive_structs)]
 pub struct SecretSharingRequest {
     /// Secret data to be split (will be zeroized on drop)
     pub secret: Vec<u8>,
@@ -44,6 +45,7 @@ impl Drop for SecretSharingRequest {
 
 /// Optional metadata for a secret
 #[derive(Debug, Clone, Default)]
+#[allow(clippy::exhaustive_structs)]
 pub struct SecretMetadata {
     /// Human-readable name for the secret
     pub name: Option<String>,
@@ -59,6 +61,7 @@ pub struct SecretMetadata {
 ///
 /// Contains identifiers and transaction IDs for the created secret components.
 #[derive(Debug, Clone)]
+#[allow(clippy::exhaustive_structs)]
 pub struct SecretSharingResult {
     /// Generated secret ID (used for recovery)
     pub secret_id: SecretId,
@@ -81,6 +84,7 @@ pub struct SecretSharingResult {
 /// cFrags and Capsule are fetched internally by the WorkflowService from
 /// AO Network and Arweave. Client only provides secret_id and requester credentials.
 #[derive(Debug)]
+#[allow(clippy::exhaustive_structs)]
 pub struct SecretRecoveryRequest {
     /// Secret ID to recover
     pub secret_id: SecretId,
@@ -94,6 +98,7 @@ pub struct SecretRecoveryRequest {
 ///
 /// Contains the recovered secret data. Automatically zeroized on drop.
 #[derive(Debug, Zeroize, ZeroizeOnDrop)]
+#[allow(clippy::exhaustive_structs)]
 pub struct SecretRecoveryResult {
     /// Recovered secret data (zeroized on drop)
     pub recovered_secret: Vec<u8>,
@@ -108,6 +113,7 @@ pub struct SecretRecoveryResult {
 
 /// Status of a secret in the D-TPRES system
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SecretStatus {
     /// Secret has been created (Phase 1 completed)
     Created,

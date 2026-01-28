@@ -9,6 +9,7 @@ use crate::usecase::dto::SecretMetadata;
 ///
 /// Separates optional parameters from required ones for better API usability.
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub struct ShareOptions {
     /// Optional metadata for the secret
     pub metadata: Option<SecretMetadata>,
@@ -21,13 +22,14 @@ impl ShareOptions {
     }
 
     /// Create ShareOptions with metadata
-    pub fn with_metadata(metadata: SecretMetadata) -> Self {
+    pub const fn with_metadata(metadata: SecretMetadata) -> Self {
         Self {
             metadata: Some(metadata),
         }
     }
 
     /// Builder method to set metadata
+    #[must_use]
     pub fn metadata(mut self, metadata: SecretMetadata) -> Self {
         self.metadata = Some(metadata);
         self
@@ -38,6 +40,7 @@ impl ShareOptions {
 ///
 /// Reserved for future extensions. Currently empty.
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub struct RecoverOptions {
     // Reserved for future extensions
 }

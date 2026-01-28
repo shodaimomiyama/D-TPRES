@@ -36,6 +36,7 @@ pub trait ShareCollectionRepository: Repository<ShareCollection, ShareCollection
 }
 
 #[cfg(test)]
+#[allow(clippy::indexing_slicing)]
 mod tests {
     use super::*;
     use crate::domain::entities::EncryptedShareData;

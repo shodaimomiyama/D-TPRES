@@ -290,30 +290,6 @@ impl<C: ArweaveClient> CFragRepository for ArweaveCFragRepository<C> {
         let cfrags = self.find_by_secret_id(secret_id).await?;
         Ok(cfrags.len())
     }
-
-    async fn retrieve_from_ao_process(
-        &self,
-        _process_id: &str,
-        _secret_id: &SecretId,
-    ) -> DomainResult<Vec<CFrag>> {
-        // AO integration will be implemented in Task 10
-        Err(crate::domain::errors::DomainError::StorageError {
-            operation: "retrieve_from_ao_process".to_string(),
-            details: "AO integration not yet implemented".to_string(),
-        })
-    }
-
-    async fn batch_retrieve_from_ao_processes(
-        &self,
-        _process_ids: &[&str],
-        _secret_id: &SecretId,
-    ) -> DomainResult<Vec<CFrag>> {
-        // AO integration will be implemented in Task 10
-        Err(crate::domain::errors::DomainError::StorageError {
-            operation: "batch_retrieve_from_ao_processes".to_string(),
-            details: "AO integration not yet implemented".to_string(),
-        })
-    }
 }
 
 #[cfg(test)]

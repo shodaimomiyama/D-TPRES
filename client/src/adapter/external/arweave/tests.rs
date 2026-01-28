@@ -1,5 +1,12 @@
 //! Unit tests for Arweave client components
 
+#![allow(
+    clippy::uninlined_format_args,
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation,
+    clippy::arithmetic_side_effects
+)]
+
 #[cfg(test)]
 mod config_tests {
     use crate::adapter::external::arweave::ArweaveClientConfig;
@@ -602,13 +609,13 @@ mod integration_tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let payload = format!("D-TPRES integration test @ {}", timestamp);
+        let payload = format!("D-TPRES integration test @ {timestamp}");
         let payload_bytes = payload.as_bytes();
 
         let tags = vec![
             Tag::new("App-Name", "D-TPRES-Test"),
             Tag::new("Content-Type", "text/plain"),
-            Tag::new("Test-Timestamp", &timestamp.to_string()),
+            Tag::new("Test-Timestamp", timestamp.to_string()),
         ];
 
         println!("Payload: \"{}\" ({} bytes)", payload, payload_bytes.len());
