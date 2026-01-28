@@ -44,7 +44,11 @@
       "mcp__ide__getDiagnostics",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(gh api:*)",
-      "Bash(gh pr view:*)"
+      "Bash(gh pr view:*)",
+      "Bash(gh issue view:*)",
+      "WebFetch(domain:cookbook_ao.arweave.net)",
+      "Bash(tree:*)",
+      "Bash(gh label list:*)"
     ],
     "deny": []
   },
