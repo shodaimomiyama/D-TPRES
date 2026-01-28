@@ -69,6 +69,7 @@ pub trait CFragRepository: Repository<CFrag, CFragId> {
 }
 
 #[cfg(test)]
+#[allow(clippy::indexing_slicing)]
 mod tests {
     use super::*;
     use std::collections::HashMap;
@@ -76,26 +77,13 @@ mod tests {
 
     struct MockCFragRepository {
         storage: RwLock<HashMap<CFragId, CFrag>>,
-        ao_storage: RwLock<HashMap<String, HashMap<SecretId, Vec<CFrag>>>>,
     }
 
     impl MockCFragRepository {
         fn new() -> Self {
             Self {
                 storage: RwLock::new(HashMap::new()),
-                ao_storage: RwLock::new(HashMap::new()),
             }
-        }
-
-        #[allow(dead_code)]
-        fn store_in_ao(&self, process_id: &str, secret_id: &SecretId, cfrag: CFrag) {
-            let mut ao_storage = self.ao_storage.write().unwrap();
-            ao_storage
-                .entry(process_id.to_string())
-                .or_default()
-                .entry(secret_id.clone())
-                .or_default()
-                .push(cfrag);
         }
     }
 
@@ -159,32 +147,6 @@ mod tests {
                 .values()
                 .filter(|c| c.secret_id() == secret_id)
                 .count())
-        }
-
-        async fn retrieve_from_ao_process(
-            &self,
-            process_id: &str,
-            secret_id: &SecretId,
-        ) -> DomainResult<Vec<CFrag>> {
-            let ao_storage = self.ao_storage.read().unwrap();
-            Ok(ao_storage
-                .get(process_id)
-                .and_then(|secrets| secrets.get(secret_id))
-                .cloned()
-                .unwrap_or_default())
-        }
-
-        async fn batch_retrieve_from_ao_processes(
-            &self,
-            process_ids: &[&str],
-            secret_id: &SecretId,
-        ) -> DomainResult<Vec<CFrag>> {
-            let mut results = Vec::new();
-            for process_id in process_ids {
-                let cfrags = self.retrieve_from_ao_process(process_id, secret_id).await?;
-                results.extend(cfrags);
-            }
-            Ok(results)
         }
     }
 
@@ -299,79 +261,5 @@ mod tests {
         let found = repo.find_by_ids(&ids[0..2]).await.unwrap();
 
         assert_eq!(found.len(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_retrieve_from_ao_process() {
-        let repo = MockCFragRepository::new();
-        let secret_id = SecretId::generate();
-        let cfrag = create_test_cfrag(secret_id.clone(), KFragId::generate(), 1);
-
-        repo.store_in_ao("holder-1", &secret_id, cfrag.clone());
-
-        let retrieved = repo
-            .retrieve_from_ao_process("holder-1", &secret_id)
-            .await
-            .unwrap();
-        assert_eq!(retrieved.len(), 1);
-        assert_eq!(retrieved[0].holder_index(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_retrieve_from_ao_process_empty() {
-        let repo = MockCFragRepository::new();
-        let secret_id = SecretId::generate();
-
-        let retrieved = repo
-            .retrieve_from_ao_process("holder-1", &secret_id)
-            .await
-            .unwrap();
-        assert!(retrieved.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_batch_retrieve_from_ao_processes() {
-        let repo = MockCFragRepository::new();
-        let secret_id = SecretId::generate();
-        let cfrag1 = create_test_cfrag(secret_id.clone(), KFragId::generate(), 1);
-        let cfrag2 = create_test_cfrag(secret_id.clone(), KFragId::generate(), 2);
-        let cfrag3 = create_test_cfrag(secret_id.clone(), KFragId::generate(), 3);
-
-        repo.store_in_ao("holder-1", &secret_id, cfrag1);
-        repo.store_in_ao("holder-2", &secret_id, cfrag2);
-        repo.store_in_ao("holder-3", &secret_id, cfrag3);
-
-        let process_ids = vec!["holder-1", "holder-2", "holder-3"];
-        let retrieved = repo
-            .batch_retrieve_from_ao_processes(&process_ids, &secret_id)
-            .await
-            .unwrap();
-        assert_eq!(retrieved.len(), 3);
-    }
-
-    #[tokio::test]
-    async fn test_retrieve_from_different_secrets() {
-        let repo = MockCFragRepository::new();
-        let secret_id1 = SecretId::generate();
-        let secret_id2 = SecretId::generate();
-        let cfrag1 = create_test_cfrag(secret_id1.clone(), KFragId::generate(), 1);
-        let cfrag2 = create_test_cfrag(secret_id2.clone(), KFragId::generate(), 2);
-
-        repo.store_in_ao("holder-1", &secret_id1, cfrag1);
-        repo.store_in_ao("holder-1", &secret_id2, cfrag2);
-
-        let retrieved1 = repo
-            .retrieve_from_ao_process("holder-1", &secret_id1)
-            .await
-            .unwrap();
-        let retrieved2 = repo
-            .retrieve_from_ao_process("holder-1", &secret_id2)
-            .await
-            .unwrap();
-
-        assert_eq!(retrieved1.len(), 1);
-        assert_eq!(retrieved1[0].holder_index(), 1);
-        assert_eq!(retrieved2.len(), 1);
-        assert_eq!(retrieved2[0].holder_index(), 2);
     }
 }

@@ -66,6 +66,7 @@ pub trait KFragRepository: Repository<KFrag, KFragId> {
 }
 
 #[cfg(test)]
+#[allow(clippy::indexing_slicing)]
 mod tests {
     use super::*;
     use std::collections::HashMap;
@@ -73,25 +74,13 @@ mod tests {
 
     struct MockKFragRepository {
         storage: RwLock<HashMap<KFragId, KFrag>>,
-        ao_storage: RwLock<HashMap<String, Vec<KFrag>>>,
     }
 
     impl MockKFragRepository {
         fn new() -> Self {
             Self {
                 storage: RwLock::new(HashMap::new()),
-                ao_storage: RwLock::new(HashMap::new()),
             }
-        }
-
-        #[allow(dead_code)]
-        fn get_ao_stored_kfrags(&self, process_id: &str) -> Vec<KFrag> {
-            self.ao_storage
-                .read()
-                .unwrap()
-                .get(process_id)
-                .cloned()
-                .unwrap_or_default()
         }
     }
 
@@ -154,27 +143,6 @@ mod tests {
             let mut storage = self.storage.write().unwrap();
             storage.retain(|_, v| v.secret_id() != secret_id);
             Ok(())
-        }
-
-        async fn send_to_ao_process(&self, process_id: &str, kfrag: &KFrag) -> DomainResult<()> {
-            let mut ao_storage = self.ao_storage.write().unwrap();
-            ao_storage
-                .entry(process_id.to_string())
-                .or_default()
-                .push(kfrag.clone());
-            Ok(())
-        }
-
-        async fn batch_send_to_ao_process(
-            &self,
-            process_id: &str,
-            kfrags: &[KFrag],
-        ) -> DomainResult<Vec<KFragId>> {
-            let mut ao_storage = self.ao_storage.write().unwrap();
-            let entry = ao_storage.entry(process_id.to_string()).or_default();
-            let ids: Vec<KFragId> = kfrags.iter().map(|k| k.id().clone()).collect();
-            entry.extend(kfrags.iter().cloned());
-            Ok(ids)
         }
     }
 
@@ -273,51 +241,5 @@ mod tests {
         let found = repo.find_by_ids(&ids[0..2]).await.unwrap();
 
         assert_eq!(found.len(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_send_to_ao_process() {
-        let repo = MockKFragRepository::new();
-        let secret_id = SecretId::generate();
-        let kfrag = create_test_kfrag(secret_id.clone(), 1);
-
-        let result = repo.send_to_ao_process("process-1", &kfrag).await;
-        assert!(result.is_ok());
-
-        let stored = repo.get_ao_stored_kfrags("process-1");
-        assert_eq!(stored.len(), 1);
-        assert_eq!(stored[0].holder_index(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_batch_send_to_ao_process() {
-        let repo = MockKFragRepository::new();
-        let secret_id = SecretId::generate();
-        let kfrags: Vec<_> = (1..=3)
-            .map(|i| create_test_kfrag(secret_id.clone(), i))
-            .collect();
-
-        let result = repo.batch_send_to_ao_process("process-1", &kfrags).await;
-        assert!(result.is_ok());
-
-        let ids = result.unwrap();
-        assert_eq!(ids.len(), 3);
-
-        let stored = repo.get_ao_stored_kfrags("process-1");
-        assert_eq!(stored.len(), 3);
-    }
-
-    #[tokio::test]
-    async fn test_send_to_different_processes() {
-        let repo = MockKFragRepository::new();
-        let secret_id = SecretId::generate();
-        let kfrag1 = create_test_kfrag(secret_id.clone(), 1);
-        let kfrag2 = create_test_kfrag(secret_id.clone(), 2);
-
-        repo.send_to_ao_process("process-1", &kfrag1).await.unwrap();
-        repo.send_to_ao_process("process-2", &kfrag2).await.unwrap();
-
-        assert_eq!(repo.get_ao_stored_kfrags("process-1").len(), 1);
-        assert_eq!(repo.get_ao_stored_kfrags("process-2").len(), 1);
     }
 }

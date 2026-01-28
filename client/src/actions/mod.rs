@@ -407,7 +407,7 @@ mod tests {
         let metadata = SecretMetadata {
             name: Some("test secret".to_string()),
             description: Some("A test secret".to_string()),
-            expires_at: Some(1735689600),
+            expires_at: Some(1_735_689_600),
             tags: vec!["test".to_string()],
         };
         let options = ShareOptions::with_metadata(metadata);

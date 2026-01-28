@@ -92,6 +92,7 @@ pub trait Repository<T, ID> {
 }
 
 #[cfg(test)]
+#[allow(clippy::indexing_slicing)]
 mod tests {
     use super::*;
     use std::collections::HashMap;

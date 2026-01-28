@@ -24,29 +24,34 @@ pub struct ArweaveClientConfig {
 
 impl ArweaveClientConfig {
     /// Create a new configuration with default values
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set the gateway URL
+    #[must_use]
     pub fn with_gateway_url(mut self, url: impl Into<String>) -> Self {
         self.gateway_url = url.into();
         self
     }
 
     /// Set the GraphQL endpoint URL
+    #[must_use]
     pub fn with_graphql_url(mut self, url: impl Into<String>) -> Self {
         self.graphql_url = url.into();
         self
     }
 
     /// Set the request timeout in seconds
+    #[must_use]
     pub fn with_timeout(mut self, secs: u64) -> Self {
         self.timeout_secs = secs;
         self
     }
 
     /// Set retry configuration
+    #[must_use]
     pub fn with_retries(mut self, max: u32, backoff_ms: u64) -> Self {
         self.max_retries = max;
         self.retry_backoff_ms = backoff_ms;
@@ -92,27 +97,32 @@ impl ArweaveClientConfig {
     }
 
     /// Get the gateway URL
+    #[must_use]
     pub fn gateway_url(&self) -> &str {
         &self.gateway_url
     }
 
     /// Get the GraphQL URL
+    #[must_use]
     pub fn graphql_url(&self) -> &str {
         &self.graphql_url
     }
 
     /// Get the timeout in seconds
-    pub fn timeout_secs(&self) -> u64 {
+    #[must_use]
+    pub const fn timeout_secs(&self) -> u64 {
         self.timeout_secs
     }
 
     /// Get the maximum retry count
-    pub fn max_retries(&self) -> u32 {
+    #[must_use]
+    pub const fn max_retries(&self) -> u32 {
         self.max_retries
     }
 
     /// Get the retry backoff in milliseconds
-    pub fn retry_backoff_ms(&self) -> u64 {
+    #[must_use]
+    pub const fn retry_backoff_ms(&self) -> u64 {
         self.retry_backoff_ms
     }
 }

@@ -335,6 +335,12 @@ impl CryptoServiceImpl {
     }
 }
 
+#[allow(
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 impl CryptoService for CryptoServiceImpl {
     fn split_secret_shamir(
         &self,
@@ -927,6 +933,12 @@ impl Default for CryptoServiceImpl {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::uninlined_format_args,
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation,
+    clippy::arithmetic_side_effects
+)]
 mod tests {
     use super::*;
 
