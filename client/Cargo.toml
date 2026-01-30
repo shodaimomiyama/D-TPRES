@@ -27,3 +27,4 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-feature
 [dev-dependencies]
 cw-multi-test = "0.13.4"
 tokio = { version = "1", features = ["rt", "macros"] }
+wiremock = "0.5"
