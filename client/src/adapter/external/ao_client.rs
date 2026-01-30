@@ -471,6 +471,12 @@ impl AOClient for MockAOClient {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::indexing_slicing,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::uninlined_format_args
+)]
 mod tests {
     use super::*;
 

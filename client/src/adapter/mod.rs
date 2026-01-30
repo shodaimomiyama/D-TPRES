@@ -12,4 +12,5 @@ pub use external::{
     AOAttribute, AOClient, AOEvent, AOMessageTags, AOResponse, Binary, ExecuteMsg, MockAOClient,
     MockConfig, QueryMsg, ValidateMessage,
 };
+pub use external::{ArweaveClientConfig, ArweaveClientImpl, ArweaveWallet};
 pub use repository_impl::{ArweaveClient, Tag};

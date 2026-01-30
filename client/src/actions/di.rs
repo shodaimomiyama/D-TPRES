@@ -23,7 +23,7 @@ impl<C: CryptoService> ActionsContainer<C> {
     ///
     /// For testing or custom configurations where specific implementations
     /// need to be injected.
-    pub fn with_dependencies(
+    pub const fn with_dependencies(
         controller: ControllerContainer<C>,
         workflow_services: WorkflowServiceContainer<C>,
         crypto_service: Arc<C>,
@@ -36,16 +36,17 @@ impl<C: CryptoService> ActionsContainer<C> {
     }
 
     /// Get reference to ControllerContainer
-    pub fn controller(&self) -> &ControllerContainer<C> {
+    pub const fn controller(&self) -> &ControllerContainer<C> {
         &self.controller
     }
 
     /// Get reference to WorkflowServiceContainer
-    pub fn workflow_services(&self) -> &WorkflowServiceContainer<C> {
+    pub const fn workflow_services(&self) -> &WorkflowServiceContainer<C> {
         &self.workflow_services
     }
 
     /// Get reference to CryptoService
+    #[allow(clippy::missing_const_for_fn)]
     pub fn crypto_service(&self) -> &C {
         &self.crypto_service
     }

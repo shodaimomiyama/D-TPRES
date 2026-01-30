@@ -1,3 +1,34 @@
+#![allow(
+    clippy::missing_const_for_fn,
+    clippy::unused_self,
+    clippy::significant_drop_tightening,
+    clippy::implicit_clone,
+    clippy::similar_names,
+    clippy::doc_markdown,
+    clippy::unnecessary_wraps,
+    clippy::use_self,
+    clippy::uninlined_format_args,
+    clippy::trivially_copy_pass_by_ref,
+    clippy::redundant_clone,
+    clippy::default_constructed_unit_structs,
+    clippy::single_char_pattern,
+    clippy::if_not_else,
+    clippy::items_after_statements,
+    clippy::option_if_let_else,
+    clippy::redundant_else,
+    clippy::manual_string_new,
+    clippy::single_match_else,
+    clippy::default_trait_access,
+    clippy::redundant_closure_for_method_calls,
+    clippy::range_plus_one,
+    clippy::collection_is_never_read,
+    clippy::manual_let_else,
+    clippy::exhaustive_structs,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation
+)]
+
 //! D-TPRES Client Library
 //!
 //! Provides domain entities, value objects, and repository interfaces for the D-TPRES

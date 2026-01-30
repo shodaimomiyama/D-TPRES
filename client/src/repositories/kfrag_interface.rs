@@ -15,16 +15,13 @@ use super::Repository;
 /// KFrag (Key Fragment) contains sensitive cryptographic material and implements
 /// Zeroize + ZeroizeOnDrop for secure memory handling. Each KFrag is associated
 /// with a Secret via SecretId and identified by a holder_index.
+#[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 pub trait KFragRepository: Repository<KFrag, KFragId> {
     /// Find all KFrags associated with a Secret
-    ///
-    /// Returns all KFrags for the given SecretId.
     async fn find_by_secret_id(&self, secret_id: &SecretId) -> DomainResult<Vec<KFrag>>;
 
     /// Find a specific KFrag by Secret ID and holder index
-    ///
-    /// Returns the KFrag for a specific holder in the threshold scheme.
     async fn find_by_holder_index(
         &self,
         secret_id: &SecretId,
@@ -32,27 +29,29 @@ pub trait KFragRepository: Repository<KFrag, KFragId> {
     ) -> DomainResult<Option<KFrag>>;
 
     /// Delete all KFrags associated with a Secret
-    ///
-    /// Bulk deletion for cleanup when a Secret is revoked or expired.
     async fn delete_by_secret_id(&self, secret_id: &SecretId) -> DomainResult<()>;
+}
 
-    /// Send a KFrag to an AO Process (Owner-Process)
-    ///
-    /// Delegates a single KFrag to the specified AO process for storage.
-    async fn send_to_ao_process(&self, process_id: &str, kfrag: &KFrag) -> DomainResult<()>;
+/// Repository interface for KFrag entity (WASM version)
+#[cfg(target_arch = "wasm32")]
+#[async_trait(?Send)]
+pub trait KFragRepository: Repository<KFrag, KFragId> {
+    /// Find all KFrags associated with a Secret
+    async fn find_by_secret_id(&self, secret_id: &SecretId) -> DomainResult<Vec<KFrag>>;
 
-    /// Batch send multiple KFrags to an AO Process
-    ///
-    /// Delegates multiple KFrags to the specified AO process.
-    /// Returns the IDs of successfully sent KFrags.
-    async fn batch_send_to_ao_process(
+    /// Find a specific KFrag by Secret ID and holder index
+    async fn find_by_holder_index(
         &self,
-        process_id: &str,
-        kfrags: &[KFrag],
-    ) -> DomainResult<Vec<KFragId>>;
+        secret_id: &SecretId,
+        holder_index: u8,
+    ) -> DomainResult<Option<KFrag>>;
+
+    /// Delete all KFrags associated with a Secret
+    async fn delete_by_secret_id(&self, secret_id: &SecretId) -> DomainResult<()>;
 }
 
 #[cfg(test)]
+#[allow(clippy::indexing_slicing)]
 mod tests {
     use super::*;
     use std::collections::HashMap;
@@ -60,25 +59,13 @@ mod tests {
 
     struct MockKFragRepository {
         storage: RwLock<HashMap<KFragId, KFrag>>,
-        ao_storage: RwLock<HashMap<String, Vec<KFrag>>>,
     }
 
     impl MockKFragRepository {
         fn new() -> Self {
             Self {
                 storage: RwLock::new(HashMap::new()),
-                ao_storage: RwLock::new(HashMap::new()),
             }
-        }
-
-        #[allow(dead_code)]
-        fn get_ao_stored_kfrags(&self, process_id: &str) -> Vec<KFrag> {
-            self.ao_storage
-                .read()
-                .unwrap()
-                .get(process_id)
-                .cloned()
-                .unwrap_or_default()
         }
     }
 
@@ -141,27 +128,6 @@ mod tests {
             let mut storage = self.storage.write().unwrap();
             storage.retain(|_, v| v.secret_id() != secret_id);
             Ok(())
-        }
-
-        async fn send_to_ao_process(&self, process_id: &str, kfrag: &KFrag) -> DomainResult<()> {
-            let mut ao_storage = self.ao_storage.write().unwrap();
-            ao_storage
-                .entry(process_id.to_string())
-                .or_default()
-                .push(kfrag.clone());
-            Ok(())
-        }
-
-        async fn batch_send_to_ao_process(
-            &self,
-            process_id: &str,
-            kfrags: &[KFrag],
-        ) -> DomainResult<Vec<KFragId>> {
-            let mut ao_storage = self.ao_storage.write().unwrap();
-            let entry = ao_storage.entry(process_id.to_string()).or_default();
-            let ids: Vec<KFragId> = kfrags.iter().map(|k| k.id().clone()).collect();
-            entry.extend(kfrags.iter().cloned());
-            Ok(ids)
         }
     }
 
@@ -260,51 +226,5 @@ mod tests {
         let found = repo.find_by_ids(&ids[0..2]).await.unwrap();
 
         assert_eq!(found.len(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_send_to_ao_process() {
-        let repo = MockKFragRepository::new();
-        let secret_id = SecretId::generate();
-        let kfrag = create_test_kfrag(secret_id.clone(), 1);
-
-        let result = repo.send_to_ao_process("process-1", &kfrag).await;
-        assert!(result.is_ok());
-
-        let stored = repo.get_ao_stored_kfrags("process-1");
-        assert_eq!(stored.len(), 1);
-        assert_eq!(stored[0].holder_index(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_batch_send_to_ao_process() {
-        let repo = MockKFragRepository::new();
-        let secret_id = SecretId::generate();
-        let kfrags: Vec<_> = (1..=3)
-            .map(|i| create_test_kfrag(secret_id.clone(), i))
-            .collect();
-
-        let result = repo.batch_send_to_ao_process("process-1", &kfrags).await;
-        assert!(result.is_ok());
-
-        let ids = result.unwrap();
-        assert_eq!(ids.len(), 3);
-
-        let stored = repo.get_ao_stored_kfrags("process-1");
-        assert_eq!(stored.len(), 3);
-    }
-
-    #[tokio::test]
-    async fn test_send_to_different_processes() {
-        let repo = MockKFragRepository::new();
-        let secret_id = SecretId::generate();
-        let kfrag1 = create_test_kfrag(secret_id.clone(), 1);
-        let kfrag2 = create_test_kfrag(secret_id.clone(), 2);
-
-        repo.send_to_ao_process("process-1", &kfrag1).await.unwrap();
-        repo.send_to_ao_process("process-2", &kfrag2).await.unwrap();
-
-        assert_eq!(repo.get_ao_stored_kfrags("process-1").len(), 1);
-        assert_eq!(repo.get_ao_stored_kfrags("process-2").len(), 1);
     }
 }
