@@ -2,8 +2,11 @@
 //!
 //! Provides wallet abstraction for Arweave transaction signing.
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::env;
+#[cfg(not(target_arch = "wasm32"))]
 use std::fs;
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
 use rsa::pss::{BlindedSigningKey, Signature};
@@ -55,6 +58,7 @@ impl ArweaveWallet {
     /// Create wallet from ARWEAVE_WALLET_PATH environment variable
     ///
     /// The environment variable should contain a path to a JWK JSON file.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn from_env() -> Result<Self, AdapterError> {
         let wallet_path = env::var("ARWEAVE_WALLET_PATH").map_err(|_| {
             AdapterError::configuration_error(
@@ -67,6 +71,7 @@ impl ArweaveWallet {
     }
 
     /// Create wallet from a JWK file path
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, AdapterError> {
         let path = path.as_ref();
 
