@@ -12,6 +12,7 @@ use std::sync::{Arc, RwLock};
 use serde::{Deserialize, Serialize};
 
 use crate::service::error::{ServiceError, ServiceResult};
+use crate::usecase::core::crypto::KeyFragment;
 
 /// Arweaveトランザクション
 #[derive(Debug, Clone)]
@@ -120,6 +121,13 @@ pub trait ArweaveStorageService: Send + Sync {
 
     /// タグを更新（新しいトランザクションとして作成）
     fn update_tags(&self, transaction_id: &str, new_tags: Vec<Tag>) -> ServiceResult<String>;
+
+    /// Send kFrags to Owner-Process via AO Network
+    fn send_kfrag_to_owner_process(
+        &self,
+        kfrags: &[KeyFragment],
+        owner_process_id: &str,
+    ) -> ServiceResult<()>;
 }
 
 /// ArweaveStorageService実装
@@ -352,6 +360,15 @@ impl ArweaveStorageService for ArweaveStorageServiceImpl {
         let new_tx_id = self.store_data(&existing_tx.data, new_tags)?;
 
         Ok(new_tx_id)
+    }
+
+    fn send_kfrag_to_owner_process(
+        &self,
+        _kfrags: &[KeyFragment],
+        _owner_process_id: &str,
+    ) -> ServiceResult<()> {
+        // TODO: Implement AO message sending when AO communication layer is ready (Issue #47)
+        Ok(())
     }
 }
 

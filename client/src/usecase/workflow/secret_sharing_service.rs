@@ -9,6 +9,7 @@ use zeroize::Zeroizing;
 
 use crate::domain::value_objects::SecretId;
 use crate::usecase::core::crypto::{CryptoService, KeyFragment, PublicKey, ShamirShare, constants};
+use crate::usecase::core::storage::{ArweaveStorageService, QueryParams, Tag};
 use crate::usecase::dto::{SecretSharingRequest, SecretSharingResult, SecretStatus};
 use crate::usecase::error::{WorkflowError, WorkflowResult};
 
@@ -71,16 +72,18 @@ pub trait SecretSharingWorkflowService: Send + Sync {
 ///
 /// Orchestrates CryptoService and StorageService to implement
 /// the complete Phase 1 secret sharing workflow.
-pub struct SecretSharingWorkflowServiceImpl<C: CryptoService> {
+pub struct SecretSharingWorkflowServiceImpl<C: CryptoService, S: ArweaveStorageService> {
     crypto_service: Arc<C>,
-    // TODO: Add StorageService when AO communication is implemented (Issue #47)
-    // storage_service: Arc<S>,
+    storage_service: Arc<S>,
 }
 
-impl<C: CryptoService> SecretSharingWorkflowServiceImpl<C> {
+impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowServiceImpl<C, S> {
     /// Create a new SecretSharingWorkflowServiceImpl
-    pub fn new(crypto_service: Arc<C>) -> Self {
-        Self { crypto_service }
+    pub fn new(crypto_service: Arc<C>, storage_service: Arc<S>) -> Self {
+        Self {
+            crypto_service,
+            storage_service,
+        }
     }
 
     /// Validate input parameters for secret sharing
@@ -197,7 +200,9 @@ impl<C: CryptoService> SecretSharingWorkflowServiceImpl<C> {
     }
 }
 
-impl<C: CryptoService> SecretSharingWorkflowService for SecretSharingWorkflowServiceImpl<C> {
+impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowService
+    for SecretSharingWorkflowServiceImpl<C, S>
+{
     fn execute_secret_sharing(
         &self,
         request: SecretSharingRequest,
@@ -223,23 +228,59 @@ impl<C: CryptoService> SecretSharingWorkflowService for SecretSharingWorkflowSer
         let kfrag_count = kfrags.len() as u8;
 
         // Step 7: Send kFrags to Owner-Process via AO
-        // TODO: Implement when StorageService AO methods are available (Issue #47)
-        // self.storage_service.send_kfrag_to_owner_process(&kfrags, &request.owner_process_id)?;
+        self.storage_service
+            .send_kfrag_to_owner_process(&kfrags, &request.owner_process_id)
+            .map_err(WorkflowError::from)?;
 
         // Step 8: Store Capsule and encrypted shares on Arweave
-        // TODO: Implement when StorageService is available (Issue #47)
-        // For now, generate placeholder transaction IDs
         let secret_id = SecretId::generate();
-        let capsule_tx_id = format!("capsule_tx_{}", secret_id.as_str());
-        let share_tx_ids: Vec<String> = encrypted_shares
-            .iter()
+
+        let capsule_tx_id = self
+            .storage_service
+            .store_data(
+                &capsule.capsule_bytes,
+                vec![
+                    Tag {
+                        name: "type".to_string(),
+                        value: "capsule".to_string(),
+                    },
+                    Tag {
+                        name: "secret_id".to_string(),
+                        value: secret_id.as_str().to_string(),
+                    },
+                ],
+            )
+            .map_err(WorkflowError::from)?;
+
+        let share_items: Vec<(Vec<u8>, Vec<Tag>)> = encrypted_shares
+            .into_iter()
             .enumerate()
-            .map(|(i, _)| format!("share_tx_{}_{}", secret_id.as_str(), i))
+            .map(|(i, data)| {
+                (
+                    data,
+                    vec![
+                        Tag {
+                            name: "type".to_string(),
+                            value: "encrypted_share".to_string(),
+                        },
+                        Tag {
+                            name: "secret_id".to_string(),
+                            value: secret_id.as_str().to_string(),
+                        },
+                        Tag {
+                            name: "index".to_string(),
+                            value: i.to_string(),
+                        },
+                    ],
+                )
+            })
             .collect();
 
-        // Suppress warnings for now - will be used when storage is implemented
-        let _ = capsule;
-        let _ = kfrags;
+        let batch_result = self
+            .storage_service
+            .batch_store(share_items)
+            .map_err(WorkflowError::from)?;
+        let share_tx_ids = batch_result.successful;
 
         Ok(SecretSharingResult {
             secret_id,
@@ -251,12 +292,34 @@ impl<C: CryptoService> SecretSharingWorkflowService for SecretSharingWorkflowSer
     }
 
     fn get_secret_status(&self, secret_id: &SecretId) -> WorkflowResult<SecretStatus> {
-        // TODO: Implement when StorageService query methods are available (Issue #47)
-        // For now, return ResourceNotFound as placeholder
-        Err(WorkflowError::not_found(format!(
-            "Secret {} not found (storage not yet implemented)",
-            secret_id
-        )))
+        let params = QueryParams {
+            tags: vec![
+                Tag {
+                    name: "type".to_string(),
+                    value: "capsule".to_string(),
+                },
+                Tag {
+                    name: "secret_id".to_string(),
+                    value: secret_id.as_str().to_string(),
+                },
+            ],
+            limit: Some(1),
+            sort_by: None,
+        };
+
+        let results = self
+            .storage_service
+            .query_by_tags(params)
+            .map_err(WorkflowError::from)?;
+
+        if results.is_empty() {
+            return Err(WorkflowError::not_found(format!(
+                "Secret {} not found",
+                secret_id
+            )));
+        }
+
+        Ok(SecretStatus::Created)
     }
 }
 
@@ -271,10 +334,13 @@ impl<C: CryptoService> SecretSharingWorkflowService for SecretSharingWorkflowSer
 mod tests {
     use super::*;
     use crate::usecase::core::crypto::CryptoServiceImpl;
+    use crate::usecase::core::storage::ArweaveStorageServiceImpl;
 
-    fn create_test_service() -> SecretSharingWorkflowServiceImpl<CryptoServiceImpl> {
+    fn create_test_service(
+    ) -> SecretSharingWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
         let crypto = Arc::new(CryptoServiceImpl::new());
-        SecretSharingWorkflowServiceImpl::new(crypto)
+        let storage = Arc::new(ArweaveStorageServiceImpl::default());
+        SecretSharingWorkflowServiceImpl::new(crypto, storage)
     }
 
     fn create_test_request(crypto: &CryptoServiceImpl) -> SecretSharingRequest {
