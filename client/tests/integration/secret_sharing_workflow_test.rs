@@ -6,13 +6,16 @@
 use std::sync::Arc;
 
 use d_tpres::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
+use d_tpres::usecase::core::storage::ArweaveStorageServiceImpl;
 use d_tpres::usecase::workflow::{SecretSharingWorkflowService, SecretSharingWorkflowServiceImpl};
 use d_tpres::usecase::{SecretSharingRequest, WorkflowError};
 
 /// Helper to create test service with real CryptoService
-fn create_integration_service() -> SecretSharingWorkflowServiceImpl<CryptoServiceImpl> {
+fn create_integration_service()
+-> SecretSharingWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
     let crypto = Arc::new(CryptoServiceImpl::new());
-    SecretSharingWorkflowServiceImpl::new(crypto)
+    let storage = Arc::new(ArweaveStorageServiceImpl::default());
+    SecretSharingWorkflowServiceImpl::new(crypto, storage)
 }
 
 /// Helper to create a valid test request
@@ -100,14 +103,14 @@ fn test_phase1_integration_complete_flow() {
     // Verify TX ID format
     for (i, tx_id) in result.share_tx_ids.iter().enumerate() {
         assert!(
-            tx_id.contains("share_tx_"),
+            tx_id.starts_with("tx_"),
             "Share TX ID {} should have correct format",
             i
         );
         println!("  Share[{}] TX: {}", i, tx_id);
     }
     assert!(
-        result.capsule_tx_id.contains("capsule_tx_"),
+        result.capsule_tx_id.starts_with("tx_"),
         "Capsule TX ID should have correct format"
     );
 
@@ -121,7 +124,8 @@ fn test_phase1_integration_crypto_operations_valid() {
     println!("========================================");
 
     let crypto = Arc::new(CryptoServiceImpl::new());
-    let _service = SecretSharingWorkflowServiceImpl::new(crypto.clone());
+    let storage = Arc::new(ArweaveStorageServiceImpl::default());
+    let _service = SecretSharingWorkflowServiceImpl::new(crypto.clone(), storage);
 
     println!("\n[Step 1] Testing symmetric key generation");
     let key1 = crypto.generate_symmetric_key().unwrap();

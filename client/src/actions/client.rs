@@ -92,12 +92,24 @@ impl DTpresClient {
     }
 
     /// Create a ShareBuilder for the share operation
-    pub fn share(&self) -> ShareBuilder<CryptoServiceImpl, ArweaveStorageServiceImpl, NotSet, NotSet, NotSet, NotSet, NotSet> {
+    pub fn share(
+        &self,
+    ) -> ShareBuilder<
+        CryptoServiceImpl,
+        ArweaveStorageServiceImpl,
+        NotSet,
+        NotSet,
+        NotSet,
+        NotSet,
+        NotSet,
+    > {
         ShareBuilder::new(Arc::clone(&self.actions), self.process_id.clone())
     }
 
     /// Create a RecoverBuilder for the recover operation
-    pub fn recover(&self) -> RecoverBuilder<CryptoServiceImpl, ArweaveStorageServiceImpl, NotSet, NotSet> {
+    pub fn recover(
+        &self,
+    ) -> RecoverBuilder<CryptoServiceImpl, ArweaveStorageServiceImpl, NotSet, NotSet> {
         RecoverBuilder::new(Arc::clone(&self.actions), self.process_id.clone())
     }
 

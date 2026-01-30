@@ -27,7 +27,15 @@ pub struct NotSet;
 ///
 /// Required fields: secret, threshold, total_shares, owner_key, requester_key.
 /// `execute()` is only callable when all type parameters are `Set`.
-pub struct ShareBuilder<C: CryptoService, Ss: ArweaveStorageService, Secret, Threshold, TotalShares, OwnerKey, RequesterKey> {
+pub struct ShareBuilder<
+    C: CryptoService,
+    Ss: ArweaveStorageService,
+    Secret,
+    Threshold,
+    TotalShares,
+    OwnerKey,
+    RequesterKey,
+> {
     container: Arc<ActionsContainer<C, Ss>>,
     process_id: String,
     secret: Option<Zeroizing<Vec<u8>>>,
@@ -39,7 +47,9 @@ pub struct ShareBuilder<C: CryptoService, Ss: ArweaveStorageService, Secret, Thr
     _marker: PhantomData<(Secret, Threshold, TotalShares, OwnerKey, RequesterKey)>,
 }
 
-impl<C: CryptoService, Ss: ArweaveStorageService> ShareBuilder<C, Ss, NotSet, NotSet, NotSet, NotSet, NotSet> {
+impl<C: CryptoService, Ss: ArweaveStorageService>
+    ShareBuilder<C, Ss, NotSet, NotSet, NotSet, NotSet, NotSet>
+{
     pub(crate) fn new(container: Arc<ActionsContainer<C, Ss>>, process_id: String) -> Self {
         ShareBuilder {
             container,
@@ -55,7 +65,9 @@ impl<C: CryptoService, Ss: ArweaveStorageService> ShareBuilder<C, Ss, NotSet, No
     }
 }
 
-impl<C: CryptoService, Ss: ArweaveStorageService, T, N, O, R> ShareBuilder<C, Ss, NotSet, T, N, O, R> {
+impl<C: CryptoService, Ss: ArweaveStorageService, T, N, O, R>
+    ShareBuilder<C, Ss, NotSet, T, N, O, R>
+{
     pub fn secret(self, secret: Vec<u8>) -> ShareBuilder<C, Ss, Set, T, N, O, R> {
         ShareBuilder {
             container: self.container,
@@ -71,7 +83,9 @@ impl<C: CryptoService, Ss: ArweaveStorageService, T, N, O, R> ShareBuilder<C, Ss
     }
 }
 
-impl<C: CryptoService, Ss: ArweaveStorageService, S, N, O, R> ShareBuilder<C, Ss, S, NotSet, N, O, R> {
+impl<C: CryptoService, Ss: ArweaveStorageService, S, N, O, R>
+    ShareBuilder<C, Ss, S, NotSet, N, O, R>
+{
     pub fn threshold(self, k: u8) -> ShareBuilder<C, Ss, S, Set, N, O, R> {
         ShareBuilder {
             container: self.container,
@@ -87,7 +101,9 @@ impl<C: CryptoService, Ss: ArweaveStorageService, S, N, O, R> ShareBuilder<C, Ss
     }
 }
 
-impl<C: CryptoService, Ss: ArweaveStorageService, S, T, O, R> ShareBuilder<C, Ss, S, T, NotSet, O, R> {
+impl<C: CryptoService, Ss: ArweaveStorageService, S, T, O, R>
+    ShareBuilder<C, Ss, S, T, NotSet, O, R>
+{
     pub fn total_shares(self, n: u8) -> ShareBuilder<C, Ss, S, T, Set, O, R> {
         ShareBuilder {
             container: self.container,
@@ -103,7 +119,9 @@ impl<C: CryptoService, Ss: ArweaveStorageService, S, T, O, R> ShareBuilder<C, Ss
     }
 }
 
-impl<C: CryptoService, Ss: ArweaveStorageService, S, T, N, R> ShareBuilder<C, Ss, S, T, N, NotSet, R> {
+impl<C: CryptoService, Ss: ArweaveStorageService, S, T, N, R>
+    ShareBuilder<C, Ss, S, T, N, NotSet, R>
+{
     pub fn owner_key(self, key: SecretKey) -> ShareBuilder<C, Ss, S, T, N, Set, R> {
         ShareBuilder {
             container: self.container,
@@ -119,7 +137,9 @@ impl<C: CryptoService, Ss: ArweaveStorageService, S, T, N, R> ShareBuilder<C, Ss
     }
 }
 
-impl<C: CryptoService, Ss: ArweaveStorageService, S, T, N, O> ShareBuilder<C, Ss, S, T, N, O, NotSet> {
+impl<C: CryptoService, Ss: ArweaveStorageService, S, T, N, O>
+    ShareBuilder<C, Ss, S, T, N, O, NotSet>
+{
     pub fn requester_key(self, key: PublicKey) -> ShareBuilder<C, Ss, S, T, N, O, Set> {
         ShareBuilder {
             container: self.container,
@@ -135,7 +155,9 @@ impl<C: CryptoService, Ss: ArweaveStorageService, S, T, N, O> ShareBuilder<C, Ss
     }
 }
 
-impl<C: CryptoService, Ss: ArweaveStorageService, S, T, N, O, R> ShareBuilder<C, Ss, S, T, N, O, R> {
+impl<C: CryptoService, Ss: ArweaveStorageService, S, T, N, O, R>
+    ShareBuilder<C, Ss, S, T, N, O, R>
+{
     pub fn metadata(mut self, meta: Option<SecretMetadata>) -> Self {
         self.metadata = meta;
         self
@@ -185,7 +207,12 @@ impl<C: CryptoService, Ss: ArweaveStorageService> ShareBuilder<C, Ss, Set, Set, 
 /// Uses a single `process_id` (set at construction) because `DTpresClient`
 /// is designed for self-service usage where one user owns both the owner
 /// and requester roles within the same AO process context.
-pub struct RecoverBuilder<C: CryptoService, Ss: ArweaveStorageService, SecretIdState, RequesterKeyState> {
+pub struct RecoverBuilder<
+    C: CryptoService,
+    Ss: ArweaveStorageService,
+    SecretIdState,
+    RequesterKeyState,
+> {
     container: Arc<ActionsContainer<C, Ss>>,
     process_id: String,
     secret_id: Option<String>,

@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use d_tpres::usecase::SecretSharingRequest;
 use d_tpres::usecase::core::crypto::{CryptoService, CryptoServiceImpl, ShamirShare};
+use d_tpres::usecase::core::storage::ArweaveStorageServiceImpl;
 use d_tpres::usecase::workflow::{SecretSharingWorkflowService, SecretSharingWorkflowServiceImpl};
 
 // ============================================================================
@@ -384,7 +385,8 @@ fn test_roundtrip_workflow_services_integration() {
     println!("========================================");
 
     let crypto = Arc::new(CryptoServiceImpl::new());
-    let sharing_service = SecretSharingWorkflowServiceImpl::new(crypto.clone());
+    let storage = Arc::new(ArweaveStorageServiceImpl::default());
+    let sharing_service = SecretSharingWorkflowServiceImpl::new(crypto.clone(), storage);
 
     let (owner_sk, owner_pk) = crypto.generate_keypair().unwrap();
     let (_requester_sk, requester_pk) = crypto.generate_keypair().unwrap();
