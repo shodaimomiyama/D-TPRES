@@ -80,16 +80,19 @@ impl ValidationError {
     }
 
     /// Get the error code
+    #[must_use]
     pub fn code(&self) -> &str {
         &self.code
     }
 
     /// Get the error message
+    #[must_use]
     pub fn message(&self) -> &str {
         &self.message
     }
 
     /// Get the field name if present
+    #[must_use]
     pub fn field(&self) -> Option<&str> {
         self.field.as_deref()
     }
@@ -97,9 +100,12 @@ impl ValidationError {
 
 impl fmt::Display for ValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.field {
-            Some(field) => write!(f, "[{}] {}: {}", self.code, field, self.message),
-            None => write!(f, "[{}] {}", self.code, self.message),
+        let code = &self.code;
+        let message = &self.message;
+        if let Some(field) = &self.field {
+            write!(f, "[{code}] {field}: {message}")
+        } else {
+            write!(f, "[{code}] {message}")
         }
     }
 }
@@ -108,9 +114,11 @@ impl std::error::Error for ValidationError {}
 
 impl From<ValidationError> for WorkflowError {
     fn from(err: ValidationError) -> Self {
+        let code = &err.code;
+        let message = &err.message;
         let msg = match &err.field {
-            Some(field) => format!("[{}] {}: {}", err.code, field, err.message),
-            None => format!("[{}] {}", err.code, err.message),
+            Some(field) => format!("[{code}] {field}: {message}"),
+            None => format!("[{code}] {message}"),
         };
         WorkflowError::ValidationError(msg)
     }
@@ -162,11 +170,11 @@ mod tests {
     #[test]
     fn test_validation_error_display() {
         let err_without_field = ValidationError::new("test_code", "test message");
-        let display = format!("{}", err_without_field);
+        let display = err_without_field.to_string();
         assert_eq!(display, "[test_code] test message");
 
         let err_with_field = ValidationError::with_field("test_code", "test message", "field_name");
-        let display_with_field = format!("{}", err_with_field);
+        let display_with_field = err_with_field.to_string();
         assert_eq!(display_with_field, "[test_code] field_name: test message");
     }
 

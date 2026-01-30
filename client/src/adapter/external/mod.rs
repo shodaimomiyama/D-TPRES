@@ -1,7 +1,11 @@
-//! External system adapters
+//! External system adapters module
 //!
-//! This module provides adapters for external system communication,
-//! primarily the AO Network client for communicating with AO processes.
+//! Provides adapters for external system integrations including
+//! Arweave network communication.
+
+pub mod arweave;
+
+pub use arweave::{ArweaveClientConfig, ArweaveClientImpl, ArweaveWallet};
 
 pub mod ao_client;
 pub mod ao_message;

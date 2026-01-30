@@ -11,12 +11,13 @@ use serde::{Deserialize, Serialize};
 
 /// Binary data wrapper for serialization
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub struct Binary(#[serde(with = "base64_serde")] pub Vec<u8>);
 
 impl Binary {
     /// Create a new Binary from bytes
-    pub fn new(data: Vec<u8>) -> Self {
-        Self(data)
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
     }
 
     /// Get the underlying bytes as a slice
@@ -41,14 +42,14 @@ impl Binary {
 }
 
 impl From<Vec<u8>> for Binary {
-    fn from(data: Vec<u8>) -> Self {
-        Self(data)
+    fn from(bytes: Vec<u8>) -> Self {
+        Self(bytes)
     }
 }
 
 impl From<&[u8]> for Binary {
-    fn from(data: &[u8]) -> Self {
-        Self(data.to_vec())
+    fn from(bytes: &[u8]) -> Self {
+        Self(bytes.to_vec())
     }
 }
 
@@ -142,7 +143,8 @@ pub enum QueryMsg {
 // =====================================================================
 
 /// Response from AO Process execution
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct AOResponse {
     /// Whether the execution succeeded
     pub success: bool,
@@ -163,10 +165,10 @@ impl AOResponse {
     }
 
     /// Create a successful response with data
-    pub fn success_with_data(data: Binary) -> Self {
+    pub fn success_with_data(value: Binary) -> Self {
         Self {
             success: true,
-            data: Some(data),
+            data: Some(value),
             events: Vec::new(),
         }
     }
@@ -187,7 +189,8 @@ impl AOResponse {
 }
 
 /// Event emitted during AO execution
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct AOEvent {
     /// Type of the event
     pub event_type: String,
@@ -228,7 +231,8 @@ impl AOEvent {
 }
 
 /// Attribute of an AO event
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct AOAttribute {
     /// Attribute key
     pub key: String,
@@ -237,7 +241,8 @@ pub struct AOAttribute {
 }
 
 /// Response for GetCFrag query
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct GetCFragResponse {
     /// The CFrag binary data
     pub cfrag: Binary,
@@ -246,7 +251,8 @@ pub struct GetCFragResponse {
 }
 
 /// Metadata for a stored blob
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct BlobMeta {
     /// Size of the blob in bytes
     pub size: u64,
@@ -259,6 +265,7 @@ pub struct BlobMeta {
 /// Status of a Capsule
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum CapsuleStatus {
     /// Capsule is pending re-encryption
     Pending,
@@ -269,7 +276,8 @@ pub enum CapsuleStatus {
 }
 
 /// Information about a Capsule
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct CapsuleInfo {
     /// Capsule identifier
     pub capsule_id: String,
@@ -280,7 +288,8 @@ pub struct CapsuleInfo {
 }
 
 /// Response for ListCapsulesByKFrag query
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ListCapsulesByKFragResponse {
     /// List of capsules
     pub capsules: Vec<CapsuleInfo>,
@@ -293,7 +302,8 @@ pub struct ListCapsulesByKFragResponse {
 // =====================================================================
 
 /// Tags for AO messages (metadata)
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct AOMessageTags {
     /// Application name (always "cwao" for CosmWasm AO)
     pub app_name: String,
@@ -357,12 +367,12 @@ pub trait ValidateMessage {
 impl ValidateMessage for ExecuteMsg {
     fn validate(&self) -> Result<(), String> {
         match self {
-            ExecuteMsg::DelegateKFrag { kfrag_id, kfrag } => {
+            Self::DelegateKFrag { kfrag_id, kfrag } => {
                 validate_kfrag_id(kfrag_id)?;
                 validate_binary_data(kfrag, "kfrag")?;
                 Ok(())
             }
-            ExecuteMsg::DelegateCapsule {
+            Self::DelegateCapsule {
                 kfrag_id,
                 capsule_id,
                 capsule,
@@ -372,12 +382,12 @@ impl ValidateMessage for ExecuteMsg {
                 validate_binary_data(capsule, "capsule")?;
                 Ok(())
             }
-            ExecuteMsg::SubmitKFrag { kfrag_id, kfrag } => {
+            Self::SubmitKFrag { kfrag_id, kfrag } => {
                 validate_kfrag_id(kfrag_id)?;
                 validate_binary_data(kfrag, "kfrag")?;
                 Ok(())
             }
-            ExecuteMsg::SubmitCapsule {
+            Self::SubmitCapsule {
                 kfrag_id,
                 capsule_id,
                 capsule,
@@ -387,7 +397,7 @@ impl ValidateMessage for ExecuteMsg {
                 validate_binary_data(capsule, "capsule")?;
                 Ok(())
             }
-            ExecuteMsg::Reencrypt {
+            Self::Reencrypt {
                 kfrag_id,
                 capsule_id,
             } => {
@@ -402,7 +412,7 @@ impl ValidateMessage for ExecuteMsg {
 impl ValidateMessage for QueryMsg {
     fn validate(&self) -> Result<(), String> {
         match self {
-            QueryMsg::GetCFrag {
+            Self::GetCFrag {
                 kfrag_id,
                 capsule_id,
             } => {
@@ -410,7 +420,7 @@ impl ValidateMessage for QueryMsg {
                 validate_capsule_id(capsule_id)?;
                 Ok(())
             }
-            QueryMsg::ListCapsulesByKFrag {
+            Self::ListCapsulesByKFrag {
                 kfrag_id,
                 start_after,
                 limit,
@@ -458,12 +468,11 @@ pub fn validate_process_id(id: &str) -> Result<(), String> {
 /// Generic ID validation
 fn validate_id(id: &str, field_name: &str) -> Result<(), String> {
     if id.is_empty() {
-        return Err(format!("{} cannot be empty", field_name));
+        return Err(format!("{field_name} cannot be empty"));
     }
     if id.len() > MAX_ID_LENGTH {
         return Err(format!(
-            "{} must be <= {} characters",
-            field_name, MAX_ID_LENGTH
+            "{field_name} must be <= {MAX_ID_LENGTH} characters"
         ));
     }
 
@@ -472,8 +481,7 @@ fn validate_id(id: &str, field_name: &str) -> Result<(), String> {
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
     {
         return Err(format!(
-            "{} must contain only ASCII alphanumeric, underscore, or hyphen",
-            field_name
+            "{field_name} must contain only ASCII alphanumeric, underscore, or hyphen"
         ));
     }
 
@@ -481,17 +489,14 @@ fn validate_id(id: &str, field_name: &str) -> Result<(), String> {
 }
 
 /// Validate binary data
-pub fn validate_binary_data(data: &Binary, field_name: &str) -> Result<(), String> {
-    if data.is_empty() {
-        return Err(format!("{} cannot be empty", field_name));
+pub fn validate_binary_data(binary: &Binary, field_name: &str) -> Result<(), String> {
+    if binary.is_empty() {
+        return Err(format!("{field_name} cannot be empty"));
     }
 
-    if data.len() > MAX_BINARY_SIZE {
-        return Err(format!(
-            "{} exceeds maximum size of {}KB",
-            field_name,
-            MAX_BINARY_SIZE / 1024
-        ));
+    if binary.len() > MAX_BINARY_SIZE {
+        let max_kb = MAX_BINARY_SIZE / 1024;
+        return Err(format!("{field_name} exceeds maximum size of {max_kb}KB"));
     }
 
     Ok(())

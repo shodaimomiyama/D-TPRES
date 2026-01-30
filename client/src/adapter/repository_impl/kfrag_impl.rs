@@ -117,7 +117,8 @@ impl<C: ArweaveClient> ArweaveKFragRepository<C> {
     }
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl<C: ArweaveClient> Repository<KFrag, KFragId> for ArweaveKFragRepository<C> {
     async fn save(&self, entity: &KFrag) -> DomainResult<()> {
         let stored = StoredKFrag::from_entity(entity);
@@ -212,7 +213,8 @@ impl<C: ArweaveClient> Repository<KFrag, KFragId> for ArweaveKFragRepository<C> 
     }
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl<C: ArweaveClient> KFragRepository for ArweaveKFragRepository<C> {
     async fn find_by_secret_id(&self, secret_id: &SecretId) -> DomainResult<Vec<KFrag>> {
         use std::collections::HashMap;
@@ -285,26 +287,6 @@ impl<C: ArweaveClient> KFragRepository for ArweaveKFragRepository<C> {
         }
 
         Ok(())
-    }
-
-    async fn send_to_ao_process(&self, _process_id: &str, _kfrag: &KFrag) -> DomainResult<()> {
-        // AO integration will be implemented in Task 9
-        Err(crate::domain::errors::DomainError::StorageError {
-            operation: "send_to_ao_process".to_string(),
-            details: "AO integration not yet implemented".to_string(),
-        })
-    }
-
-    async fn batch_send_to_ao_process(
-        &self,
-        _process_id: &str,
-        _kfrags: &[KFrag],
-    ) -> DomainResult<Vec<KFragId>> {
-        // AO integration will be implemented in Task 9
-        Err(crate::domain::errors::DomainError::StorageError {
-            operation: "batch_send_to_ao_process".to_string(),
-            details: "AO integration not yet implemented".to_string(),
-        })
     }
 }
 

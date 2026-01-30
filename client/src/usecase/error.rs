@@ -103,68 +103,59 @@ impl From<DomainError> for ServiceError {
                 entity_type,
                 field,
                 message,
-            } => ServiceError::Business(BusinessException::ValidationError(format!(
-                "{} field '{}' validation failed: {}",
-                entity_type, field, message
+            } => Self::Business(BusinessException::ValidationError(format!(
+                "{entity_type} field '{field}' validation failed: {message}"
             ))),
             DomainError::InvalidStateTransition {
                 entity_type,
                 from_state,
                 to_state,
                 reason,
-            } => ServiceError::Business(BusinessException::InvalidProcessState(format!(
-                "Invalid state transition for {}: {} -> {} ({})",
-                entity_type, from_state, to_state, reason
+            } => Self::Business(BusinessException::InvalidProcessState(format!(
+                "Invalid state transition for {entity_type}: {from_state} -> {to_state} ({reason})"
             ))),
             DomainError::BusinessRuleViolation { rule, message } => {
-                ServiceError::Business(BusinessException::BusinessRuleViolation(format!(
-                    "Rule '{}' violated: {}",
-                    rule, message
+                Self::Business(BusinessException::BusinessRuleViolation(format!(
+                    "Rule '{rule}' violated: {message}"
                 )))
             }
             DomainError::UnauthorizedRole {
                 required_role,
                 actual_role,
                 operation,
-            } => ServiceError::Business(BusinessException::AuthorizationError(format!(
-                "Operation '{}' requires role '{}' but got '{}'",
-                operation, required_role, actual_role
+            } => Self::Business(BusinessException::AuthorizationError(format!(
+                "Operation '{operation}' requires role '{required_role}' but got '{actual_role}'"
             ))),
             DomainError::ThresholdConstraintViolation {
                 required_threshold,
                 available_shares,
                 operation: _,
-            } => ServiceError::Business(BusinessException::ThresholdNotMet {
+            } => Self::Business(BusinessException::ThresholdNotMet {
                 required: required_threshold,
                 actual: available_shares,
             }),
             DomainError::NotFound { entity_type, id } => {
-                ServiceError::Business(BusinessException::ResourceNotFound(format!(
-                    "{} with id '{}' not found",
-                    entity_type, id
+                Self::Business(BusinessException::ResourceNotFound(format!(
+                    "{entity_type} with id '{id}' not found"
                 )))
             }
             DomainError::CryptographicError { operation, details } => {
-                ServiceError::System(SystemException::Crypto(format!(
-                    "Crypto operation '{}' failed: {}",
-                    operation, details
+                Self::System(SystemException::Crypto(format!(
+                    "Crypto operation '{operation}' failed: {details}"
                 )))
             }
             DomainError::StorageError { operation, details } => {
-                ServiceError::System(SystemException::Storage(format!(
-                    "Storage operation '{}' failed: {}",
-                    operation, details
+                Self::System(SystemException::Storage(format!(
+                    "Storage operation '{operation}' failed: {details}"
                 )))
             }
             DomainError::SerializationError { operation, details } => {
-                ServiceError::System(SystemException::Serialization(format!(
-                    "Serialization operation '{}' failed: {}",
-                    operation, details
+                Self::System(SystemException::Serialization(format!(
+                    "Serialization operation '{operation}' failed: {details}"
                 )))
             }
-            _ => ServiceError::System(SystemException::Internal(format!(
-                "Unexpected domain error: {:?}",
-                err
+            _ => Self::System(SystemException::Internal(format!(
+                "Unexpected domain error: {err:?}"
             ))),
         }
     }
@@ -173,48 +164,51 @@ impl From<DomainError> for ServiceError {
 /// Helper methods for ServiceError
 impl ServiceError {
     /// Check if this error is recoverable (business errors are recoverable)
+    #[must_use]
     pub const fn is_recoverable(&self) -> bool {
-        matches!(self, ServiceError::Business(_))
+        matches!(self, Self::Business(_))
     }
 
     /// Check if this is a business error
+    #[must_use]
     pub const fn is_business_error(&self) -> bool {
-        matches!(self, ServiceError::Business(_))
+        matches!(self, Self::Business(_))
     }
 
     /// Check if this is a system error
+    #[must_use]
     pub const fn is_system_error(&self) -> bool {
-        matches!(self, ServiceError::System(_))
+        matches!(self, Self::System(_))
     }
 
     /// Create a validation error
     pub fn validation_error(message: impl Into<String>) -> Self {
-        ServiceError::Business(BusinessException::ValidationError(message.into()))
+        Self::Business(BusinessException::ValidationError(message.into()))
     }
 
     /// Create an authorization error
     pub fn authorization_error(message: impl Into<String>) -> Self {
-        ServiceError::Business(BusinessException::AuthorizationError(message.into()))
+        Self::Business(BusinessException::AuthorizationError(message.into()))
     }
 
     /// Create a not found error
     pub fn not_found(message: impl Into<String>) -> Self {
-        ServiceError::Business(BusinessException::ResourceNotFound(message.into()))
+        Self::Business(BusinessException::ResourceNotFound(message.into()))
     }
 
     /// Create a crypto error
     pub fn crypto_error(message: impl Into<String>) -> Self {
-        ServiceError::System(SystemException::Crypto(message.into()))
+        Self::System(SystemException::Crypto(message.into()))
     }
 
     /// Create a storage error
     pub fn storage_error(message: impl Into<String>) -> Self {
-        ServiceError::System(SystemException::Storage(message.into()))
+        Self::System(SystemException::Storage(message.into()))
     }
 
     /// Create an AO network error
     pub fn ao_network_error(message: impl Into<String>) -> Self {
-        ServiceError::System(SystemException::AONetwork(message.into()))
+        Self::System(SystemException::AONetwork(message.into()))
     }
 }
 
@@ -287,48 +281,48 @@ impl From<ServiceError> for WorkflowError {
 impl WorkflowError {
     /// Create a validation error
     pub fn validation(message: impl Into<String>) -> Self {
-        WorkflowError::ValidationError(message.into())
+        Self::ValidationError(message.into())
     }
 
     /// Create a crypto error
     pub fn crypto(message: impl Into<String>) -> Self {
-        WorkflowError::CryptoError(message.into())
+        Self::CryptoError(message.into())
     }
 
     /// Create a storage error
     pub fn storage(message: impl Into<String>) -> Self {
-        WorkflowError::StorageError(message.into())
+        Self::StorageError(message.into())
     }
 
     /// Create an AO communication error
     pub fn ao_communication(message: impl Into<String>) -> Self {
-        WorkflowError::AOCommunicationError(message.into())
+        Self::AOCommunicationError(message.into())
     }
 
     /// Create an insufficient cFrags error
-    pub fn insufficient_cfrags(required: u8, actual: u8) -> Self {
-        WorkflowError::InsufficientCFrags { required, actual }
+    #[must_use]
+    pub const fn insufficient_cfrags(required: u8, actual: u8) -> Self {
+        Self::InsufficientCFrags { required, actual }
     }
 
     /// Create a decryption error
     pub fn decryption(phase: impl Into<String>) -> Self {
-        WorkflowError::DecryptionError {
+        Self::DecryptionError {
             phase: phase.into(),
         }
     }
 
     /// Create a resource not found error
     pub fn not_found(message: impl Into<String>) -> Self {
-        WorkflowError::ResourceNotFound(message.into())
+        Self::ResourceNotFound(message.into())
     }
 
     /// Check if this error is recoverable
+    #[must_use]
     pub const fn is_recoverable(&self) -> bool {
         matches!(
             self,
-            WorkflowError::ValidationError(_)
-                | WorkflowError::ResourceNotFound(_)
-                | WorkflowError::InsufficientCFrags { .. }
+            Self::ValidationError(_) | Self::ResourceNotFound(_) | Self::InsufficientCFrags { .. }
         )
     }
 }

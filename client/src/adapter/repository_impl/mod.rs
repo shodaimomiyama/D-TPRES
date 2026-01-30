@@ -88,8 +88,31 @@ pub mod tag_values {
 /// This trait defines the interface for Arweave storage operations.
 /// Implementations can be swapped for testing (MockArweaveClient)
 /// or production use (actual Arweave client).
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
+#[cfg(not(target_arch = "wasm32"))]
 pub trait ArweaveClient: Send + Sync {
+    /// Retrieve data by transaction ID
+    ///
+    /// Returns `Ok(Some(data))` if found, `Ok(None)` if not found,
+    /// or `Err` on connection/storage errors.
+    async fn get(&self, tx_id: &str) -> Result<Option<Vec<u8>>, AdapterError>;
+
+    /// Post data to Arweave with associated tags
+    ///
+    /// Returns the transaction ID on success.
+    async fn post(&self, data: &[u8], tags: Vec<Tag>) -> Result<String, AdapterError>;
+
+    /// Query for transaction IDs matching the given tags
+    ///
+    /// Returns a list of matching transaction IDs.
+    async fn query(&self, tags: Vec<Tag>) -> Result<Vec<String>, AdapterError>;
+}
+
+/// Arweave client trait for abstracting Arweave operations (WASM version)
+#[cfg(target_arch = "wasm32")]
+#[async_trait(?Send)]
+pub trait ArweaveClient {
     /// Retrieve data by transaction ID
     ///
     /// Returns `Ok(Some(data))` if found, `Ok(None)` if not found,

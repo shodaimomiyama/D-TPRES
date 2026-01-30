@@ -14,11 +14,21 @@ use super::Repository;
 ///
 /// ShareCollection manages encrypted Shamir secret shares. It is associated with
 /// a parent Secret via SecretId and may have an Arweave TX ID for permanent storage.
+#[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 pub trait ShareCollectionRepository: Repository<ShareCollection, ShareCollectionId> {
     /// Find ShareCollection by its parent Secret ID
-    ///
-    /// Returns the ShareCollection associated with the given SecretId, if it exists.
+    async fn find_by_secret_id(
+        &self,
+        secret_id: &SecretId,
+    ) -> DomainResult<Option<ShareCollection>>;
+}
+
+/// Repository interface for ShareCollection entity (WASM version)
+#[cfg(target_arch = "wasm32")]
+#[async_trait(?Send)]
+pub trait ShareCollectionRepository: Repository<ShareCollection, ShareCollectionId> {
+    /// Find ShareCollection by its parent Secret ID
     async fn find_by_secret_id(
         &self,
         secret_id: &SecretId,
@@ -26,6 +36,7 @@ pub trait ShareCollectionRepository: Repository<ShareCollection, ShareCollection
 }
 
 #[cfg(test)]
+#[allow(clippy::indexing_slicing)]
 mod tests {
     use super::*;
     use crate::domain::entities::EncryptedShareData;

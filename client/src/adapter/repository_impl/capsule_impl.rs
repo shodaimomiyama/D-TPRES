@@ -99,7 +99,8 @@ impl<C: ArweaveClient> ArweaveCapsuleRepository<C> {
     }
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl<C: ArweaveClient> Repository<Capsule, CapsuleId> for ArweaveCapsuleRepository<C> {
     async fn save(&self, entity: &Capsule) -> DomainResult<()> {
         let stored = StoredCapsule::from_entity(entity);
@@ -191,7 +192,8 @@ impl<C: ArweaveClient> Repository<Capsule, CapsuleId> for ArweaveCapsuleReposito
     }
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl<C: ArweaveClient> CapsuleRepository for ArweaveCapsuleRepository<C> {
     async fn find_by_secret_id(&self, secret_id: &SecretId) -> DomainResult<Option<Capsule>> {
         let tags = self.create_secret_query_tags(secret_id);
