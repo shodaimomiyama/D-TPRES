@@ -9,25 +9,57 @@ use std::fs;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
 
+use std::fmt;
+
 use rsa::pss::{BlindedSigningKey, Signature};
 use rsa::signature::{RandomizedSigner, SignatureEncoding};
 use rsa::{BigUint, RsaPrivateKey};
 use sha2::{Digest, Sha256};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::adapter::errors::AdapterError;
 use crate::adapter::external::arweave::client::base64url_encode;
 
 /// Arweave wallet for transaction signing
-#[derive(Debug)]
+///
+/// Secret JWK components (d, p, q) are zeroized on drop to prevent
+/// private key material from lingering in memory.
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct ArweaveWallet {
-    jwk: serde_json::Value,
+    #[zeroize(skip)]
     public_key_bytes: Vec<u8>,
+    #[zeroize(skip)]
+    public_exp_bytes: Vec<u8>,
+    private_exp_bytes: Vec<u8>,
+    prime_p_bytes: Vec<u8>,
+    prime_q_bytes: Vec<u8>,
+}
+
+impl fmt::Debug for ArweaveWallet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ArweaveWallet")
+            .field(
+                "public_key_bytes",
+                &format!("[{} bytes]", self.public_key_bytes.len()),
+            )
+            .field(
+                "public_exp_bytes",
+                &format!("[{} bytes]", self.public_exp_bytes.len()),
+            )
+            .field("private_exp_bytes", &"[REDACTED]")
+            .field("prime_p_bytes", &"[REDACTED]")
+            .field("prime_q_bytes", &"[REDACTED]")
+            .finish()
+    }
 }
 
 impl ArweaveWallet {
     /// Create wallet from JWK JSON value
+    ///
+    /// Parses all RSA components into byte vectors. The `serde_json::Value`
+    /// is not retained so that secret material lives only in zeroizable fields.
+    #[allow(clippy::needless_pass_by_value)]
     pub fn from_jwk(jwk: serde_json::Value) -> Result<Self, AdapterError> {
-        // Validate JWK structure
         let kty = jwk
             .get("kty")
             .and_then(|v| v.as_str())
@@ -40,18 +72,18 @@ impl ArweaveWallet {
             ));
         }
 
-        let n = jwk.get("n").and_then(|v| v.as_str()).ok_or_else(|| {
-            AdapterError::configuration_error("wallet", "Missing 'n' (modulus) in JWK")
-        })?;
-
-        // Decode public key modulus
-        let public_key_bytes = base64url_decode_internal(n).map_err(|e| {
-            AdapterError::configuration_error("wallet", &format!("Invalid Base64URL in 'n': {e}"))
-        })?;
+        let public_key_bytes = decode_jwk_field(&jwk, "n", "modulus")?;
+        let public_exp_bytes = decode_jwk_field(&jwk, "e", "public exponent")?;
+        let private_exp_bytes = decode_jwk_field(&jwk, "d", "private exponent")?;
+        let prime_p_bytes = decode_jwk_field(&jwk, "p", "prime p")?;
+        let prime_q_bytes = decode_jwk_field(&jwk, "q", "prime q")?;
 
         Ok(Self {
-            jwk,
             public_key_bytes,
+            public_exp_bytes,
+            private_exp_bytes,
+            prime_p_bytes,
+            prime_q_bytes,
         })
     }
 
@@ -105,11 +137,6 @@ impl ArweaveWallet {
         base64url_encode(&self.public_key_bytes)
     }
 
-    /// Get the JWK value
-    pub fn jwk(&self) -> &serde_json::Value {
-        &self.jwk
-    }
-
     /// Sign message using RSA-PSS with SHA-256
     pub fn sign(&self, message: &[u8]) -> Result<Vec<u8>, AdapterError> {
         let private_key = self.build_rsa_private_key()?;
@@ -122,13 +149,12 @@ impl ArweaveWallet {
         Ok(signature.to_vec())
     }
 
-    /// Build RSA private key from JWK components
     fn build_rsa_private_key(&self) -> Result<RsaPrivateKey, AdapterError> {
-        let modulus = self.decode_jwk_component("n", "modulus")?;
-        let public_exp = self.decode_jwk_component("e", "public exponent")?;
-        let private_exp = self.decode_jwk_component("d", "private exponent")?;
-        let prime_p = self.decode_jwk_component("p", "prime p")?;
-        let prime_q = self.decode_jwk_component("q", "prime q")?;
+        let modulus = BigUint::from_bytes_be(&self.public_key_bytes);
+        let public_exp = BigUint::from_bytes_be(&self.public_exp_bytes);
+        let private_exp = BigUint::from_bytes_be(&self.private_exp_bytes);
+        let prime_p = BigUint::from_bytes_be(&self.prime_p_bytes);
+        let prime_q = BigUint::from_bytes_be(&self.prime_q_bytes);
 
         RsaPrivateKey::from_components(modulus, public_exp, private_exp, vec![prime_p, prime_q])
             .map_err(|err| {
@@ -138,28 +164,28 @@ impl ArweaveWallet {
                 )
             })
     }
-
-    /// Decode a JWK component from Base64URL to BigUint
-    fn decode_jwk_component(&self, key: &str, name: &str) -> Result<BigUint, AdapterError> {
-        let value = self.jwk.get(key).and_then(|v| v.as_str()).ok_or_else(|| {
-            AdapterError::configuration_error(
-                "wallet",
-                &format!("Missing JWK component '{key}' ({name})"),
-            )
-        })?;
-
-        let bytes = base64url_decode_internal(value).map_err(|e| {
-            AdapterError::configuration_error(
-                "wallet",
-                &format!("Invalid Base64URL in JWK component '{key}': {e}"),
-            )
-        })?;
-
-        Ok(BigUint::from_bytes_be(&bytes))
-    }
 }
 
-/// Decode Base64URL (internal helper to avoid circular dependency)
+fn decode_jwk_field(
+    jwk: &serde_json::Value,
+    key: &str,
+    name: &str,
+) -> Result<Vec<u8>, AdapterError> {
+    let value = jwk.get(key).and_then(|v| v.as_str()).ok_or_else(|| {
+        AdapterError::configuration_error(
+            "wallet",
+            &format!("Missing JWK component '{key}' ({name})"),
+        )
+    })?;
+
+    base64url_decode_internal(value).map_err(|e| {
+        AdapterError::configuration_error(
+            "wallet",
+            &format!("Invalid Base64URL in JWK component '{key}': {e}"),
+        )
+    })
+}
+
 fn base64url_decode_internal(encoded: &str) -> Result<Vec<u8>, base64::DecodeError> {
     use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
     URL_SAFE_NO_PAD.decode(encoded)
