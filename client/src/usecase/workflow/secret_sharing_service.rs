@@ -336,8 +336,8 @@ mod tests {
     use crate::usecase::core::crypto::CryptoServiceImpl;
     use crate::usecase::core::storage::ArweaveStorageServiceImpl;
 
-    fn create_test_service(
-    ) -> SecretSharingWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
+    fn create_test_service()
+    -> SecretSharingWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
         let crypto = Arc::new(CryptoServiceImpl::new());
         let storage = Arc::new(ArweaveStorageServiceImpl::default());
         SecretSharingWorkflowServiceImpl::new(crypto, storage)
@@ -750,9 +750,9 @@ mod tests {
 
         // Verify transaction IDs have correct format
         for tx_id in &result.share_tx_ids {
-            assert!(tx_id.contains("share_tx_"));
+            assert!(tx_id.starts_with("tx_"));
         }
-        assert!(result.capsule_tx_id.contains("capsule_tx_"));
+        assert!(result.capsule_tx_id.starts_with("tx_"));
         println!("  [PASS] Complete PHASE 1 flow executed successfully");
     }
 

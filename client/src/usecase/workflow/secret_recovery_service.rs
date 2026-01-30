@@ -304,8 +304,8 @@ mod tests {
     use crate::usecase::core::crypto::CryptoServiceImpl;
     use crate::usecase::core::storage::ArweaveStorageServiceImpl;
 
-    fn create_test_service(
-    ) -> SecretRecoveryWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
+    fn create_test_service()
+    -> SecretRecoveryWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
         let crypto = Arc::new(CryptoServiceImpl::new());
         let storage = Arc::new(ArweaveStorageServiceImpl::default());
         SecretRecoveryWorkflowServiceImpl::new(crypto, storage)
