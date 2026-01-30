@@ -1,11 +1,12 @@
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use rsa::pkcs1v15::SigningKey;
+use rand::rngs::OsRng;
+use rsa::pss::SigningKey;
+use rsa::signature::RandomizedSigner;
 use rsa::signature::SignatureEncoding;
-use rsa::signature::Signer;
 use rsa::{BigUint, RsaPrivateKey};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::{Digest, Sha256, Sha384};
 
 use crate::adapter::errors::AOCommunicationError;
 use crate::adapter::external::ao_message::{ExecuteMsg, QueryMsg};
@@ -58,8 +59,20 @@ impl DataItemBuilder {
 
         let tags = Self::ao_tags(target, &action);
 
+        let target_bytes =
+            URL_SAFE_NO_PAD
+                .decode(target)
+                .map_err(|e| AOCommunicationError::ValidationError {
+                    details: format!("Invalid base64url target: {e}"),
+                })?;
+        if target_bytes.len() != 32 {
+            return Err(AOCommunicationError::ValidationError {
+                details: format!("Target must be 32 bytes (got {})", target_bytes.len()),
+            });
+        }
+
         Ok(UnsignedDataItem {
-            target: target.as_bytes().to_vec(),
+            target: target_bytes,
             anchor: Vec::new(),
             tags,
             data,
@@ -244,9 +257,9 @@ impl DataItemSigner {
 
     /// Sign a DataItem and return complete ANS-104 signed bytes
     pub fn sign(&self, item: &UnsignedDataItem) -> Result<Vec<u8>, AOCommunicationError> {
-        let deep_hash_input = self.build_deep_hash_input(item);
+        let deep_hash = self.build_deep_hash(item);
         let signing_key = SigningKey::<Sha256>::new(self.private_key.clone());
-        let signature = signing_key.sign(&deep_hash_input);
+        let signature = signing_key.sign_with_rng(&mut OsRng, &deep_hash);
         let sig_bytes = signature.to_bytes();
 
         let mut result = Vec::new();
@@ -302,18 +315,55 @@ impl DataItemSigner {
         URL_SAFE_NO_PAD.encode(hash)
     }
 
-    fn build_deep_hash_input(&self, item: &UnsignedDataItem) -> Vec<u8> {
-        let mut input = Vec::new();
-        input.extend_from_slice(b"dataitem");
-        input.extend_from_slice(b"1");
-        input.extend_from_slice(&SIG_TYPE_RSA256.to_le_bytes());
-        input.extend_from_slice(&self.owner_bytes);
-        input.extend_from_slice(&item.target);
-        input.extend_from_slice(&item.anchor);
+    /// ANS-104 deep hash: SHA-384-based recursive tree hash
+    fn build_deep_hash(&self, item: &UnsignedDataItem) -> Vec<u8> {
         let tags_bytes = self.serialize_avro_tags(&item.tags);
-        input.extend_from_slice(&tags_bytes);
-        input.extend_from_slice(&item.data);
-        input
+        let sig_type_bytes = SIG_TYPE_RSA256.to_le_bytes();
+
+        let parts: Vec<&[u8]> = vec![
+            b"dataitem",
+            b"1",
+            &sig_type_bytes,
+            &self.owner_bytes,
+            &item.target,
+            &item.anchor,
+            &tags_bytes,
+            &item.data,
+        ];
+
+        let hashed_parts: Vec<[u8; 48]> = parts.iter().map(|p| Self::deep_hash_blob(p)).collect();
+        Self::deep_hash_list(&hashed_parts).to_vec()
+    }
+
+    fn deep_hash_blob(data: &[u8]) -> [u8; 48] {
+        let mut tag = Vec::new();
+        tag.extend_from_slice(b"blob");
+        tag.extend_from_slice(data.len().to_string().as_bytes());
+
+        let tag_hash = Sha384::digest(&tag);
+        let data_hash = Sha384::digest(data);
+
+        let mut combined = Vec::with_capacity(96);
+        combined.extend_from_slice(&tag_hash);
+        combined.extend_from_slice(&data_hash);
+        Sha384::digest(&combined).into()
+    }
+
+    fn deep_hash_list(items: &[[u8; 48]]) -> [u8; 48] {
+        let mut tag = Vec::new();
+        tag.extend_from_slice(b"list");
+        tag.extend_from_slice(items.len().to_string().as_bytes());
+
+        let mut acc: [u8; 48] = Sha384::digest(&tag).into();
+
+        for item in items {
+            let mut combined = Vec::with_capacity(96);
+            combined.extend_from_slice(&acc);
+            combined.extend_from_slice(item);
+            acc = Sha384::digest(&combined).into();
+        }
+
+        acc
     }
 
     fn serialize_avro_tags(&self, tags: &[DataItemTag]) -> Vec<u8> {
@@ -353,8 +403,10 @@ mod tests {
             kfrag_id: "kf1".to_string(),
             kfrag: Binary::new(vec![1, 2, 3]),
         };
-        let item = DataItemBuilder::build_execute("proc-123", &msg).unwrap();
-        assert_eq!(item.target, b"proc-123");
+        let item =
+            DataItemBuilder::build_execute("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", &msg)
+                .unwrap();
+        assert_eq!(item.target.len(), 32);
         assert!(!item.data.is_empty());
     }
 
@@ -364,7 +416,9 @@ mod tests {
             kfrag_id: "kf1".to_string(),
             kfrag: Binary::new(vec![1]),
         };
-        let item = DataItemBuilder::build_execute("proc-123", &msg).unwrap();
+        let item =
+            DataItemBuilder::build_execute("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", &msg)
+                .unwrap();
         let tag_names: Vec<&str> = item.tags.iter().map(|t| t.name.as_str()).collect();
         assert!(tag_names.contains(&"Data-Protocol"));
         assert!(tag_names.contains(&"Variant"));
@@ -387,7 +441,9 @@ mod tests {
             kfrag_id: "kf1".to_string(),
             kfrag: Binary::new(vec![1, 2, 3]),
         };
-        let item = DataItemBuilder::build_execute("proc-123", &msg).unwrap();
+        let item =
+            DataItemBuilder::build_execute("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", &msg)
+                .unwrap();
         let action_tag = item.tags.iter().find(|t| t.name == "Action").unwrap();
         assert_eq!(action_tag.value, "DelegateKFrag");
     }
@@ -398,7 +454,9 @@ mod tests {
             kfrag_id: "kf1".to_string(),
             capsule_id: "cap1".to_string(),
         };
-        let body = DataItemBuilder::build_query_body("proc-123", &msg).unwrap();
+        let body =
+            DataItemBuilder::build_query_body("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", &msg)
+                .unwrap();
         let tags = body["Tags"].as_array().unwrap();
         let action = tags.iter().find(|t| t["name"] == "Action").unwrap();
         assert_eq!(action["value"], "GetCFrag");
@@ -410,9 +468,14 @@ mod tests {
             kfrag_id: "kf1".to_string(),
             capsule_id: "cap1".to_string(),
         };
-        let item = DataItemBuilder::build_execute("target-proc-456", &msg).unwrap();
+        let item =
+            DataItemBuilder::build_execute("AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE", &msg)
+                .unwrap();
         let target_tag = item.tags.iter().find(|t| t.name == "Target").unwrap();
-        assert_eq!(target_tag.value, "target-proc-456");
+        assert_eq!(
+            target_tag.value,
+            "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+        );
     }
 
     #[test]
@@ -421,8 +484,15 @@ mod tests {
             kfrag_id: "kf1".to_string(),
             kfrag: Binary::new(vec![1]),
         };
-        let body = DataItemBuilder::build_dry_run_body("proc-123", &msg).unwrap();
-        assert_eq!(body["Target"], "proc-123");
+        let body = DataItemBuilder::build_dry_run_body(
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            &msg,
+        )
+        .unwrap();
+        assert_eq!(
+            body["Target"],
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        );
         assert!(body["Tags"].is_array());
         assert!(body["Data"].is_string());
     }
@@ -485,7 +555,9 @@ mod tests {
             kfrag_id: "kf1".to_string(),
             kfrag: Binary::new(vec![1, 2, 3]),
         };
-        let item = DataItemBuilder::build_execute("proc-123", &msg).unwrap();
+        let item =
+            DataItemBuilder::build_execute("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", &msg)
+                .unwrap();
         let signed = signer.sign(&item);
         assert!(signed.is_ok());
         let bytes = signed.unwrap();
@@ -549,7 +621,9 @@ mod tests {
         ];
 
         for (msg, expected_action) in cases {
-            let item = DataItemBuilder::build_execute("proc", &msg).unwrap();
+            let item =
+                DataItemBuilder::build_execute("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", &msg)
+                    .unwrap();
             let action_tag = item.tags.iter().find(|t| t.name == "Action").unwrap();
             assert_eq!(action_tag.value, expected_action);
         }

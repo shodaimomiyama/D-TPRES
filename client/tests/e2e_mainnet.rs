@@ -1,3 +1,4 @@
+#![cfg(feature = "production-ao")]
 //! AO Mainnet (Testnet) E2E tests for ProductionAOClient
 //!
 //! Prerequisites:

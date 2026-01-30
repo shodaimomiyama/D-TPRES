@@ -1,3 +1,4 @@
+#![cfg(feature = "production-ao")]
 //! ArLocal E2E tests for ProductionAOClient
 //!
 //! Prerequisites:

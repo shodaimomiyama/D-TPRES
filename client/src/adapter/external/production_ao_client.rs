@@ -251,11 +251,11 @@ mod tests {
     use crate::adapter::external::data_item::ArweaveJWK;
 
     fn test_jwk() -> ArweaveJWK {
-        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
         use base64::Engine;
+        use base64::engine::general_purpose::URL_SAFE_NO_PAD;
         use rand::rngs::OsRng;
-        use rsa::traits::{PrivateKeyParts, PublicKeyParts};
         use rsa::RsaPrivateKey;
+        use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 
         let private_key = RsaPrivateKey::new(&mut OsRng, 2048).unwrap();
         let public_key = private_key.to_public_key();
@@ -284,6 +284,9 @@ mod tests {
         let config = AOConfig::new(mu_url, cu_url, "https://arweave.net", 5000).unwrap();
         ProductionAOClient::new(config, &jwk).unwrap()
     }
+
+    // Valid base64url-encoded 32-byte target for tests
+    const TEST_PROCESS_ID: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
     fn delegate_kfrag_msg() -> ExecuteMsg {
         ExecuteMsg::DelegateKFrag {
@@ -364,8 +367,7 @@ mod tests {
 
         Mock::given(method("POST"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"id": "msg-abc-123"})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": "msg-abc-123"})),
             )
             .mount(&mu)
             .await;
@@ -380,7 +382,7 @@ mod tests {
             .await;
 
         let client = setup_client(&mu.uri(), &cu.uri());
-        let result = client.execute("proc-1", delegate_kfrag_msg()).await;
+        let result = client.execute(TEST_PROCESS_ID, delegate_kfrag_msg()).await;
         assert!(result.is_ok());
         let resp = result.unwrap();
         assert!(resp.success);
@@ -393,8 +395,7 @@ mod tests {
 
         Mock::given(method("POST"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"id": "msg-xyz-789"})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": "msg-xyz-789"})),
             )
             .mount(&mu)
             .await;
@@ -409,7 +410,10 @@ mod tests {
             .await;
 
         let client = setup_client(&mu.uri(), &cu.uri());
-        let resp = client.execute("proc-1", delegate_kfrag_msg()).await.unwrap();
+        let resp = client
+            .execute(TEST_PROCESS_ID, delegate_kfrag_msg())
+            .await
+            .unwrap();
         assert_eq!(resp.message_id, Some("msg-xyz-789".to_string()));
     }
 
@@ -424,7 +428,7 @@ mod tests {
             .await;
 
         let client = setup_client(&mu.uri(), &cu.uri());
-        let result = client.execute("proc-1", delegate_kfrag_msg()).await;
+        let result = client.execute(TEST_PROCESS_ID, delegate_kfrag_msg()).await;
         assert!(matches!(
             result,
             Err(AOCommunicationError::ExecutionError { .. })
@@ -438,14 +442,13 @@ mod tests {
 
         Mock::given(method("POST"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"status": "ok"})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"status": "ok"})),
             )
             .mount(&mu)
             .await;
 
         let client = setup_client(&mu.uri(), &cu.uri());
-        let result = client.execute("proc-1", delegate_kfrag_msg()).await;
+        let result = client.execute(TEST_PROCESS_ID, delegate_kfrag_msg()).await;
         assert!(matches!(
             result,
             Err(AOCommunicationError::DeserializationError { .. })
@@ -459,8 +462,7 @@ mod tests {
 
         Mock::given(method("POST"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"id": "msg-1"})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": "msg-1"})),
             )
             .mount(&mu)
             .await;
@@ -472,7 +474,7 @@ mod tests {
             .await;
 
         let client = setup_client(&mu.uri(), &cu.uri());
-        let result = client.execute("proc-1", delegate_kfrag_msg()).await;
+        let result = client.execute(TEST_PROCESS_ID, delegate_kfrag_msg()).await;
         assert!(matches!(
             result,
             Err(AOCommunicationError::ProcessNotFound { .. })
@@ -486,8 +488,7 @@ mod tests {
 
         Mock::given(method("POST"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"id": "msg-1"})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": "msg-1"})),
             )
             .mount(&mu)
             .await;
@@ -495,14 +496,13 @@ mod tests {
         Mock::given(method("GET"))
             .and(path_regex(r"/result/.*"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"Error": "bad input"})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"Error": "bad input"})),
             )
             .mount(&cu)
             .await;
 
         let client = setup_client(&mu.uri(), &cu.uri());
-        let result = client.execute("proc-1", delegate_kfrag_msg()).await;
+        let result = client.execute(TEST_PROCESS_ID, delegate_kfrag_msg()).await;
         assert!(matches!(
             result,
             Err(AOCommunicationError::ExecutionError { .. })
@@ -516,8 +516,7 @@ mod tests {
 
         Mock::given(method("POST"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"id": "msg-1"})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"id": "msg-1"})),
             )
             .mount(&mu)
             .await;
@@ -529,7 +528,7 @@ mod tests {
             .await;
 
         let client = setup_client(&mu.uri(), &cu.uri());
-        let result = client.execute("proc-1", delegate_kfrag_msg()).await;
+        let result = client.execute(TEST_PROCESS_ID, delegate_kfrag_msg()).await;
         assert!(matches!(
             result,
             Err(AOCommunicationError::ExecutionError { .. })
@@ -540,7 +539,7 @@ mod tests {
     async fn test_execute_connection_refused() {
         // Point to a port with no server
         let client = setup_client("http://127.0.0.1:19999", "http://127.0.0.1:19998");
-        let result = client.execute("proc-1", delegate_kfrag_msg()).await;
+        let result = client.execute(TEST_PROCESS_ID, delegate_kfrag_msg()).await;
         assert!(matches!(
             result,
             Err(AOCommunicationError::ConnectionError { .. })
@@ -555,9 +554,8 @@ mod tests {
         Mock::given(method("POST"))
             .and(path_regex(r"/dry-run.*"))
             .respond_with(
-                ResponseTemplate::new(200).set_body_json(
-                    serde_json::json!({"Output": {"data": "{\"cfrag\":\"abc\"}"}}),
-                ),
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"Output": {"data": "{\"cfrag\":\"abc\"}"}})),
             )
             .mount(&cu)
             .await;
@@ -603,8 +601,7 @@ mod tests {
         Mock::given(method("POST"))
             .and(path_regex(r"/dry-run.*"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"Error": "not found"})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"Error": "not found"})),
             )
             .mount(&cu)
             .await;
@@ -636,7 +633,10 @@ mod tests {
             .await;
 
         let client = setup_client(&mu.uri(), &cu.uri());
-        let resp = client.dry_run("proc-1", delegate_kfrag_msg()).await.unwrap();
+        let resp = client
+            .dry_run("proc-1", delegate_kfrag_msg())
+            .await
+            .unwrap();
         assert!(resp.success);
         assert_eq!(resp.message_id, None);
     }
