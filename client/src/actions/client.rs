@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use crate::actions::builder::{NotSet, RecoverBuilder, ShareBuilder};
 use crate::actions::di::DefaultActionsContainer;
-use crate::actions::error::ActionResult;
+use crate::actions::error::{ActionError, ActionResult};
 use crate::usecase::core::crypto::{CryptoServiceImpl, PublicKey, SecretKey};
 
 /// Client initialization configuration
@@ -23,7 +23,12 @@ pub struct InitConfig {
 const DEFAULT_AO_GATEWAY: &str = "https://ao.arweave.net";
 const DEFAULT_ARWEAVE_GATEWAY: &str = "https://arweave.net";
 
-/// Main D-TPRES client providing builder-based share/recover API
+/// Main D-TPRES client providing builder-based share/recover API.
+///
+/// Designed for single-user (self-service) workflows where the caller
+/// acts as both data owner and requester within one AO process.
+/// A single `process_id` is used for all operations; separate
+/// `owner_process_id` / `requester_process_id` are not needed.
 pub struct DTpresClient {
     process_id: String,
     wallet_address: String,
@@ -41,6 +46,13 @@ impl DTpresClient {
     /// # Errors
     /// Returns `ActionError` if wallet loading or process setup fails.
     pub fn init(config: InitConfig) -> ActionResult<Self> {
+        if !std::path::Path::new(&config.wallet_path).exists() {
+            return Err(ActionError::validation_failed(
+                "wallet_path",
+                format!("wallet file not found: {}", config.wallet_path),
+            ));
+        }
+
         let ao_gateway_url = config
             .ao_gateway_url
             .unwrap_or_else(|| DEFAULT_AO_GATEWAY.to_string());
