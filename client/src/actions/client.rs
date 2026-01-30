@@ -20,9 +20,6 @@ pub struct InitConfig {
     pub arweave_gateway_url: Option<String>,
 }
 
-const DEFAULT_AO_GATEWAY: &str = "https://ao.arweave.net";
-const DEFAULT_ARWEAVE_GATEWAY: &str = "https://arweave.net";
-
 /// Main D-TPRES client providing builder-based share/recover API.
 ///
 /// Designed for single-user (self-service) workflows where the caller
@@ -44,37 +41,37 @@ impl DTpresClient {
     /// and returns a configured client instance.
     ///
     /// # Errors
-    /// Returns `ActionError` if wallet loading or process setup fails.
-    pub fn init(config: InitConfig) -> ActionResult<Self> {
-        if !std::path::Path::new(&config.wallet_path).exists() {
-            return Err(ActionError::validation_failed(
-                "wallet_path",
-                format!("wallet file not found: {}", config.wallet_path),
-            ));
-        }
+    /// Currently returns `ActionError::WorkflowFailed` because JWK wallet
+    /// loading and AO process detection are not yet implemented.
+    /// See: <https://github.com/shodaimomiyama/D-TPRES/issues/60>
+    pub fn init(_config: InitConfig) -> ActionResult<Self> {
+        Err(ActionError::workflow_failed(
+            "DTpresClient::init is not yet implemented: \
+             JWK wallet loading and AO process spawning require Issue #60",
+        ))
+    }
 
-        let ao_gateway_url = config
-            .ao_gateway_url
-            .unwrap_or_else(|| DEFAULT_AO_GATEWAY.to_string());
-        let arweave_gateway_url = config
-            .arweave_gateway_url
-            .unwrap_or_else(|| DEFAULT_ARWEAVE_GATEWAY.to_string());
-
-        // TODO: Load JWK wallet from config.wallet_path
-        // TODO: Detect existing AO Process or spawn new one
-        // For now, use placeholder values until AO integration is complete
-        let wallet_address = format!("wallet_{}", &config.wallet_path);
-        let process_id = format!("process_{}", &config.wallet_path);
-
+    /// Create a DTpresClient with pre-configured values.
+    ///
+    /// Intended for testing and scenarios where wallet/process setup
+    /// is handled externally.
+    pub fn new(
+        process_id: String,
+        wallet_address: String,
+        ao_gateway_url: String,
+        arweave_gateway_url: String,
+    ) -> Self {
+        // TODO(#51/#52): Pass gateway URLs to ActionsContainer
+        // when StorageService/AOClient DI integration is implemented
         let actions = Arc::new(DefaultActionsContainer::new());
 
-        Ok(Self {
+        Self {
             process_id,
             wallet_address,
             ao_gateway_url,
             arweave_gateway_url,
             actions,
-        })
+        }
     }
 
     pub fn process_id(&self) -> &str {
