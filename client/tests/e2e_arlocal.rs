@@ -1,12 +1,35 @@
 #![cfg(feature = "production-ao")]
 //! ArLocal E2E tests for ProductionAOClient
 //!
-//! Prerequisites:
-//!   1. cd ao && node scripts/start.js   (starts ArLocal + cwao-units)
-//!   2. cd ao && node scripts/deploy.js  (deploys WASM contract)
-//!   3. cd ao && node scripts/instantiate.js (creates process)
+//! ## Important: cwao-units vs ao-localnet
 //!
-//! Run: cargo test --test e2e_arlocal -- --ignored --nocapture
+//! The `ao/` directory uses `cwao-units`, which does NOT provide ao-connect
+//! compatible HTTP APIs (no `/dry-run`, `/result/{id}` returns empty, etc.).
+//! ProductionAOClient requires ao-connect compatible endpoints.
+//!
+//! Use **ao-localnet** (Docker Compose) instead:
+//!   <https://github.com/permaweb/ao-localnet/>
+//!
+//! ## Setup (ao-localnet)
+//!
+//! ```sh
+//! git clone https://github.com/permaweb/ao-localnet.git
+//! cd ao-localnet
+//! cd wallets && ./generateAll.sh && ./printWalletAddresses.mjs && cd ..
+//! docker compose up --detach
+//! cd seed && ./download-aos-module.sh && ./seed-for-aos.sh
+//! ```
+//!
+//! ## Run
+//!
+//! ```sh
+//! AO_TEST_PROCESS_ID=<PROCESS_ID> \
+//! AO_MU_URL=http://localhost:4002 \
+//! AO_CU_URL=http://localhost:4004 \
+//! AO_GATEWAY_URL=http://localhost:4000 \
+//! ARWEAVE_WALLET_PATH=<path/to/wallet.json> \
+//! cargo test --test e2e_arlocal --features production-ao -- --ignored --nocapture --test-threads=1
+//! ```
 
 #![allow(clippy::unwrap_used)]
 
@@ -17,10 +40,10 @@ use d_tpres::adapter::external::data_item::ArweaveJWK;
 use d_tpres::adapter::external::production_ao_client::ProductionAOClient;
 
 fn arlocal_config() -> AOConfig {
-    let mu = std::env::var("AO_MU_URL").unwrap_or_else(|_| "http://localhost:1995".to_string());
-    let cu = std::env::var("AO_CU_URL").unwrap_or_else(|_| "http://localhost:1997".to_string());
+    let mu = std::env::var("AO_MU_URL").unwrap_or_else(|_| "http://localhost:4002".to_string());
+    let cu = std::env::var("AO_CU_URL").unwrap_or_else(|_| "http://localhost:4004".to_string());
     let gw =
-        std::env::var("AO_GATEWAY_URL").unwrap_or_else(|_| "http://localhost:1984".to_string());
+        std::env::var("AO_GATEWAY_URL").unwrap_or_else(|_| "http://localhost:4000".to_string());
     AOConfig::new(&mu, &cu, &gw, 30_000).unwrap()
 }
 
