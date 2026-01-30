@@ -256,7 +256,10 @@ impl ArweaveClientImpl {
 
             if should_retry {
                 retries += 1;
-                sleep_backoff(Duration::from_millis(backoff_ms * (1 << retries))).await;
+                sleep_backoff(Duration::from_millis(
+                    backoff_ms.saturating_mul(1u64.checked_shl(retries).unwrap_or(u64::MAX)),
+                ))
+                .await;
             }
         }
     }
@@ -310,7 +313,10 @@ impl ArweaveClientImpl {
 
             if should_retry {
                 retries += 1;
-                sleep_backoff(Duration::from_millis(backoff_ms * (1 << retries))).await;
+                sleep_backoff(Duration::from_millis(
+                    backoff_ms.saturating_mul(1u64.checked_shl(retries).unwrap_or(u64::MAX)),
+                ))
+                .await;
             }
         }
     }
@@ -394,7 +400,10 @@ impl ArweaveClient for ArweaveClientImpl {
             }
 
             retries += 1;
-            sleep_backoff(Duration::from_millis(backoff_ms * (1 << retries))).await;
+            sleep_backoff(Duration::from_millis(
+                backoff_ms.saturating_mul(1u64.checked_shl(retries).unwrap_or(u64::MAX)),
+            ))
+            .await;
         }
     }
 
@@ -524,7 +533,10 @@ impl ArweaveClient for ArweaveClientImpl {
             }
 
             retries += 1;
-            sleep_backoff(Duration::from_millis(backoff_ms * (1 << retries))).await;
+            sleep_backoff(Duration::from_millis(
+                backoff_ms.saturating_mul(1u64.checked_shl(retries).unwrap_or(u64::MAX)),
+            ))
+            .await;
         }
     }
 
@@ -589,7 +601,10 @@ impl ArweaveClient for ArweaveClientImpl {
                 }
 
                 retries += 1;
-                sleep_backoff(Duration::from_millis(backoff_ms * (1 << retries))).await;
+                sleep_backoff(Duration::from_millis(
+                    backoff_ms.saturating_mul(1u64.checked_shl(retries).unwrap_or(u64::MAX)),
+                ))
+                .await;
             };
 
             if let Some(errors) = graphql_response.errors {
