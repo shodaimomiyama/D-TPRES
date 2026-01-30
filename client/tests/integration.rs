@@ -4,6 +4,7 @@
 //! from PHASE 1 (Secret Sharing) to PHASE 3 (Secret Recovery).
 
 mod integration {
+    #[allow(deprecated)]
     mod actions_integration_test;
     mod secret_recovery_workflow_test;
     mod secret_sharing_workflow_test;
