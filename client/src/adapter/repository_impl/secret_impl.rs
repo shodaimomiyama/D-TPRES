@@ -133,7 +133,8 @@ impl<C: ArweaveClient> ArweaveSecretRepository<C> {
     }
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl<C: ArweaveClient> Repository<Secret, SecretId> for ArweaveSecretRepository<C> {
     async fn save(&self, entity: &Secret) -> DomainResult<()> {
         let stored = StoredSecret::from_entity(entity);
@@ -225,7 +226,8 @@ impl<C: ArweaveClient> Repository<Secret, SecretId> for ArweaveSecretRepository<
     }
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl<C: ArweaveClient> SecretRepository for ArweaveSecretRepository<C> {}
 
 #[cfg(test)]

@@ -80,6 +80,7 @@ pub struct SecretRecoveryWorkflowServiceImpl<C: CryptoService> {
     // storage_service: Arc<S>,
 }
 
+#[allow(clippy::cast_possible_truncation, clippy::indexing_slicing)]
 impl<C: CryptoService> SecretRecoveryWorkflowServiceImpl<C> {
     /// Create a new SecretRecoveryWorkflowServiceImpl
     pub fn new(crypto_service: Arc<C>) -> Self {
@@ -168,7 +169,7 @@ impl<C: CryptoService> SecretRecoveryWorkflowServiceImpl<C> {
         self.crypto_service
             .decrypt_pre_capsule(capsule, cfrags, requester_secret_key)
             .map_err(|e| WorkflowError::DecryptionError {
-                phase: format!("PRE decapsulation: {}", e),
+                phase: format!("PRE decapsulation: {e}"),
             })
     }
 
@@ -186,7 +187,7 @@ impl<C: CryptoService> SecretRecoveryWorkflowServiceImpl<C> {
                     .crypto_service
                     .aes_gcm_decrypt(symmetric_key, encrypted_share)
                     .map_err(|e| WorkflowError::DecryptionError {
-                        phase: format!("AES-GCM decryption of share {}: {}", i, e),
+                        phase: format!("AES-GCM decryption of share {i}: {e}"),
                     })?;
 
                 // shamirsecretsharing library embeds the index in the first byte of share data
@@ -211,7 +212,7 @@ impl<C: CryptoService> SecretRecoveryWorkflowServiceImpl<C> {
         self.crypto_service
             .reconstruct_secret_shamir(shares, threshold)
             .map_err(|e| WorkflowError::DecryptionError {
-                phase: format!("Shamir reconstruction: {}", e),
+                phase: format!("Shamir reconstruction: {e}"),
             })
     }
 
@@ -228,6 +229,7 @@ impl<C: CryptoService> SecretRecoveryWorkflowServiceImpl<C> {
     }
 }
 
+#[allow(clippy::cast_possible_truncation)]
 impl<C: CryptoService> SecretRecoveryWorkflowService for SecretRecoveryWorkflowServiceImpl<C> {
     fn execute_secret_recovery(
         &self,
@@ -284,7 +286,13 @@ impl<C: CryptoService> SecretRecoveryWorkflowService for SecretRecoveryWorkflowS
 }
 
 #[cfg(test)]
-#[allow(clippy::indexing_slicing, clippy::redundant_clone)]
+#[allow(
+    clippy::uninlined_format_args,
+    clippy::indexing_slicing,
+    clippy::redundant_clone,
+    clippy::cast_possible_truncation,
+    clippy::arithmetic_side_effects
+)]
 mod tests {
     use super::*;
     use crate::usecase::core::crypto::CryptoServiceImpl;
