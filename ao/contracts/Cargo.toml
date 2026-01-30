@@ -14,9 +14,11 @@ serde_json = "1.0"
 cw-storage-plus = "0.13.4"
 thiserror = "1"
 zeroize = { version = "1.6", features = ["derive"] }
-sha256 = "1.5"
+sha2 = "0.10"
+hex = "0.4"
 bincode = { version = "1.3", default-features = false }
 umbral-pre = { version = "0.11", features = ["serde", "default-serialization"] }
+getrandom = { version = "0.2", features = ["custom"] }
 
 [dev-dependencies]
 cw-multi-test = "0.13.4"
