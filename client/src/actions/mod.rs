@@ -52,10 +52,14 @@
 //! )?;
 //! ```
 
+pub mod builder;
+pub mod client;
 pub mod di;
 pub mod error;
 pub mod options;
 
+pub use builder::{NotSet, RecoverBuilder, Set, ShareBuilder};
+pub use client::{DTpresClient, InitConfig};
 pub use di::{ActionsContainer, DefaultActionsContainer};
 pub use error::{ActionError, ActionResult};
 pub use options::{RecoverOptions, ShareOptions};
@@ -105,6 +109,7 @@ impl<C: CryptoService> ActionsContainer<C> {
     /// )?;
     /// println!("Secret ID: {}", result.secret_id);
     /// ```
+    #[deprecated(since = "0.2.0", note = "use DTpresClient::share() builder instead")]
     #[allow(clippy::too_many_arguments)]
     pub fn share(
         &self,
@@ -188,6 +193,7 @@ impl<C: CryptoService> ActionsContainer<C> {
     /// // Use result.recovered_secret
     /// // Memory is cleared when result goes out of scope
     /// ```
+    #[deprecated(since = "0.2.0", note = "use DTpresClient::recover() builder instead")]
     pub fn recover(
         &self,
         secret_id: &str,
@@ -248,6 +254,7 @@ impl<C: CryptoService> ActionsContainer<C> {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 
