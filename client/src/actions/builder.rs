@@ -145,7 +145,6 @@ impl<C: CryptoService> ShareBuilder<C, Set, Set, Set, Set, Set> {
     #[allow(deprecated)]
     pub fn execute(self) -> ActionResult<SecretSharingResult> {
         let mut secret = self.secret.expect("secret guaranteed by type state");
-        let secret = std::mem::take(&mut *secret);
         let threshold = self.threshold.expect("threshold guaranteed by type state");
         let total_shares = self
             .total_shares
@@ -155,13 +154,14 @@ impl<C: CryptoService> ShareBuilder<C, Set, Set, Set, Set, Set> {
             .requester_key
             .expect("requester_key guaranteed by type state");
 
-        // Derive owner_public_key from owner_secret_key internally
+        // Derive before taking secret out of Zeroizing, so on error secret is still zeroized on drop
         let owner_public_key = self
             .container
             .crypto_service()
             .derive_public_key(&owner_secret_key)
             .map_err(|e| ActionError::crypto_error(e.to_string()))?;
 
+        let secret = std::mem::take(&mut *secret);
         let options = self.metadata.map(ShareOptions::with_metadata);
 
         self.container.share(
