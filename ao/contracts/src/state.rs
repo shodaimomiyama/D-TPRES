@@ -1,6 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Binary;
 use cw_storage_plus::{Item, Map};
+use sha2::{Digest, Sha256};
 
 pub const DEFAULT_LIST_LIMIT: u32 = 50;
 pub const DEFAULT_HOLDER_PROCESS_ID: &str = "holder_ABC123XYZ456DEF789GHI012JKL345MNO678PQR";
@@ -140,7 +141,7 @@ impl OwnerKFragData {
     pub fn new(kfrag: Binary, timestamp: String) -> Self {
         let meta = BlobMeta {
             size_bytes: kfrag.len() as u64,
-            sha256_hex: sha256::digest(kfrag.as_slice()).to_string(),
+            sha256_hex: hex::encode(Sha256::digest(kfrag.as_slice())),
             updated_ts: timestamp,
         };
         Self { kfrag, meta }
@@ -151,7 +152,7 @@ impl OwnerCapsuleData {
     pub fn new(capsule: Binary, timestamp: String) -> Self {
         let meta = BlobMeta {
             size_bytes: capsule.len() as u64,
-            sha256_hex: sha256::digest(capsule.as_slice()).to_string(),
+            sha256_hex: hex::encode(Sha256::digest(capsule.as_slice())),
             updated_ts: timestamp.clone(),
         };
         Self {
@@ -171,7 +172,7 @@ impl HolderCFragData {
     pub fn new(cfrag: Binary, timestamp: String) -> Self {
         let meta = BlobMeta {
             size_bytes: cfrag.len() as u64,
-            sha256_hex: sha256::digest(cfrag.as_slice()).to_string(),
+            sha256_hex: hex::encode(Sha256::digest(cfrag.as_slice())),
             updated_ts: timestamp,
         };
         Self { cfrag, meta }
