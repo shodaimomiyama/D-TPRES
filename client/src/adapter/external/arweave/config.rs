@@ -2,6 +2,7 @@
 //!
 //! Provides configuration structure and builder pattern for ArweaveClientImpl.
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::env;
 
 use crate::adapter::errors::AdapterError;
@@ -66,6 +67,7 @@ impl ArweaveClientConfig {
     /// - `ARWEAVE_TIMEOUT_SECS`: Request timeout in seconds (default: 30)
     /// - `ARWEAVE_MAX_RETRIES`: Maximum retry count (default: 3)
     /// - `ARWEAVE_RETRY_BACKOFF_MS`: Retry backoff in milliseconds (default: 1000)
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn from_env() -> Result<Self, AdapterError> {
         let gateway_url =
             env::var("ARWEAVE_GATEWAY_URL").unwrap_or_else(|_| DEFAULT_GATEWAY_URL.to_string());
