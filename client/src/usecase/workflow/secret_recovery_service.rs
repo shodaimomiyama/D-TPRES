@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use crate::domain::value_objects::SecretId;
 use crate::usecase::core::crypto::{CFragData, Capsule, CryptoService, SecretKey, ShamirShare};
+use crate::usecase::core::storage::ArweaveStorageService;
 use crate::usecase::dto::{SecretRecoveryRequest, SecretRecoveryResult};
 use crate::usecase::error::{WorkflowError, WorkflowResult};
 
@@ -74,17 +75,20 @@ pub trait SecretRecoveryWorkflowService: Send + Sync {
 ///
 /// Orchestrates CryptoService and StorageService to implement
 /// the complete Phase 3 secret recovery workflow.
-pub struct SecretRecoveryWorkflowServiceImpl<C: CryptoService> {
+pub struct SecretRecoveryWorkflowServiceImpl<C: CryptoService, S: ArweaveStorageService> {
     crypto_service: Arc<C>,
-    // TODO: Add StorageService when AO communication is implemented (Issue #47)
-    // storage_service: Arc<S>,
+    #[allow(dead_code)]
+    storage_service: Arc<S>,
 }
 
 #[allow(clippy::cast_possible_truncation, clippy::indexing_slicing)]
-impl<C: CryptoService> SecretRecoveryWorkflowServiceImpl<C> {
+impl<C: CryptoService, S: ArweaveStorageService> SecretRecoveryWorkflowServiceImpl<C, S> {
     /// Create a new SecretRecoveryWorkflowServiceImpl
-    pub fn new(crypto_service: Arc<C>) -> Self {
-        Self { crypto_service }
+    pub fn new(crypto_service: Arc<C>, storage_service: Arc<S>) -> Self {
+        Self {
+            crypto_service,
+            storage_service,
+        }
     }
 
     /// Validate input parameters for secret recovery
@@ -230,7 +234,9 @@ impl<C: CryptoService> SecretRecoveryWorkflowServiceImpl<C> {
 }
 
 #[allow(clippy::cast_possible_truncation)]
-impl<C: CryptoService> SecretRecoveryWorkflowService for SecretRecoveryWorkflowServiceImpl<C> {
+impl<C: CryptoService, S: ArweaveStorageService> SecretRecoveryWorkflowService
+    for SecretRecoveryWorkflowServiceImpl<C, S>
+{
     fn execute_secret_recovery(
         &self,
         request: SecretRecoveryRequest,
@@ -296,10 +302,13 @@ impl<C: CryptoService> SecretRecoveryWorkflowService for SecretRecoveryWorkflowS
 mod tests {
     use super::*;
     use crate::usecase::core::crypto::CryptoServiceImpl;
+    use crate::usecase::core::storage::ArweaveStorageServiceImpl;
 
-    fn create_test_service() -> SecretRecoveryWorkflowServiceImpl<CryptoServiceImpl> {
+    fn create_test_service(
+    ) -> SecretRecoveryWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
         let crypto = Arc::new(CryptoServiceImpl::new());
-        SecretRecoveryWorkflowServiceImpl::new(crypto)
+        let storage = Arc::new(ArweaveStorageServiceImpl::default());
+        SecretRecoveryWorkflowServiceImpl::new(crypto, storage)
     }
 
     fn create_test_request(crypto: &CryptoServiceImpl) -> SecretRecoveryRequest {

@@ -68,11 +68,12 @@ use zeroize::Zeroizing;
 
 use crate::domain::value_objects::SecretId;
 use crate::usecase::core::crypto::{CryptoService, PublicKey, SecretKey};
+use crate::usecase::core::storage::ArweaveStorageService;
 use crate::usecase::dto::{SecretRecoveryResult, SecretSharingResult};
 use crate::usecase::workflow::secret_recovery_service::SecretRecoveryWorkflowService;
 use crate::usecase::workflow::secret_sharing_service::SecretSharingWorkflowService;
 
-impl<C: CryptoService> ActionsContainer<C> {
+impl<C: CryptoService, S: ArweaveStorageService> ActionsContainer<C, S> {
     /// Share a secret by splitting and distributing it
     ///
     /// This is the main Phase 1 API endpoint that:
