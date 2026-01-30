@@ -117,7 +117,8 @@ impl<C: ArweaveClient> ArweaveCFragRepository<C> {
     }
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl<C: ArweaveClient> Repository<CFrag, CFragId> for ArweaveCFragRepository<C> {
     async fn save(&self, entity: &CFrag) -> DomainResult<()> {
         let stored = StoredCFrag::from_entity(entity);
@@ -213,7 +214,8 @@ impl<C: ArweaveClient> Repository<CFrag, CFragId> for ArweaveCFragRepository<C> 
     }
 }
 
-#[async_trait]
+#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait)]
 impl<C: ArweaveClient> CFragRepository for ArweaveCFragRepository<C> {
     async fn find_by_secret_id(&self, secret_id: &SecretId) -> DomainResult<Vec<CFrag>> {
         use std::collections::HashMap;
@@ -287,30 +289,6 @@ impl<C: ArweaveClient> CFragRepository for ArweaveCFragRepository<C> {
     async fn count_by_secret_id(&self, secret_id: &SecretId) -> DomainResult<usize> {
         let cfrags = self.find_by_secret_id(secret_id).await?;
         Ok(cfrags.len())
-    }
-
-    async fn retrieve_from_ao_process(
-        &self,
-        _process_id: &str,
-        _secret_id: &SecretId,
-    ) -> DomainResult<Vec<CFrag>> {
-        // AO integration will be implemented in Task 10
-        Err(crate::domain::errors::DomainError::StorageError {
-            operation: "retrieve_from_ao_process".to_string(),
-            details: "AO integration not yet implemented".to_string(),
-        })
-    }
-
-    async fn batch_retrieve_from_ao_processes(
-        &self,
-        _process_ids: &[&str],
-        _secret_id: &SecretId,
-    ) -> DomainResult<Vec<CFrag>> {
-        // AO integration will be implemented in Task 10
-        Err(crate::domain::errors::DomainError::StorageError {
-            operation: "batch_retrieve_from_ao_processes".to_string(),
-            details: "AO integration not yet implemented".to_string(),
-        })
     }
 }
 

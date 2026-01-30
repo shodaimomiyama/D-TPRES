@@ -78,7 +78,7 @@ impl<C: CryptoService> ShareValidator<C> {
         if threshold < MIN_THRESHOLD {
             return Err(ValidationError::with_field(
                 error_codes::THRESHOLD_BELOW_MIN,
-                format!("Threshold must be at least {}", MIN_THRESHOLD),
+                format!("Threshold must be at least {MIN_THRESHOLD}"),
                 "threshold",
             ));
         }
@@ -87,7 +87,7 @@ impl<C: CryptoService> ShareValidator<C> {
         if total_shares > MAX_SHARES {
             return Err(ValidationError::with_field(
                 error_codes::TOTAL_SHARES_EXCEEDS_MAX,
-                format!("Total shares cannot exceed {}", MAX_SHARES),
+                format!("Total shares cannot exceed {MAX_SHARES}"),
                 "total_shares",
             ));
         }

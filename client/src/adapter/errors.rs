@@ -27,6 +27,22 @@ pub enum AdapterError {
 
     /// Connection to external system failed
     ConnectionError { details: String },
+
+    /// Network operation failed with retry information
+    NetworkError {
+        context: String,
+        message: String,
+        retries_attempted: u32,
+    },
+
+    /// Configuration error
+    ConfigurationError { context: String, message: String },
+
+    /// Validation error
+    ValidationError { context: String, message: String },
+
+    /// Query error (GraphQL or similar)
+    QueryError { context: String, message: String },
 }
 
 impl fmt::Display for AdapterError {
@@ -47,6 +63,25 @@ impl fmt::Display for AdapterError {
             Self::ConnectionError { details } => {
                 write!(f, "Connection error: {details}")
             }
+            Self::NetworkError {
+                context,
+                message,
+                retries_attempted,
+            } => {
+                write!(
+                    f,
+                    "Network error in '{context}' after {retries_attempted} retries: {message}"
+                )
+            }
+            Self::ConfigurationError { context, message } => {
+                write!(f, "Configuration error in '{context}': {message}")
+            }
+            Self::ValidationError { context, message } => {
+                write!(f, "Validation error in '{context}': {message}")
+            }
+            Self::QueryError { context, message } => {
+                write!(f, "Query error in '{context}': {message}")
+            }
         }
     }
 }
@@ -66,6 +101,24 @@ impl From<AdapterError> for DomainError {
             AdapterError::ConnectionError { details } => Self::StorageError {
                 operation: "connection".to_string(),
                 details,
+            },
+            AdapterError::NetworkError {
+                context, message, ..
+            } => Self::StorageError {
+                operation: context,
+                details: message,
+            },
+            AdapterError::ConfigurationError { context, message } => Self::StorageError {
+                operation: format!("configuration:{context}"),
+                details: message,
+            },
+            AdapterError::ValidationError { context, message } => Self::StorageError {
+                operation: format!("validation:{context}"),
+                details: message,
+            },
+            AdapterError::QueryError { context, message } => Self::StorageError {
+                operation: format!("query:{context}"),
+                details: message,
             },
         }
     }
@@ -101,6 +154,39 @@ impl AdapterError {
     pub fn connection_error(details: &str) -> Self {
         Self::ConnectionError {
             details: details.to_string(),
+        }
+    }
+
+    /// Create network error
+    pub fn network_error(context: &str, message: &str, retries_attempted: u32) -> Self {
+        Self::NetworkError {
+            context: context.to_string(),
+            message: message.to_string(),
+            retries_attempted,
+        }
+    }
+
+    /// Create configuration error
+    pub fn configuration_error(context: &str, message: &str) -> Self {
+        Self::ConfigurationError {
+            context: context.to_string(),
+            message: message.to_string(),
+        }
+    }
+
+    /// Create validation error
+    pub fn validation_error(context: &str, message: &str) -> Self {
+        Self::ValidationError {
+            context: context.to_string(),
+            message: message.to_string(),
+        }
+    }
+
+    /// Create query error
+    pub fn query_error(context: &str, message: &str) -> Self {
+        Self::QueryError {
+            context: context.to_string(),
+            message: message.to_string(),
         }
     }
 }
