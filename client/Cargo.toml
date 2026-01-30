@@ -20,6 +20,9 @@ thiserror = "1"
 async-trait = "0.1"
 base64 = "0.22"
 serde_json = "1.0"
+rsa = "0.9"
+sha2 = { version = "0.10", features = ["oid"] }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 
 [dev-dependencies]
 cw-multi-test = "0.13.4"

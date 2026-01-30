@@ -150,6 +150,9 @@ pub struct AOResponse {
     pub data: Option<Binary>,
     /// Events emitted during execution
     pub events: Vec<AOEvent>,
+    /// MU-returned message ID for AO Link verification
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message_id: Option<String>,
 }
 
 impl AOResponse {
@@ -159,6 +162,7 @@ impl AOResponse {
             success: true,
             data: None,
             events: Vec::new(),
+            message_id: None,
         }
     }
 
@@ -168,6 +172,7 @@ impl AOResponse {
             success: true,
             data: Some(data),
             events: Vec::new(),
+            message_id: None,
         }
     }
 
@@ -177,6 +182,7 @@ impl AOResponse {
             success: true,
             data: None,
             events,
+            message_id: None,
         }
     }
 
