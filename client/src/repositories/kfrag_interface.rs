@@ -48,21 +48,6 @@ pub trait KFragRepository: Repository<KFrag, KFragId> {
 
     /// Delete all KFrags associated with a Secret
     async fn delete_by_secret_id(&self, secret_id: &SecretId) -> DomainResult<()>;
-
-    /// Send a KFrag to an AO Process (Owner-Process)
-    ///
-    /// Delegates a single KFrag to the specified AO process for storage.
-    async fn send_to_ao_process(&self, process_id: &str, kfrag: &KFrag) -> DomainResult<()>;
-
-    /// Batch send multiple KFrags to an AO Process
-    ///
-    /// Delegates multiple KFrags to the specified AO process.
-    /// Returns the IDs of successfully sent KFrags.
-    async fn batch_send_to_ao_process(
-        &self,
-        process_id: &str,
-        kfrags: &[KFrag],
-    ) -> DomainResult<Vec<KFragId>>;
 }
 
 #[cfg(test)]

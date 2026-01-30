@@ -46,26 +46,6 @@ pub trait CFragRepository: Repository<CFrag, CFragId> {
 
     /// Count CFrags associated with a Secret
     async fn count_by_secret_id(&self, secret_id: &SecretId) -> DomainResult<usize>;
-
-    /// Retrieve CFrags from an AO Process (Holder-Process)
-    ///
-    /// Collects CFrags from the specified AO process for a given secret.
-    /// Used by Requester-Process to gather re-encrypted fragments.
-    async fn retrieve_from_ao_process(
-        &self,
-        process_id: &str,
-        secret_id: &SecretId,
-    ) -> DomainResult<Vec<CFrag>>;
-
-    /// Batch retrieve CFrags from multiple AO Processes
-    ///
-    /// Collects CFrags from multiple holder processes.
-    /// Returns successfully retrieved CFrags (partial success is possible).
-    async fn batch_retrieve_from_ao_processes(
-        &self,
-        process_ids: &[&str],
-        secret_id: &SecretId,
-    ) -> DomainResult<Vec<CFrag>>;
 }
 
 #[cfg(test)]
