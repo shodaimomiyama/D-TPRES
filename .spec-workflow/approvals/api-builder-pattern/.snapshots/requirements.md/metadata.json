@@ -1,0 +1,14 @@
+{
+  "filePath": ".spec-workflow/specs/api-builder-pattern/requirements.md",
+  "currentVersion": 1,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-01-28T04:14:50.225Z",
+      "trigger": "initial",
+      "approvalId": "approval_1769573690209_j9p42ghwl",
+      "approvalTitle": "API Builder Pattern - Requirements Document"
+    }
+  ]
+}

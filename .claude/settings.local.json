@@ -45,7 +45,16 @@
       "Bash(gh issue view:*)",
       "WebFetch(domain:cookbook_ao.arweave.net)",
       "Bash(tree:*)",
-      "Bash(gh label list:*)"
+      "Bash(gh label list:*)",
+      "Bash(npm view:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Skill(dig:dig)",
+      "Bash(gh issue comment:*)",
+      "Bash(cargo read-manifest:*)",
+      "Bash(gh api:*)",
+      "Bash(gh issue create --title \"Implement JWK wallet loading in DTpresClient::init\" --label \"enhancement\" --body \"$\\(cat <<''EOF''\n## Summary\n\n`DTpresClient::init` currently only validates that the JWK wallet file exists but uses a placeholder value for `wallet_address`. The actual JWK parsing and Arweave address derivation need to be implemented.\n\n**File:** `client/src/actions/client.rs` — `init\\(\\)` method\n\n## Current State\n\n- File existence check is implemented via `wallet_path` validation\n- `wallet_address` is set to a placeholder value \\(`\"ar_address_from_jwk\"`\\)\n- No actual JWK parsing or address derivation\n\n## Required Work\n\n- [ ] Define JWK struct for Arweave wallet format \\(RSA key fields: `n`, `e`, `d`, `p`, `q`, `dp`, `dq`, `qi`\\)\n- [ ] Parse JWK file in `init\\(\\)` and extract the public key modulus \\(`n` field\\)\n- [ ] Derive Arweave address using SHA-256 hash of the public key modulus \\(Base64URL-encoded\\)\n- [ ] Add `sha2` crate to `client/Cargo.toml`\n- [ ] Apply `Zeroize` / `ZeroizeOnDrop` to JWK struct \\(contains private key material\\)\n- [ ] Update integration tests to use valid JWK fixtures\n\n## Context\n\nThis was identified during PR #59 review as a follow-up task. The current placeholder approach was intentional to keep the PR focused on the API facade and builder pattern.\nEOF\n\\)\")",
+      "Bash(rustc:*)",
+      "Bash(gh pr view:*)"
     ],
     "deny": []
   },
