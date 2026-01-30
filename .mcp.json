@@ -30,7 +30,7 @@
       "args": [
         "-y",
         "@pimzino/spec-workflow-mcp@latest",
-        "${PWD}"
+        "/Users/momiyamashodai/Develop/MyProject/D-TPRES/D-TPRES-worktrees/feature-production-ao-client"
       ]
     }
   }

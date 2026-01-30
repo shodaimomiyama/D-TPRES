@@ -45,7 +45,10 @@
       "Bash(gh issue view:*)",
       "WebFetch(domain:cookbook_ao.arweave.net)",
       "Bash(tree:*)",
-      "Bash(gh label list:*)"
+      "Bash(gh label list:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(echo:*)",
+      "Bash(cargo tree:*)"
     ],
     "deny": []
   },
