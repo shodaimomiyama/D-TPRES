@@ -232,7 +232,6 @@ pub fn handle_reencrypt(
 pub fn handle_get_cfrag(
     deps: Deps,
     env: Env,
-    _info: MessageInfo,
     kfrag_id: String,
     capsule_id: String,
 ) -> StdResult<Binary> {
@@ -783,15 +782,14 @@ pub fn execute_handler(
     }
 }
 
-pub fn query_handler(deps: Deps, env: Env, info: MessageInfo, msg: QueryMsg) -> StdResult<Binary> {
-    // メッセージバリデーション
+pub fn query_handler(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     msg.validate().map_err(|e| StdError::generic_err(e))?;
 
     match msg {
         QueryMsg::GetCFrag {
             kfrag_id,
             capsule_id,
-        } => handle_get_cfrag(deps, env, info, kfrag_id, capsule_id),
+        } => handle_get_cfrag(deps, env, kfrag_id, capsule_id),
         QueryMsg::ListCapsulesByKFrag {
             kfrag_id,
             start_after,

@@ -38,13 +38,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> C
 
 // --------------------- クエリ ---------------------
 pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
-    // MessageInfo不要だが、統一インターフェースのためmock作成
-    let mock_info = MessageInfo {
-        sender: deps.api.addr_validate("querier")?,
-        funds: vec![],
-    };
-
-    query_handler(deps, env, mock_info, msg)
+    query_handler(deps, env, msg)
 }
 
 // tests moved to `tests/`
