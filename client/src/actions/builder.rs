@@ -7,6 +7,8 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use zeroize::Zeroizing;
+
 use crate::actions::error::{ActionError, ActionResult};
 use crate::actions::options::ShareOptions;
 use crate::domain::value_objects::SecretId;
@@ -27,7 +29,7 @@ pub struct NotSet;
 pub struct ShareBuilder<C: CryptoService, Secret, Threshold, TotalShares, OwnerKey, RequesterKey> {
     container: Arc<ActionsContainer<C>>,
     process_id: String,
-    secret: Option<Vec<u8>>,
+    secret: Option<Zeroizing<Vec<u8>>>,
     threshold: Option<u8>,
     total_shares: Option<u8>,
     owner_key: Option<SecretKey>,
@@ -57,7 +59,7 @@ impl<C: CryptoService, T, N, O, R> ShareBuilder<C, NotSet, T, N, O, R> {
         ShareBuilder {
             container: self.container,
             process_id: self.process_id,
-            secret: Some(secret),
+            secret: Some(Zeroizing::new(secret)),
             threshold: self.threshold,
             total_shares: self.total_shares,
             owner_key: self.owner_key,
@@ -142,7 +144,8 @@ impl<C: CryptoService, S, T, N, O, R> ShareBuilder<C, S, T, N, O, R> {
 impl<C: CryptoService> ShareBuilder<C, Set, Set, Set, Set, Set> {
     #[allow(deprecated)]
     pub fn execute(self) -> ActionResult<SecretSharingResult> {
-        let secret = self.secret.expect("secret guaranteed by type state");
+        let mut secret = self.secret.expect("secret guaranteed by type state");
+        let secret = std::mem::take(&mut *secret);
         let threshold = self.threshold.expect("threshold guaranteed by type state");
         let total_shares = self
             .total_shares
@@ -178,6 +181,10 @@ impl<C: CryptoService> ShareBuilder<C, Set, Set, Set, Set, Set> {
 ///
 /// Required fields: secret_id, requester_key.
 /// `execute()` is only callable when both type parameters are `Set`.
+///
+/// Uses a single `process_id` (set at construction) because `DTpresClient`
+/// is designed for self-service usage where one user owns both the owner
+/// and requester roles within the same AO process context.
 pub struct RecoverBuilder<C: CryptoService, SecretIdState, RequesterKeyState> {
     container: Arc<ActionsContainer<C>>,
     process_id: String,
