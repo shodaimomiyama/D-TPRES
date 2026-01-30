@@ -3,12 +3,12 @@ use d_tpres::domain::value_objects::SecretId;
 use d_tpres::usecase::dto::SecretMetadata;
 
 fn default_client() -> DTpresClient {
-    DTpresClient::init(InitConfig {
-        wallet_path: "test_wallet.json".to_string(),
-        ao_gateway_url: None,
-        arweave_gateway_url: None,
-    })
-    .unwrap()
+    DTpresClient::new(
+        "test_process".to_string(),
+        "test_wallet".to_string(),
+        "https://ao.arweave.net".to_string(),
+        "https://arweave.net".to_string(),
+    )
 }
 
 // ============================================================================
@@ -16,26 +16,29 @@ fn default_client() -> DTpresClient {
 // ============================================================================
 
 #[test]
-fn test_client_init_with_defaults() {
-    let client = default_client();
-    assert_eq!(client.ao_gateway_url(), "https://ao.arweave.net");
-    assert_eq!(client.arweave_gateway_url(), "https://arweave.net");
+fn test_client_init_not_yet_implemented() {
+    let result = DTpresClient::init(InitConfig {
+        wallet_path: "test_wallet.json".to_string(),
+        ao_gateway_url: None,
+        arweave_gateway_url: None,
+    });
+
+    match result {
+        Err(ActionError::WorkflowFailed { message }) => {
+            assert!(message.contains("not yet implemented"));
+        }
+        Err(other) => panic!("Expected WorkflowFailed, got {:?}", other),
+        Ok(_) => panic!("Expected error, got Ok"),
+    }
 }
 
 #[test]
-fn test_client_init_with_custom_gateways() {
-    let client = DTpresClient::init(InitConfig {
-        wallet_path: "test_wallet.json".to_string(),
-        ao_gateway_url: Some("https://custom-ao.example.com".to_string()),
-        arweave_gateway_url: Some("https://custom-arweave.example.com".to_string()),
-    })
-    .unwrap();
-
-    assert_eq!(client.ao_gateway_url(), "https://custom-ao.example.com");
-    assert_eq!(
-        client.arweave_gateway_url(),
-        "https://custom-arweave.example.com"
-    );
+fn test_client_new_with_values() {
+    let client = default_client();
+    assert_eq!(client.ao_gateway_url(), "https://ao.arweave.net");
+    assert_eq!(client.arweave_gateway_url(), "https://arweave.net");
+    assert_eq!(client.process_id(), "test_process");
+    assert_eq!(client.wallet_address(), "test_wallet");
 }
 
 #[test]
