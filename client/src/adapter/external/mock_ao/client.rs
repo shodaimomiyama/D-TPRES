@@ -13,7 +13,7 @@ use std::sync::RwLock;
 
 use async_trait::async_trait;
 
-use super::ao_message::{
+use super::message::{
     AOEvent, AOResponse, Binary, BlobMeta, CapsuleInfo, CapsuleStatus, ExecuteMsg,
     GetCFragResponse, ListCapsulesByKFragResponse, QueryMsg, ValidateMessage,
 };

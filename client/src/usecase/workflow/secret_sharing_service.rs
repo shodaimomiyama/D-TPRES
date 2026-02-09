@@ -329,18 +329,209 @@ impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowService
     clippy::indexing_slicing,
     clippy::redundant_clone,
     clippy::cast_possible_truncation,
-    clippy::arithmetic_side_effects
+    clippy::arithmetic_side_effects,
+    clippy::unwrap_used
 )]
 mod tests {
     use super::*;
+    use crate::service::error::ServiceResult;
     use crate::usecase::core::crypto::CryptoServiceImpl;
-    use crate::usecase::core::storage::ArweaveStorageServiceImpl;
+    use crate::usecase::core::storage::{
+        ArweaveStorageServiceImpl, ArweaveTransaction, BatchResult, QueryParams, Tag,
+        TransactionStatus,
+    };
+    use std::sync::RwLock;
+
+    // ========================================================================
+    // MockStorageService (Task 8)
+    // ========================================================================
+
+    /// Mock implementation of ArweaveStorageService for testing
+    struct MockStorageService {
+        /// Stores all data passed to store_data()
+        stored_data: Arc<RwLock<Vec<StoredItem>>>,
+        /// Stores all batch items passed to batch_store()
+        batch_items: Arc<RwLock<Vec<(Vec<u8>, Vec<Tag>)>>>,
+        /// Stores kFrag calls
+        kfrag_calls: Arc<RwLock<Vec<KFragCall>>>,
+        /// Stores query calls
+        query_results: Arc<RwLock<Vec<ArweaveTransaction>>>,
+        /// Transaction counter
+        tx_counter: Arc<RwLock<u64>>,
+        /// Controls whether send_kfrag should fail
+        should_fail_kfrag: Arc<RwLock<bool>>,
+        /// Controls whether store_data should fail
+        should_fail_store: Arc<RwLock<bool>>,
+    }
+
+    #[derive(Debug, Clone)]
+    struct StoredItem {
+        data: Vec<u8>,
+        tags: Vec<Tag>,
+        tx_id: String,
+    }
+
+    #[derive(Debug, Clone)]
+    struct KFragCall {
+        kfrag_count: usize,
+        owner_process_id: String,
+    }
+
+    impl MockStorageService {
+        fn new() -> Self {
+            Self {
+                stored_data: Arc::new(RwLock::new(Vec::new())),
+                batch_items: Arc::new(RwLock::new(Vec::new())),
+                kfrag_calls: Arc::new(RwLock::new(Vec::new())),
+                query_results: Arc::new(RwLock::new(Vec::new())),
+                tx_counter: Arc::new(RwLock::new(0)),
+                should_fail_kfrag: Arc::new(RwLock::new(false)),
+                should_fail_store: Arc::new(RwLock::new(false)),
+            }
+        }
+
+        fn get_stored_data(&self) -> Vec<StoredItem> {
+            self.stored_data.read().unwrap().clone()
+        }
+
+        fn get_batch_items(&self) -> Vec<(Vec<u8>, Vec<Tag>)> {
+            self.batch_items.read().unwrap().clone()
+        }
+
+        fn get_kfrag_calls(&self) -> Vec<KFragCall> {
+            self.kfrag_calls.read().unwrap().clone()
+        }
+
+        fn set_query_results(&self, results: Vec<ArweaveTransaction>) {
+            *self.query_results.write().unwrap() = results;
+        }
+
+        fn set_should_fail_kfrag(&self, should_fail: bool) {
+            *self.should_fail_kfrag.write().unwrap() = should_fail;
+        }
+
+        fn set_should_fail_store(&self, should_fail: bool) {
+            *self.should_fail_store.write().unwrap() = should_fail;
+        }
+
+        fn generate_tx_id(&self) -> String {
+            let mut counter = self.tx_counter.write().unwrap();
+            *counter += 1;
+            format!("mock_tx_{:016x}", *counter)
+        }
+    }
+
+    impl ArweaveStorageService for MockStorageService {
+        fn store_data(&self, data: &[u8], tags: Vec<Tag>) -> ServiceResult<String> {
+            if *self.should_fail_store.read().unwrap() {
+                return Err(crate::service::error::ServiceError::storage_error(
+                    "Mock storage failure",
+                ));
+            }
+
+            let tx_id = self.generate_tx_id();
+            self.stored_data.write().unwrap().push(StoredItem {
+                data: data.to_vec(),
+                tags,
+                tx_id: tx_id.clone(),
+            });
+            Ok(tx_id)
+        }
+
+        fn retrieve_data(&self, transaction_id: &str) -> ServiceResult<ArweaveTransaction> {
+            let stored = self.stored_data.read().unwrap();
+            stored
+                .iter()
+                .find(|item| item.tx_id == transaction_id)
+                .map(|item| ArweaveTransaction {
+                    id: item.tx_id.clone(),
+                    data: item.data.clone(),
+                    tags: item.tags.clone(),
+                    timestamp: 0,
+                })
+                .ok_or_else(|| {
+                    crate::service::error::ServiceError::not_found(format!(
+                        "Transaction {} not found",
+                        transaction_id
+                    ))
+                })
+        }
+
+        fn query_by_tags(&self, _params: QueryParams) -> ServiceResult<Vec<ArweaveTransaction>> {
+            Ok(self.query_results.read().unwrap().clone())
+        }
+
+        fn check_transaction_status(
+            &self,
+            _transaction_id: &str,
+        ) -> ServiceResult<TransactionStatus> {
+            Ok(TransactionStatus::Confirmed)
+        }
+
+        fn batch_store(&self, items: Vec<(Vec<u8>, Vec<Tag>)>) -> ServiceResult<BatchResult> {
+            if *self.should_fail_store.read().unwrap() {
+                return Err(crate::service::error::ServiceError::storage_error(
+                    "Mock batch storage failure",
+                ));
+            }
+
+            self.batch_items.write().unwrap().extend(items.clone());
+
+            let successful: Vec<String> = items.iter().map(|_| self.generate_tx_id()).collect();
+            Ok(BatchResult {
+                successful,
+                failed: Vec::new(),
+            })
+        }
+
+        fn exists(&self, transaction_id: &str) -> ServiceResult<bool> {
+            let stored = self.stored_data.read().unwrap();
+            Ok(stored.iter().any(|item| item.tx_id == transaction_id))
+        }
+
+        fn update_tags(&self, transaction_id: &str, new_tags: Vec<Tag>) -> ServiceResult<String> {
+            let data = self.retrieve_data(transaction_id)?.data;
+            self.store_data(&data, new_tags)
+        }
+
+        fn send_kfrag_to_owner_process(
+            &self,
+            kfrags: &[KeyFragment],
+            owner_process_id: &str,
+        ) -> ServiceResult<()> {
+            if *self.should_fail_kfrag.read().unwrap() {
+                return Err(crate::service::error::ServiceError::ao_network_error(
+                    "Mock kFrag send failure",
+                ));
+            }
+
+            self.kfrag_calls.write().unwrap().push(KFragCall {
+                kfrag_count: kfrags.len(),
+                owner_process_id: owner_process_id.to_string(),
+            });
+            Ok(())
+        }
+    }
+
+    // ========================================================================
+    // Test Helper Functions
+    // ========================================================================
 
     fn create_test_service()
     -> SecretSharingWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
         let crypto = Arc::new(CryptoServiceImpl::new());
         let storage = Arc::new(ArweaveStorageServiceImpl::default());
         SecretSharingWorkflowServiceImpl::new(crypto, storage)
+    }
+
+    fn create_mock_service() -> (
+        SecretSharingWorkflowServiceImpl<CryptoServiceImpl, MockStorageService>,
+        Arc<MockStorageService>,
+    ) {
+        let crypto = Arc::new(CryptoServiceImpl::new());
+        let storage = Arc::new(MockStorageService::new());
+        let service = SecretSharingWorkflowServiceImpl::new(crypto, storage.clone());
+        (service, storage)
     }
 
     fn create_test_request(crypto: &CryptoServiceImpl) -> SecretSharingRequest {

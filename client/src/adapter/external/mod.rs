@@ -1,18 +1,14 @@
 //! External system adapters module
 //!
 //! Provides adapters for external system integrations including
-//! Arweave network communication.
+//! Arweave network communication and AO Network mock client.
 
 pub mod arweave;
+pub mod mock_ao;
 
 pub use arweave::{ArweaveClientConfig, ArweaveClientImpl, ArweaveWallet};
-
-pub mod ao_client;
-pub mod ao_message;
-
-pub use ao_client::{AOClient, MockAOClient, MockConfig};
-pub use ao_message::{
-    AOAttribute, AOEvent, AOMessageTags, AOResponse, Binary, BlobMeta, CapsuleInfo, CapsuleStatus,
-    ExecuteMsg, GetCFragResponse, ListCapsulesByKFragResponse, MAX_BINARY_SIZE, MAX_ID_LENGTH,
-    QueryMsg, ValidateMessage,
+pub use mock_ao::{
+    AOAttribute, AOClient, AOEvent, AOMessageTags, AOResponse, Binary, BlobMeta, CapsuleInfo,
+    CapsuleStatus, ExecuteMsg, GetCFragResponse, ListCapsulesByKFragResponse, MockAOClient,
+    MockConfig, QueryMsg, ValidateMessage, MAX_BINARY_SIZE, MAX_ID_LENGTH,
 };
