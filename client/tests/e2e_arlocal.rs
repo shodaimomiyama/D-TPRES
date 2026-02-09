@@ -33,11 +33,9 @@
 
 #![allow(clippy::unwrap_used)]
 
-use d_tpres::adapter::external::ao_client::AOClient;
-use d_tpres::adapter::external::ao_config::AOConfig;
-use d_tpres::adapter::external::ao_message::{Binary, ExecuteMsg, QueryMsg};
-use d_tpres::adapter::external::data_item::ArweaveJWK;
-use d_tpres::adapter::external::production_ao_client::ProductionAOClient;
+use d_tpres::adapter::external::ao::{
+    AOClient, AOConfig, ArweaveJWK, Binary, ExecuteMsg, ProductionAOClient, QueryMsg,
+};
 
 fn arlocal_config() -> AOConfig {
     let mu = std::env::var("AO_MU_URL").unwrap_or_else(|_| "http://localhost:4002".to_string());

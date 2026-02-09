@@ -1,11 +1,13 @@
+#![allow(clippy::disallowed_names)]
+
 use async_trait::async_trait;
 use reqwest::Client;
 
+use super::client::AOClient;
+use super::config::AOConfig;
+use super::data_item::{ArweaveJWK, DataItemBuilder, DataItemSigner};
+use super::message::{AOResponse, Binary, ExecuteMsg, QueryMsg};
 use crate::adapter::errors::AOCommunicationError;
-use crate::adapter::external::ao_client::AOClient;
-use crate::adapter::external::ao_config::AOConfig;
-use crate::adapter::external::ao_message::{AOResponse, Binary, ExecuteMsg, QueryMsg};
-use crate::adapter::external::data_item::{ArweaveJWK, DataItemBuilder, DataItemSigner};
 
 pub struct ProductionAOClient {
     config: AOConfig,
@@ -242,10 +244,8 @@ impl AOClient for ProductionAOClient {
     }
 
     async fn query(&self, process_id: &str, msg: QueryMsg) -> Result<Binary, AOCommunicationError> {
-        let item = DataItemBuilder::build_read_only(process_id, &msg)?;
-        let signed_bytes = self.signer.sign(&item)?;
-        let message_id = self.post_to_mu(&signed_bytes).await?;
-        let result_json = self.fetch_cu_result(process_id, &message_id).await?;
+        let body = DataItemBuilder::build_query_body(process_id, &msg)?;
+        let result_json = self.post_cu_dry_run(process_id, body).await?;
         Self::parse_cu_dryrun_data(process_id, &result_json)
     }
 
@@ -254,11 +254,9 @@ impl AOClient for ProductionAOClient {
         process_id: &str,
         msg: ExecuteMsg,
     ) -> Result<AOResponse, AOCommunicationError> {
-        let item = DataItemBuilder::build_dry_run(process_id, &msg)?;
-        let signed_bytes = self.signer.sign(&item)?;
-        let message_id = self.post_to_mu(&signed_bytes).await?;
-        let result_json = self.fetch_cu_result(process_id, &message_id).await?;
-        Self::parse_cu_result(process_id, &result_json, Some(message_id))
+        let body = DataItemBuilder::build_dry_run_body(process_id, &msg)?;
+        let result_json = self.post_cu_dry_run(process_id, body).await?;
+        Self::parse_cu_result(process_id, &result_json, None)
     }
 }
 
@@ -269,7 +267,7 @@ mod tests {
     use wiremock::matchers::{method, path_regex};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
-    use crate::adapter::external::data_item::ArweaveJWK;
+    use super::super::data_item::ArweaveJWK;
 
     fn test_jwk() -> ArweaveJWK {
         use base64::Engine;

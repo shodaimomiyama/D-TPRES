@@ -1,7 +1,7 @@
-//! AO Network client trait and mock implementation
+//! Mock AO Network client implementation
 //!
-//! This module provides the AOClient trait for abstracting AO Network communication
-//! and a MockAOClient implementation for testing and development.
+//! Provides MockAOClient for testing and development without
+//! actual AO Network connection.
 
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::disallowed_names)]
@@ -13,59 +13,11 @@ use std::sync::RwLock;
 
 use async_trait::async_trait;
 
-use super::ao_message::{
-    AOEvent, AOResponse, Binary, BlobMeta, CapsuleInfo, CapsuleStatus, ExecuteMsg,
+use crate::adapter::errors::AOCommunicationError;
+use crate::adapter::external::ao::{
+    AOClient, AOEvent, AOResponse, Binary, BlobMeta, CapsuleInfo, CapsuleStatus, ExecuteMsg,
     GetCFragResponse, ListCapsulesByKFragResponse, QueryMsg, ValidateMessage,
 };
-use crate::adapter::errors::AOCommunicationError;
-
-/// AOClient trait for AO Network communication
-///
-/// This trait abstracts the communication with AO Network processes,
-/// enabling dependency injection and easy mocking for tests.
-#[async_trait]
-pub trait AOClient: Send + Sync {
-    /// Execute a state-changing message to an AO Process
-    ///
-    /// # Arguments
-    /// * `process_id` - The AO Process ID to send the message to
-    /// * `msg` - The execute message to send
-    ///
-    /// # Returns
-    /// * `Ok(AOResponse)` - The response from the process
-    /// * `Err(AOCommunicationError)` - If the execution fails
-    async fn execute(
-        &self,
-        process_id: &str,
-        msg: ExecuteMsg,
-    ) -> Result<AOResponse, AOCommunicationError>;
-
-    /// Query an AO Process (read-only, via dry_run)
-    ///
-    /// # Arguments
-    /// * `process_id` - The AO Process ID to query
-    /// * `msg` - The query message to send
-    ///
-    /// # Returns
-    /// * `Ok(Binary)` - The query result as binary data
-    /// * `Err(AOCommunicationError)` - If the query fails
-    async fn query(&self, process_id: &str, msg: QueryMsg) -> Result<Binary, AOCommunicationError>;
-
-    /// Dry-run execution (read-only state inspection)
-    ///
-    /// # Arguments
-    /// * `process_id` - The AO Process ID to dry-run against
-    /// * `msg` - The execute message to simulate
-    ///
-    /// # Returns
-    /// * `Ok(AOResponse)` - The simulated response
-    /// * `Err(AOCommunicationError)` - If the dry-run fails
-    async fn dry_run(
-        &self,
-        process_id: &str,
-        msg: ExecuteMsg,
-    ) -> Result<AOResponse, AOCommunicationError>;
-}
 
 /// Configuration for MockAOClient behavior
 #[derive(Debug, Clone, Default)]
@@ -544,7 +496,6 @@ mod tests {
     async fn test_execute_reencrypt() {
         let client = MockAOClient::new();
 
-        // First delegate a kfrag and capsule
         let _ = client
             .execute(
                 "process-1",
@@ -566,7 +517,6 @@ mod tests {
             )
             .await;
 
-        // Then reencrypt
         let result = client
             .execute(
                 "process-1",
@@ -589,7 +539,6 @@ mod tests {
     async fn test_query_get_cfrag() {
         let client = MockAOClient::new();
 
-        // Setup: delegate kfrag, capsule, and reencrypt
         let _ = client
             .execute(
                 "process-1",
@@ -610,7 +559,6 @@ mod tests {
             )
             .await;
 
-        // Query the cfrag
         let result = client
             .query(
                 "process-1",
@@ -652,7 +600,6 @@ mod tests {
     async fn test_query_list_capsules_by_kfrag() {
         let client = MockAOClient::new();
 
-        // Setup: delegate multiple capsules
         for i in 1..=5 {
             let _ = client
                 .execute(
