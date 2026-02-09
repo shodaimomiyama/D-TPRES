@@ -40,13 +40,14 @@ impl ProductionAOClient {
             .body(item_bytes.to_vec())
             .send()
             .await
-            .map_err(|e| Self::map_reqwest_error(&e, "MU POST"))?;
+            .map_err(|e| Self::map_reqwest_error(&e, "MU POST", self.config.timeout_ms()))?;
 
         let status = response.status();
         if !status.is_success() {
+            let body_text = response.text().await.unwrap_or_default();
             return Err(AOCommunicationError::ExecutionError {
                 process_id: String::new(),
-                details: format!("MU returned status {status}"),
+                details: format!("MU returned status {status}: {body_text}"),
             });
         }
 
@@ -82,7 +83,7 @@ impl ProductionAOClient {
             .get(&url)
             .send()
             .await
-            .map_err(|e| Self::map_reqwest_error(&e, "CU result"))?;
+            .map_err(|e| Self::map_reqwest_error(&e, "CU result", self.config.timeout_ms()))?;
 
         let status = response.status();
         if status.as_u16() == 404 {
@@ -118,7 +119,7 @@ impl ProductionAOClient {
             .json(&body)
             .send()
             .await
-            .map_err(|e| Self::map_reqwest_error(&e, "CU dry-run"))?;
+            .map_err(|e| Self::map_reqwest_error(&e, "CU dry-run", self.config.timeout_ms()))?;
 
         let status = response.status();
         if status.as_u16() == 404 {
@@ -182,20 +183,36 @@ impl ProductionAOClient {
             }
         }
 
-        let data_str = json
-            .get("Output")
-            .and_then(|o| o.get("data"))
-            .and_then(|d| d.as_str())
-            .unwrap_or("");
+        let output = json.get("Output");
 
-        Ok(Binary::from(data_str.as_bytes().to_vec()))
+        // CWAO CU returns query results directly in Output as a JSON object
+        if let Some(obj) = output {
+            if obj.is_object() || obj.is_array() {
+                let serialized = serde_json::to_vec(obj).map_err(|e| {
+                    AOCommunicationError::DeserializationError {
+                        details: format!("Failed to serialize Output: {e}"),
+                    }
+                })?;
+                return Ok(Binary::from(serialized));
+            }
+            // Standard AO CU: Output.data as string
+            if let Some(data_str) = obj.get("data").and_then(|d| d.as_str()) {
+                return Ok(Binary::from(data_str.as_bytes().to_vec()));
+            }
+        }
+
+        Ok(Binary::from(Vec::new()))
     }
 
-    fn map_reqwest_error(err: &reqwest::Error, operation: &str) -> AOCommunicationError {
+    fn map_reqwest_error(
+        err: &reqwest::Error,
+        operation: &str,
+        timeout_ms: u64,
+    ) -> AOCommunicationError {
         if err.is_timeout() {
             AOCommunicationError::Timeout {
                 operation: operation.to_string(),
-                timeout_ms: 0,
+                timeout_ms,
             }
         } else if err.is_connect() {
             AOCommunicationError::ConnectionError {
@@ -225,8 +242,10 @@ impl AOClient for ProductionAOClient {
     }
 
     async fn query(&self, process_id: &str, msg: QueryMsg) -> Result<Binary, AOCommunicationError> {
-        let body = DataItemBuilder::build_query_body(process_id, &msg)?;
-        let result_json = self.post_cu_dry_run(process_id, body).await?;
+        let item = DataItemBuilder::build_read_only(process_id, &msg)?;
+        let signed_bytes = self.signer.sign(&item)?;
+        let message_id = self.post_to_mu(&signed_bytes).await?;
+        let result_json = self.fetch_cu_result(process_id, &message_id).await?;
         Self::parse_cu_dryrun_data(process_id, &result_json)
     }
 
@@ -235,9 +254,11 @@ impl AOClient for ProductionAOClient {
         process_id: &str,
         msg: ExecuteMsg,
     ) -> Result<AOResponse, AOCommunicationError> {
-        let body = DataItemBuilder::build_dry_run_body(process_id, &msg)?;
-        let result_json = self.post_cu_dry_run(process_id, body).await?;
-        Self::parse_cu_result(process_id, &result_json, None)
+        let item = DataItemBuilder::build_dry_run(process_id, &msg)?;
+        let signed_bytes = self.signer.sign(&item)?;
+        let message_id = self.post_to_mu(&signed_bytes).await?;
+        let result_json = self.fetch_cu_result(process_id, &message_id).await?;
+        Self::parse_cu_result(process_id, &result_json, Some(message_id))
     }
 }
 

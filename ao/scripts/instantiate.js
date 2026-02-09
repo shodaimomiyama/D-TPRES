@@ -14,7 +14,13 @@ const dirs = [dir, dir_ac]
 const deploy = async ({ module_id, input, scheduler, wallet }) => {
   await mkdirs(dirs)
   const _wallet = await keygen(wallet, dir_ac)
-  const cwao = new CWAO({ wallet: _wallet })
+  const cwao = new CWAO({
+    wallet: _wallet,
+    arweave: { host: "arweave.net", port: 443, protocol: "https" },
+    mu: "https://mu.ao-testnet.xyz",
+    su: "https://su.ao-testnet.xyz",
+    cu: "http://localhost:1987",
+  })
   console.log(input)
   const { error, id } = await cwao.instantiate({
     module: module_id,
@@ -24,10 +30,10 @@ const deploy = async ({ module_id, input, scheduler, wallet }) => {
   console.log({
     module: module_id,
     scheduler,
-    input: JSON.parse(input ?? {}),
+    input: JSON.parse(input ?? "{}"),
   })
   if (error) {
-    console.log(`something went wrong`)
+    console.log(`something went wrong`, error)
   } else {
     console.log(`Process instantiated: ${id}`)
   }

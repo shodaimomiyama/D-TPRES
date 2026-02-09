@@ -23,7 +23,13 @@ const deploy = async ({ module_path, wallet }) => {
   await mkdirs(dirs)
   const _wallet = await keygen(wallet, dir_ac)
   const wasm = await getModule(module_path)
-  const cwao = new CWAO({ wallet: _wallet })
+  const cwao = new CWAO({
+    wallet: _wallet,
+    arweave: { host: "arweave.net", port: 443, protocol: "https" },
+    mu: "https://mu.ao-testnet.xyz",
+    su: "https://su.ao-testnet.xyz",
+    cu: "http://localhost:1987",
+  })
   const mod_id = await cwao.deploy(wasm)
   console.log(`Module deployed: ${mod_id}`)
 }
