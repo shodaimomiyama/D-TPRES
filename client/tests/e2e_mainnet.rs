@@ -13,11 +13,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use d_tpres::adapter::external::ao_client::AOClient;
-use d_tpres::adapter::external::ao_config::AOConfig;
-use d_tpres::adapter::external::ao_message::{Binary, ExecuteMsg, QueryMsg};
-use d_tpres::adapter::external::data_item::ArweaveJWK;
-use d_tpres::adapter::external::production_ao_client::ProductionAOClient;
+use d_tpres::adapter::external::ao::{
+    AOClient, AOConfig, ArweaveJWK, Binary, ExecuteMsg, ProductionAOClient, QueryMsg,
+};
 use d_tpres::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
 
 fn mainnet_config() -> AOConfig {
@@ -142,7 +140,10 @@ async fn test_mainnet_dry_run() {
     match result {
         Ok(resp) => {
             assert!(resp.success);
-            assert!(resp.message_id.is_some(), "dry_run now returns message_id via MU");
+            assert!(
+                resp.message_id.is_some(),
+                "dry_run now returns message_id via MU"
+            );
             println!("Dry run succeeded (message_id: {:?})", resp.message_id);
         }
         Err(e) => {
@@ -214,10 +215,7 @@ async fn test_mainnet_full_flow_with_ao_link() {
 
     match query_result {
         Ok(binary) => {
-            println!(
-                "cFrag retrieved successfully ({} bytes)",
-                binary.len()
-            );
+            println!("cFrag retrieved successfully ({} bytes)", binary.len());
         }
         Err(e) => {
             panic!("GetCFrag query failed: {e}");
@@ -225,5 +223,7 @@ async fn test_mainnet_full_flow_with_ao_link() {
     }
 
     println!();
-    println!("=== Full flow completed: SubmitKFrag -> SubmitCapsule (auto-reencrypt) -> GetCFrag ===");
+    println!(
+        "=== Full flow completed: SubmitKFrag -> SubmitCapsule (auto-reencrypt) -> GetCFrag ==="
+    );
 }

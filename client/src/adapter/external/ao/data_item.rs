@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_names)]
+
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use rand::rngs::OsRng;
@@ -8,8 +10,8 @@ use rsa::{BigUint, RsaPrivateKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, Sha384};
 
+use super::message::{ExecuteMsg, QueryMsg};
 use crate::adapter::errors::AOCommunicationError;
-use crate::adapter::external::ao_message::{ExecuteMsg, QueryMsg};
 
 // AO protocol constants
 const DATA_PROTOCOL: &str = "ao";
@@ -468,8 +470,8 @@ impl DataItemSigner {
 
 #[cfg(test)]
 mod tests {
+    use super::super::message::Binary;
     use super::*;
-    use crate::adapter::external::ao_message::Binary;
 
     #[test]
     fn test_execute_msg_to_data_item() {
