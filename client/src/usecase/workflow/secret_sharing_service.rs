@@ -255,9 +255,9 @@ impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowService
         let share_items: Vec<(Vec<u8>, Vec<Tag>)> = encrypted_shares
             .into_iter()
             .enumerate()
-            .map(|(i, data)| {
+            .map(|(i, encrypted_share)| {
                 (
-                    data,
+                    encrypted_share,
                     vec![
                         Tag {
                             name: "type".to_string(),
@@ -330,7 +330,8 @@ impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowService
     clippy::redundant_clone,
     clippy::cast_possible_truncation,
     clippy::arithmetic_side_effects,
-    clippy::unwrap_used
+    clippy::unwrap_used,
+    clippy::type_complexity
 )]
 mod tests {
     use super::*;

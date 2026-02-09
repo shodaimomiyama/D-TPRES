@@ -158,6 +158,7 @@ impl<C: CryptoService, Ss: ArweaveStorageService, S, T, N, O>
 impl<C: CryptoService, Ss: ArweaveStorageService, S, T, N, O, R>
     ShareBuilder<C, Ss, S, T, N, O, R>
 {
+    #[must_use]
     pub fn metadata(mut self, meta: Option<SecretMetadata>) -> Self {
         self.metadata = meta;
         self
@@ -165,17 +166,23 @@ impl<C: CryptoService, Ss: ArweaveStorageService, S, T, N, O, R>
 }
 
 impl<C: CryptoService, Ss: ArweaveStorageService> ShareBuilder<C, Ss, Set, Set, Set, Set, Set> {
-    #[allow(deprecated)]
+    #[allow(deprecated, clippy::missing_const_for_fn)]
     pub fn execute(self) -> ActionResult<SecretSharingResult> {
-        let mut secret = self.secret.expect("secret guaranteed by type state");
-        let threshold = self.threshold.expect("threshold guaranteed by type state");
-        let total_shares = self
-            .total_shares
-            .expect("total_shares guaranteed by type state");
-        let owner_secret_key = self.owner_key.expect("owner_key guaranteed by type state");
-        let requester_public_key = self
-            .requester_key
-            .expect("requester_key guaranteed by type state");
+        let mut secret = self.secret.ok_or_else(|| {
+            ActionError::validation_failed("missing_secret", "secret is required")
+        })?;
+        let threshold = self.threshold.ok_or_else(|| {
+            ActionError::validation_failed("missing_threshold", "threshold is required")
+        })?;
+        let total_shares = self.total_shares.ok_or_else(|| {
+            ActionError::validation_failed("missing_total_shares", "total_shares is required")
+        })?;
+        let owner_secret_key = self.owner_key.ok_or_else(|| {
+            ActionError::validation_failed("missing_owner_key", "owner_key is required")
+        })?;
+        let requester_public_key = self.requester_key.ok_or_else(|| {
+            ActionError::validation_failed("missing_requester_key", "requester_key is required")
+        })?;
 
         let owner_public_key = self
             .container
@@ -257,12 +264,14 @@ impl<C: CryptoService, Ss: ArweaveStorageService, S> RecoverBuilder<C, Ss, S, No
 }
 
 impl<C: CryptoService, Ss: ArweaveStorageService> RecoverBuilder<C, Ss, Set, Set> {
-    #[allow(deprecated)]
+    #[allow(deprecated, clippy::missing_const_for_fn)]
     pub fn execute(self) -> ActionResult<crate::usecase::dto::SecretRecoveryResult> {
-        let secret_id = self.secret_id.expect("secret_id guaranteed by type state");
-        let requester_key = self
-            .requester_key
-            .expect("requester_key guaranteed by type state");
+        let secret_id = self.secret_id.ok_or_else(|| {
+            ActionError::validation_failed("missing_secret_id", "secret_id is required")
+        })?;
+        let requester_key = self.requester_key.ok_or_else(|| {
+            ActionError::validation_failed("missing_requester_key", "requester_key is required")
+        })?;
 
         self.container
             .recover(&secret_id, requester_key, self.process_id, None)

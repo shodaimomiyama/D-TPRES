@@ -14,6 +14,6 @@ mod message;
 pub use client::{AOClient, MockAOClient, MockConfig};
 pub use message::{
     AOAttribute, AOEvent, AOMessageTags, AOResponse, Binary, BlobMeta, CapsuleInfo, CapsuleStatus,
-    ExecuteMsg, GetCFragResponse, ListCapsulesByKFragResponse, QueryMsg, ValidateMessage,
-    MAX_BINARY_SIZE, MAX_ID_LENGTH,
+    ExecuteMsg, GetCFragResponse, ListCapsulesByKFragResponse, MAX_BINARY_SIZE, MAX_ID_LENGTH,
+    QueryMsg, ValidateMessage,
 };
