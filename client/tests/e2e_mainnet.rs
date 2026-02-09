@@ -44,13 +44,13 @@ fn create_client() -> ProductionAOClient {
 
 fn print_ao_link_message(message_id: &str) {
     println!("=== AO Link Verification ===");
-    println!("Message: https://www.ao.link/#/message/{message_id}");
+    println!("Message: https://aolink.ar.io/#/message/{message_id}");
     println!("============================");
 }
 
 fn print_ao_link_entity(process_id: &str) {
     println!("=== AO Link Process ===");
-    println!("Process: https://www.ao.link/#/entity/{process_id}");
+    println!("Process: https://aolink.ar.io/#/entity/{process_id}");
     println!("=======================");
 }
 
@@ -142,8 +142,8 @@ async fn test_mainnet_dry_run() {
     match result {
         Ok(resp) => {
             assert!(resp.success);
-            assert_eq!(resp.message_id, None);
-            println!("Dry run succeeded (no message_id, as expected)");
+            assert!(resp.message_id.is_some(), "dry_run now returns message_id via MU");
+            println!("Dry run succeeded (message_id: {:?})", resp.message_id);
         }
         Err(e) => {
             panic!("Dry run failed: {e}");

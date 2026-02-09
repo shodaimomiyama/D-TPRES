@@ -124,6 +124,74 @@ impl DataItemBuilder {
         }
     }
 
+    /// Build an unsigned DataItem with Read-Only tag for query via MU
+    pub fn build_read_only(
+        target: &str,
+        msg: &QueryMsg,
+    ) -> Result<UnsignedDataItem, AOCommunicationError> {
+        let action = Self::query_msg_action(msg);
+        let data =
+            serde_json::to_vec(msg).map_err(|e| AOCommunicationError::SerializationError {
+                details: format!("Failed to serialize QueryMsg: {e}"),
+            })?;
+
+        let mut tags = Self::ao_tags(target, &action);
+        tags.push(DataItemTag::new("Read-Only", "True"));
+
+        let target_bytes =
+            URL_SAFE_NO_PAD
+                .decode(target)
+                .map_err(|e| AOCommunicationError::ValidationError {
+                    details: format!("Invalid base64url target: {e}"),
+                })?;
+        if target_bytes.len() != 32 {
+            return Err(AOCommunicationError::ValidationError {
+                details: format!("Target must be 32 bytes (got {})", target_bytes.len()),
+            });
+        }
+
+        Ok(UnsignedDataItem {
+            target: target_bytes,
+            anchor: Vec::new(),
+            tags,
+            data,
+        })
+    }
+
+    /// Build an unsigned DataItem with Read-Only tag for dry-run via MU
+    pub fn build_dry_run(
+        target: &str,
+        msg: &ExecuteMsg,
+    ) -> Result<UnsignedDataItem, AOCommunicationError> {
+        let action = Self::execute_msg_action(msg);
+        let data =
+            serde_json::to_vec(msg).map_err(|e| AOCommunicationError::SerializationError {
+                details: format!("Failed to serialize ExecuteMsg: {e}"),
+            })?;
+
+        let mut tags = Self::ao_tags(target, &action);
+        tags.push(DataItemTag::new("Read-Only", "True"));
+
+        let target_bytes =
+            URL_SAFE_NO_PAD
+                .decode(target)
+                .map_err(|e| AOCommunicationError::ValidationError {
+                    details: format!("Invalid base64url target: {e}"),
+                })?;
+        if target_bytes.len() != 32 {
+            return Err(AOCommunicationError::ValidationError {
+                details: format!("Target must be 32 bytes (got {})", target_bytes.len()),
+            });
+        }
+
+        Ok(UnsignedDataItem {
+            target: target_bytes,
+            anchor: Vec::new(),
+            tags,
+            data,
+        })
+    }
+
     fn ao_tags(target: &str, action: &str) -> Vec<DataItemTag> {
         vec![
             DataItemTag::new("Data-Protocol", DATA_PROTOCOL),
@@ -318,12 +386,12 @@ impl DataItemSigner {
     /// ANS-104 deep hash: SHA-384-based recursive tree hash
     fn build_deep_hash(&self, item: &UnsignedDataItem) -> Vec<u8> {
         let tags_bytes = self.serialize_avro_tags(&item.tags);
-        let sig_type_bytes = SIG_TYPE_RSA256.to_le_bytes();
+        let sig_type_str = SIG_TYPE_RSA256.to_string();
 
         let parts: Vec<&[u8]> = vec![
             b"dataitem",
             b"1",
-            &sig_type_bytes,
+            sig_type_str.as_bytes(),
             &self.owner_bytes,
             &item.target,
             &item.anchor,
@@ -367,7 +435,12 @@ impl DataItemSigner {
     }
 
     fn serialize_avro_tags(&self, tags: &[DataItemTag]) -> Vec<u8> {
+        if tags.is_empty() {
+            return Vec::new();
+        }
+
         let mut buf = Vec::new();
+        Self::avro_encode_long(&mut buf, tags.len() as i64);
         for tag in tags {
             let name_bytes = tag.name.as_bytes();
             let value_bytes = tag.value.as_bytes();
@@ -376,6 +449,7 @@ impl DataItemSigner {
             Self::avro_encode_long(&mut buf, value_bytes.len() as i64);
             buf.extend_from_slice(value_bytes);
         }
+        Self::avro_encode_long(&mut buf, 0);
         buf
     }
 

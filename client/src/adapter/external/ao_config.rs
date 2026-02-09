@@ -1,9 +1,9 @@
 use crate::adapter::errors::AOCommunicationError;
 
 const DEFAULT_MU_URL: &str = "https://mu.ao-testnet.xyz";
-const DEFAULT_CU_URL: &str = "https://cu.ao-testnet.xyz";
+const DEFAULT_CU_URL: &str = "http://localhost:1987";
 const DEFAULT_GATEWAY_URL: &str = "https://arweave.net";
-const DEFAULT_TIMEOUT_MS: u64 = 30_000;
+const DEFAULT_TIMEOUT_MS: u64 = 120_000;
 
 /// AO Network connection configuration
 #[derive(Debug, Clone)]
@@ -91,7 +91,7 @@ mod tests {
     fn test_ao_config_default_endpoints() {
         let config = AOConfig::default();
         assert_eq!(config.mu_url(), "https://mu.ao-testnet.xyz");
-        assert_eq!(config.cu_url(), "https://cu.ao-testnet.xyz");
+        assert_eq!(config.cu_url(), "http://localhost:1987");
         assert_eq!(config.gateway_url(), "https://arweave.net");
         assert_eq!(config.timeout_ms(), 30_000);
     }
