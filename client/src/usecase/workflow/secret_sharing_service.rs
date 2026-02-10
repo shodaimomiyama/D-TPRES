@@ -332,6 +332,7 @@ impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowService
 
 #[cfg(test)]
 #[allow(
+    dead_code,
     clippy::uninlined_format_args,
     clippy::indexing_slicing,
     clippy::redundant_clone,
