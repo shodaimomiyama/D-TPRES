@@ -19,7 +19,8 @@ use d_tpres::adapter::external::ao::{
 use d_tpres::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
 
 fn mainnet_config() -> AOConfig {
-    AOConfig::default()
+    let _ = dotenvy::dotenv();
+    AOConfig::from_env().unwrap()
 }
 
 fn mainnet_process_id() -> String {

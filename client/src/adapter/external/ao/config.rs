@@ -1,7 +1,10 @@
+#[cfg(not(target_arch = "wasm32"))]
+use std::env;
+
 use crate::adapter::errors::AOCommunicationError;
 
 const DEFAULT_MU_URL: &str = "https://mu.ao-testnet.xyz";
-const DEFAULT_CU_URL: &str = "http://localhost:1987";
+const DEFAULT_CU_URL: &str = "https://cu.ao-testnet.xyz";
 const DEFAULT_GATEWAY_URL: &str = "https://arweave.net";
 const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 
@@ -55,6 +58,20 @@ impl AOConfig {
     pub fn timeout_ms(&self) -> u64 {
         self.timeout_ms
     }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn from_env() -> Result<Self, AOCommunicationError> {
+        let mu_url = env::var("AO_MU_URL").unwrap_or_else(|_| DEFAULT_MU_URL.to_string());
+        let cu_url = env::var("AO_CU_URL").unwrap_or_else(|_| DEFAULT_CU_URL.to_string());
+        let gateway_url =
+            env::var("AO_GATEWAY_URL").unwrap_or_else(|_| DEFAULT_GATEWAY_URL.to_string());
+        let timeout_ms = env::var("AO_TIMEOUT_MS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(DEFAULT_TIMEOUT_MS);
+
+        Self::new(&mu_url, &cu_url, &gateway_url, timeout_ms)
+    }
 }
 
 impl Default for AOConfig {
@@ -91,7 +108,7 @@ mod tests {
     fn test_ao_config_default_endpoints() {
         let config = AOConfig::default();
         assert_eq!(config.mu_url(), "https://mu.ao-testnet.xyz");
-        assert_eq!(config.cu_url(), "http://localhost:1987");
+        assert_eq!(config.cu_url(), "https://cu.ao-testnet.xyz");
         assert_eq!(config.gateway_url(), "https://arweave.net");
         assert_eq!(config.timeout_ms(), 30_000);
     }
@@ -102,6 +119,13 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(matches!(err, AOCommunicationError::ValidationError { .. }));
+    }
+
+    #[test]
+    fn test_ao_config_from_env_defaults() {
+        let config = AOConfig::from_env().unwrap();
+        assert!(!config.mu_url().is_empty());
+        assert!(!config.cu_url().is_empty());
     }
 
     #[test]
