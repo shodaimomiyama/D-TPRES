@@ -207,9 +207,18 @@ impl ProductionAOClient {
                 })?;
                 return Ok(Binary::from(serialized));
             }
-            // Standard AO CU: Output.data as string
             if let Some(data_str) = obj.get("data").and_then(|d| d.as_str()) {
-                return Ok(Binary::from(data_str.as_bytes().to_vec()));
+                use base64::{
+                    Engine,
+                    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+                };
+                return match STANDARD
+                    .decode(data_str)
+                    .or_else(|_| URL_SAFE_NO_PAD.decode(data_str))
+                {
+                    Ok(decoded) => Ok(Binary::from(decoded)),
+                    Err(_) => Ok(Binary::from(data_str.as_bytes().to_vec())),
+                };
             }
         }
 
