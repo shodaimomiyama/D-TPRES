@@ -420,7 +420,10 @@ mod wallet_tests {
         println!("JWK has 'd' (private key): {}", jwk.get("d").is_some());
 
         let result = ArweaveWallet::from_jwk(jwk);
-        println!("Result (should fail due to missing 'd'): {:?}", result.is_err());
+        println!(
+            "Result (should fail due to missing 'd'): {:?}",
+            result.is_err()
+        );
 
         assert!(result.is_err());
     }
