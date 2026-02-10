@@ -1,5 +1,7 @@
 #![allow(clippy::disallowed_names)]
 
+use std::fmt;
+
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use rand::rngs::OsRng;
@@ -9,6 +11,7 @@ use rsa::signature::SignatureEncoding;
 use rsa::{BigUint, RsaPrivateKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, Sha384};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use super::message::{ExecuteMsg, QueryMsg};
 use crate::adapter::errors::AOCommunicationError;
@@ -244,10 +247,16 @@ impl DataItemBuilder {
 }
 
 /// Arweave JWK (JSON Web Key) for RSA signing
-#[derive(Debug, Clone, Deserialize)]
+///
+/// Secret RSA components (d, p, q, dp, dq, qi) are zeroized on drop
+/// to prevent private key material from lingering in memory.
+#[derive(Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct ArweaveJWK {
+    #[zeroize(skip)]
     pub kty: String,
+    #[zeroize(skip)]
     pub n: String,
+    #[zeroize(skip)]
     pub e: String,
     #[serde(default)]
     pub d: String,
@@ -261,6 +270,22 @@ pub struct ArweaveJWK {
     pub dq: String,
     #[serde(default)]
     pub qi: String,
+}
+
+impl fmt::Debug for ArweaveJWK {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ArweaveJWK")
+            .field("kty", &self.kty)
+            .field("n", &format!("[{} chars]", self.n.len()))
+            .field("e", &self.e)
+            .field("d", &"[REDACTED]")
+            .field("p", &"[REDACTED]")
+            .field("q", &"[REDACTED]")
+            .field("dp", &"[REDACTED]")
+            .field("dq", &"[REDACTED]")
+            .field("qi", &"[REDACTED]")
+            .finish()
+    }
 }
 
 // ANS-104 signature type for RSA-256
