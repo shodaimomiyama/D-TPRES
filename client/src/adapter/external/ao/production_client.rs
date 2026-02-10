@@ -164,8 +164,11 @@ impl ProductionAOClient {
             .and_then(|d| d.as_str())
             .filter(|s| !s.is_empty())
             .map(|s| {
-                use base64::{Engine, engine::general_purpose::STANDARD};
-                match STANDARD.decode(s) {
+                use base64::{
+                    Engine,
+                    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+                };
+                match STANDARD.decode(s).or_else(|_| URL_SAFE_NO_PAD.decode(s)) {
                     Ok(decoded) => Binary::from(decoded),
                     Err(_) => Binary::from(s.as_bytes().to_vec()),
                 }
@@ -389,6 +392,19 @@ mod tests {
         use base64::{Engine, engine::general_purpose::STANDARD};
         let raw_bytes = vec![0x01, 0x02, 0x03, 0x04, 0xFF];
         let encoded = STANDARD.encode(&raw_bytes);
+        let json = serde_json::json!({
+            "Output": { "data": encoded }
+        });
+        let result = ProductionAOClient::parse_cu_result("proc-1", &json, None);
+        let resp = result.unwrap();
+        assert_eq!(resp.data.unwrap().as_ref(), &raw_bytes);
+    }
+
+    #[test]
+    fn test_parse_cu_result_base64url_data() {
+        use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+        let raw_bytes = vec![0xFF, 0xFE, 0xFD, 0x00, 0x01];
+        let encoded = URL_SAFE_NO_PAD.encode(&raw_bytes);
         let json = serde_json::json!({
             "Output": { "data": encoded }
         });
