@@ -162,7 +162,14 @@ impl ProductionAOClient {
             .get("Output")
             .and_then(|o| o.get("data"))
             .and_then(|d| d.as_str())
-            .map(|s| Binary::from(s.as_bytes().to_vec()));
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                use base64::{Engine, engine::general_purpose::STANDARD};
+                match STANDARD.decode(s) {
+                    Ok(decoded) => Binary::from(decoded),
+                    Err(_) => Binary::from(s.as_bytes().to_vec()),
+                }
+            });
 
         Ok(AOResponse {
             success: true,
@@ -375,6 +382,42 @@ mod tests {
         let resp = result.unwrap();
         assert!(resp.data.is_none());
         assert_eq!(resp.message_id, None);
+    }
+
+    #[test]
+    fn test_parse_cu_result_base64_data() {
+        use base64::{Engine, engine::general_purpose::STANDARD};
+        let raw_bytes = vec![0x01, 0x02, 0x03, 0x04, 0xFF];
+        let encoded = STANDARD.encode(&raw_bytes);
+        let json = serde_json::json!({
+            "Output": { "data": encoded }
+        });
+        let result = ProductionAOClient::parse_cu_result("proc-1", &json, None);
+        let resp = result.unwrap();
+        assert_eq!(resp.data.unwrap().as_ref(), &raw_bytes);
+    }
+
+    #[test]
+    fn test_parse_cu_result_non_base64_data_fallback() {
+        let json = serde_json::json!({
+            "Output": { "data": "plain-text-not-base64!" }
+        });
+        let result = ProductionAOClient::parse_cu_result("proc-1", &json, None);
+        let resp = result.unwrap();
+        assert_eq!(
+            resp.data.unwrap().as_ref(),
+            "plain-text-not-base64!".as_bytes()
+        );
+    }
+
+    #[test]
+    fn test_parse_cu_result_empty_data() {
+        let json = serde_json::json!({
+            "Output": { "data": "" }
+        });
+        let result = ProductionAOClient::parse_cu_result("proc-1", &json, None);
+        let resp = result.unwrap();
+        assert!(resp.data.is_none());
     }
 
     // --- wiremock integration tests ---
