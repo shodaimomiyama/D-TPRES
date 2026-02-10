@@ -280,6 +280,13 @@ impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowService
             .storage_service
             .batch_store(share_items)
             .map_err(WorkflowError::from)?;
+        if !batch_result.failed.is_empty() {
+            return Err(WorkflowError::storage(format!(
+                "batch_store partially failed: {} of {} items failed",
+                batch_result.failed.len(),
+                batch_result.failed.len() + batch_result.successful.len()
+            )));
+        }
         let share_tx_ids = batch_result.successful;
 
         Ok(SecretSharingResult {
