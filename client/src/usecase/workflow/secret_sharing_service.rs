@@ -5,10 +5,12 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use zeroize::Zeroizing;
 
 use crate::domain::value_objects::SecretId;
 use crate::usecase::core::crypto::{CryptoService, KeyFragment, PublicKey, ShamirShare, constants};
+use crate::usecase::core::storage::{ArweaveStorageService, QueryParams, Tag};
 use crate::usecase::dto::{SecretSharingRequest, SecretSharingResult, SecretStatus};
 use crate::usecase::error::{WorkflowError, WorkflowResult};
 
@@ -20,6 +22,7 @@ use crate::usecase::error::{WorkflowError, WorkflowResult};
 ///
 /// Defines the contract for secret sharing operations that orchestrate
 /// CryptoService and StorageService to split, encrypt, and distribute secrets.
+#[async_trait]
 pub trait SecretSharingWorkflowService: Send + Sync {
     /// Execute the complete Phase 1 secret sharing workflow
     ///
@@ -44,7 +47,7 @@ pub trait SecretSharingWorkflowService: Send + Sync {
     /// * `WorkflowError::CryptoError` - Cryptographic operation failed
     /// * `WorkflowError::StorageError` - Arweave storage failed
     /// * `WorkflowError::AOCommunicationError` - AO Network communication failed
-    fn execute_secret_sharing(
+    async fn execute_secret_sharing(
         &self,
         request: SecretSharingRequest,
     ) -> WorkflowResult<SecretSharingResult>;
@@ -71,16 +74,18 @@ pub trait SecretSharingWorkflowService: Send + Sync {
 ///
 /// Orchestrates CryptoService and StorageService to implement
 /// the complete Phase 1 secret sharing workflow.
-pub struct SecretSharingWorkflowServiceImpl<C: CryptoService> {
+pub struct SecretSharingWorkflowServiceImpl<C: CryptoService, S: ArweaveStorageService> {
     crypto_service: Arc<C>,
-    // TODO: Add StorageService when AO communication is implemented (Issue #47)
-    // storage_service: Arc<S>,
+    storage_service: Arc<S>,
 }
 
-impl<C: CryptoService> SecretSharingWorkflowServiceImpl<C> {
+impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowServiceImpl<C, S> {
     /// Create a new SecretSharingWorkflowServiceImpl
-    pub fn new(crypto_service: Arc<C>) -> Self {
-        Self { crypto_service }
+    pub fn new(crypto_service: Arc<C>, storage_service: Arc<S>) -> Self {
+        Self {
+            crypto_service,
+            storage_service,
+        }
     }
 
     /// Validate input parameters for secret sharing
@@ -197,8 +202,11 @@ impl<C: CryptoService> SecretSharingWorkflowServiceImpl<C> {
     }
 }
 
-impl<C: CryptoService> SecretSharingWorkflowService for SecretSharingWorkflowServiceImpl<C> {
-    fn execute_secret_sharing(
+#[async_trait]
+impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowService
+    for SecretSharingWorkflowServiceImpl<C, S>
+{
+    async fn execute_secret_sharing(
         &self,
         request: SecretSharingRequest,
     ) -> WorkflowResult<SecretSharingResult> {
@@ -223,23 +231,71 @@ impl<C: CryptoService> SecretSharingWorkflowService for SecretSharingWorkflowSer
         let kfrag_count = kfrags.len() as u8;
 
         // Step 7: Send kFrags to Owner-Process via AO
-        // TODO: Implement when StorageService AO methods are available (Issue #47)
-        // self.storage_service.send_kfrag_to_owner_process(&kfrags, &request.owner_process_id)?;
+        self.storage_service
+            .send_kfrag_to_owner_process(&kfrags, &request.owner_process_id)
+            .await
+            .map_err(WorkflowError::from)?;
 
         // Step 8: Store Capsule and encrypted shares on Arweave
-        // TODO: Implement when StorageService is available (Issue #47)
-        // For now, generate placeholder transaction IDs
         let secret_id = SecretId::generate();
-        let capsule_tx_id = format!("capsule_tx_{}", secret_id.as_str());
-        let share_tx_ids: Vec<String> = encrypted_shares
-            .iter()
+
+        let capsule_tx_id = self
+            .storage_service
+            .store_data(
+                &capsule.capsule_bytes,
+                vec![
+                    Tag {
+                        name: "type".to_string(),
+                        value: "capsule".to_string(),
+                    },
+                    Tag {
+                        name: "secret_id".to_string(),
+                        value: secret_id.as_str().to_string(),
+                    },
+                ],
+            )
+            .map_err(WorkflowError::from)?;
+
+        let share_items: Vec<(Vec<u8>, Vec<Tag>)> = encrypted_shares
+            .into_iter()
             .enumerate()
-            .map(|(i, _)| format!("share_tx_{}_{}", secret_id.as_str(), i))
+            .map(|(i, encrypted_share)| {
+                (
+                    encrypted_share,
+                    vec![
+                        Tag {
+                            name: "type".to_string(),
+                            value: "encrypted_share".to_string(),
+                        },
+                        Tag {
+                            name: "secret_id".to_string(),
+                            value: secret_id.as_str().to_string(),
+                        },
+                        Tag {
+                            name: "index".to_string(),
+                            value: i.to_string(),
+                        },
+                    ],
+                )
+            })
             .collect();
 
-        // Suppress warnings for now - will be used when storage is implemented
-        let _ = capsule;
-        let _ = kfrags;
+        let batch_result = self
+            .storage_service
+            .batch_store(share_items)
+            .map_err(WorkflowError::from)?;
+        if !batch_result.failed.is_empty() {
+            let failed_count = batch_result.failed.len();
+            let total_count = failed_count + batch_result.successful.len();
+            return Err(WorkflowError::PartialStorageFailure {
+                capsule_tx_id,
+                successful_share_tx_ids: batch_result.successful,
+                failed_shares: batch_result.failed,
+                failed_count,
+                total_count,
+            });
+        }
+        let share_tx_ids = batch_result.successful;
 
         Ok(SecretSharingResult {
             secret_id,
@@ -251,30 +307,275 @@ impl<C: CryptoService> SecretSharingWorkflowService for SecretSharingWorkflowSer
     }
 
     fn get_secret_status(&self, secret_id: &SecretId) -> WorkflowResult<SecretStatus> {
-        // TODO: Implement when StorageService query methods are available (Issue #47)
-        // For now, return ResourceNotFound as placeholder
-        Err(WorkflowError::not_found(format!(
-            "Secret {} not found (storage not yet implemented)",
-            secret_id
-        )))
+        let params = QueryParams {
+            tags: vec![
+                Tag {
+                    name: "type".to_string(),
+                    value: "capsule".to_string(),
+                },
+                Tag {
+                    name: "secret_id".to_string(),
+                    value: secret_id.as_str().to_string(),
+                },
+            ],
+            limit: Some(1),
+            sort_by: None,
+        };
+
+        let results = self
+            .storage_service
+            .query_by_tags(params)
+            .map_err(WorkflowError::from)?;
+
+        if results.is_empty() {
+            return Err(WorkflowError::not_found(format!(
+                "Secret {} not found",
+                secret_id
+            )));
+        }
+
+        Ok(SecretStatus::Created)
     }
 }
 
 #[cfg(test)]
 #[allow(
+    dead_code,
     clippy::uninlined_format_args,
     clippy::indexing_slicing,
     clippy::redundant_clone,
     clippy::cast_possible_truncation,
-    clippy::arithmetic_side_effects
+    clippy::arithmetic_side_effects,
+    clippy::unwrap_used,
+    clippy::type_complexity
 )]
 mod tests {
     use super::*;
+    use crate::adapter::external::mock_ao::MockAOClient;
+    use crate::service::error::ServiceResult;
     use crate::usecase::core::crypto::CryptoServiceImpl;
+    use crate::usecase::core::storage::{
+        ArweaveStorageServiceImpl, ArweaveTransaction, BatchResult, QueryParams, Tag,
+        TransactionStatus,
+    };
+    use std::sync::RwLock;
 
-    fn create_test_service() -> SecretSharingWorkflowServiceImpl<CryptoServiceImpl> {
+    // ========================================================================
+    // MockStorageService (Task 8)
+    // ========================================================================
+
+    /// Mock implementation of ArweaveStorageService for testing
+    struct MockStorageService {
+        /// Stores all data passed to store_data()
+        stored_data: Arc<RwLock<Vec<StoredItem>>>,
+        /// Stores all batch items passed to batch_store()
+        batch_items: Arc<RwLock<Vec<(Vec<u8>, Vec<Tag>)>>>,
+        /// Stores kFrag calls
+        kfrag_calls: Arc<RwLock<Vec<KFragCall>>>,
+        /// Stores query calls
+        query_results: Arc<RwLock<Vec<ArweaveTransaction>>>,
+        /// Transaction counter
+        tx_counter: Arc<RwLock<u64>>,
+        /// Controls whether send_kfrag should fail
+        should_fail_kfrag: Arc<RwLock<bool>>,
+        /// Controls whether store_data should fail
+        should_fail_store: Arc<RwLock<bool>>,
+        /// Controls whether batch_store should partially fail (odd indices fail)
+        should_fail_batch_partial: Arc<RwLock<bool>>,
+    }
+
+    #[derive(Debug, Clone)]
+    struct StoredItem {
+        data: Vec<u8>,
+        tags: Vec<Tag>,
+        tx_id: String,
+    }
+
+    #[derive(Debug, Clone)]
+    struct KFragCall {
+        kfrag_count: usize,
+        owner_process_id: String,
+    }
+
+    impl MockStorageService {
+        fn new() -> Self {
+            Self {
+                stored_data: Arc::new(RwLock::new(Vec::new())),
+                batch_items: Arc::new(RwLock::new(Vec::new())),
+                kfrag_calls: Arc::new(RwLock::new(Vec::new())),
+                query_results: Arc::new(RwLock::new(Vec::new())),
+                tx_counter: Arc::new(RwLock::new(0)),
+                should_fail_kfrag: Arc::new(RwLock::new(false)),
+                should_fail_store: Arc::new(RwLock::new(false)),
+                should_fail_batch_partial: Arc::new(RwLock::new(false)),
+            }
+        }
+
+        fn get_stored_data(&self) -> Vec<StoredItem> {
+            self.stored_data.read().unwrap().clone()
+        }
+
+        fn get_batch_items(&self) -> Vec<(Vec<u8>, Vec<Tag>)> {
+            self.batch_items.read().unwrap().clone()
+        }
+
+        fn get_kfrag_calls(&self) -> Vec<KFragCall> {
+            self.kfrag_calls.read().unwrap().clone()
+        }
+
+        fn set_query_results(&self, results: Vec<ArweaveTransaction>) {
+            *self.query_results.write().unwrap() = results;
+        }
+
+        fn set_should_fail_kfrag(&self, should_fail: bool) {
+            *self.should_fail_kfrag.write().unwrap() = should_fail;
+        }
+
+        fn set_should_fail_store(&self, should_fail: bool) {
+            *self.should_fail_store.write().unwrap() = should_fail;
+        }
+
+        fn set_should_fail_batch_partial(&self, should_fail: bool) {
+            *self.should_fail_batch_partial.write().unwrap() = should_fail;
+        }
+
+        fn build_partial_failure_result(&self, item_count: usize) -> BatchResult {
+            let mut successful = Vec::new();
+            let mut failed = Vec::new();
+            for index in 0..item_count {
+                if index % 2 == 1 {
+                    failed.push((index.to_string(), "Mock partial failure".to_string()));
+                } else {
+                    successful.push(self.generate_tx_id());
+                }
+            }
+            BatchResult { successful, failed }
+        }
+
+        fn generate_tx_id(&self) -> String {
+            let mut counter = self.tx_counter.write().unwrap();
+            *counter += 1;
+            format!("mock_tx_{:016x}", *counter)
+        }
+    }
+
+    #[async_trait]
+    impl ArweaveStorageService for MockStorageService {
+        fn store_data(&self, data: &[u8], tags: Vec<Tag>) -> ServiceResult<String> {
+            if *self.should_fail_store.read().unwrap() {
+                return Err(crate::service::error::ServiceError::storage_error(
+                    "Mock storage failure",
+                ));
+            }
+
+            let tx_id = self.generate_tx_id();
+            self.stored_data.write().unwrap().push(StoredItem {
+                data: data.to_vec(),
+                tags,
+                tx_id: tx_id.clone(),
+            });
+            Ok(tx_id)
+        }
+
+        fn retrieve_data(&self, transaction_id: &str) -> ServiceResult<ArweaveTransaction> {
+            let stored = self.stored_data.read().unwrap();
+            stored
+                .iter()
+                .find(|item| item.tx_id == transaction_id)
+                .map(|item| ArweaveTransaction {
+                    id: item.tx_id.clone(),
+                    data: item.data.clone(),
+                    tags: item.tags.clone(),
+                    timestamp: 0,
+                })
+                .ok_or_else(|| {
+                    crate::service::error::ServiceError::not_found(format!(
+                        "Transaction {} not found",
+                        transaction_id
+                    ))
+                })
+        }
+
+        fn query_by_tags(&self, _params: QueryParams) -> ServiceResult<Vec<ArweaveTransaction>> {
+            Ok(self.query_results.read().unwrap().clone())
+        }
+
+        fn check_transaction_status(
+            &self,
+            _transaction_id: &str,
+        ) -> ServiceResult<TransactionStatus> {
+            Ok(TransactionStatus::Confirmed)
+        }
+
+        fn batch_store(&self, items: Vec<(Vec<u8>, Vec<Tag>)>) -> ServiceResult<BatchResult> {
+            if *self.should_fail_store.read().unwrap() {
+                return Err(crate::service::error::ServiceError::storage_error(
+                    "Mock batch storage failure",
+                ));
+            }
+
+            self.batch_items.write().unwrap().extend(items.clone());
+
+            if *self.should_fail_batch_partial.read().unwrap() {
+                return Ok(self.build_partial_failure_result(items.len()));
+            }
+
+            let successful: Vec<String> = items.iter().map(|_| self.generate_tx_id()).collect();
+            Ok(BatchResult {
+                successful,
+                failed: Vec::new(),
+            })
+        }
+
+        fn exists(&self, transaction_id: &str) -> ServiceResult<bool> {
+            let stored = self.stored_data.read().unwrap();
+            Ok(stored.iter().any(|item| item.tx_id == transaction_id))
+        }
+
+        fn update_tags(&self, transaction_id: &str, new_tags: Vec<Tag>) -> ServiceResult<String> {
+            let data = self.retrieve_data(transaction_id)?.data;
+            self.store_data(&data, new_tags)
+        }
+
+        async fn send_kfrag_to_owner_process(
+            &self,
+            kfrags: &[KeyFragment],
+            owner_process_id: &str,
+        ) -> ServiceResult<()> {
+            if *self.should_fail_kfrag.read().unwrap() {
+                return Err(crate::service::error::ServiceError::ao_network_error(
+                    "Mock kFrag send failure",
+                ));
+            }
+
+            self.kfrag_calls.write().unwrap().push(KFragCall {
+                kfrag_count: kfrags.len(),
+                owner_process_id: owner_process_id.to_string(),
+            });
+            Ok(())
+        }
+    }
+
+    // ========================================================================
+    // Test Helper Functions
+    // ========================================================================
+
+    fn create_test_service()
+    -> SecretSharingWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
         let crypto = Arc::new(CryptoServiceImpl::new());
-        SecretSharingWorkflowServiceImpl::new(crypto)
+        let mock_ao_client = Arc::new(MockAOClient::new());
+        let storage = Arc::new(ArweaveStorageServiceImpl::default().with_ao_client(mock_ao_client));
+        SecretSharingWorkflowServiceImpl::new(crypto, storage)
+    }
+
+    fn create_mock_service() -> (
+        SecretSharingWorkflowServiceImpl<CryptoServiceImpl, MockStorageService>,
+        Arc<MockStorageService>,
+    ) {
+        let crypto = Arc::new(CryptoServiceImpl::new());
+        let storage = Arc::new(MockStorageService::new());
+        let service = SecretSharingWorkflowServiceImpl::new(crypto, storage.clone());
+        (service, storage)
     }
 
     fn create_test_request(crypto: &CryptoServiceImpl) -> SecretSharingRequest {
@@ -625,8 +926,8 @@ mod tests {
         println!("  [PASS] kFrag count matches n for all test values");
     }
 
-    #[test]
-    fn test_phase1_returns_complete_result() {
+    #[tokio::test]
+    async fn test_phase1_returns_complete_result() {
         println!("\n=== test_phase1_returns_complete_result ===");
         let service = create_test_service();
         let crypto = CryptoServiceImpl::new();
@@ -634,7 +935,7 @@ mod tests {
         let owner_pk = request.owner_public_key.clone();
         println!("  Executing complete PHASE 1 workflow...");
 
-        let result = service.execute_secret_sharing(request);
+        let result = service.execute_secret_sharing(request).await;
         assert!(result.is_ok());
 
         let result = result.unwrap();
@@ -653,8 +954,8 @@ mod tests {
         println!("  [PASS] Complete result returned with all fields populated");
     }
 
-    #[test]
-    fn test_phase1_complete_flow() {
+    #[tokio::test]
+    async fn test_phase1_complete_flow() {
         println!("\n=== test_phase1_complete_flow ===");
         let service = create_test_service();
         let crypto = CryptoServiceImpl::new();
@@ -671,7 +972,7 @@ mod tests {
         println!("  Parameters: threshold=3, total_shares=5");
 
         println!("  Executing PHASE 1 workflow...");
-        let result = service.execute_secret_sharing(request);
+        let result = service.execute_secret_sharing(request).await;
         assert!(result.is_ok());
 
         let result = result.unwrap();
@@ -684,14 +985,14 @@ mod tests {
 
         // Verify transaction IDs have correct format
         for tx_id in &result.share_tx_ids {
-            assert!(tx_id.contains("share_tx_"));
+            assert!(tx_id.starts_with("tx_"));
         }
-        assert!(result.capsule_tx_id.contains("capsule_tx_"));
+        assert!(result.capsule_tx_id.starts_with("tx_"));
         println!("  [PASS] Complete PHASE 1 flow executed successfully");
     }
 
-    #[test]
-    fn test_phase1_minimum_threshold() {
+    #[tokio::test]
+    async fn test_phase1_minimum_threshold() {
         println!("\n=== test_phase1_minimum_threshold ===");
         let service = create_test_service();
         let crypto = CryptoServiceImpl::new();
@@ -703,14 +1004,14 @@ mod tests {
             constants::MIN_THRESHOLD
         );
 
-        let result = service.execute_secret_sharing(request);
+        let result = service.execute_secret_sharing(request).await;
         println!("  Result: {:?}", result.is_ok());
         assert!(result.is_ok());
         println!("  [PASS] Minimum threshold accepted");
     }
 
-    #[test]
-    fn test_phase1_max_secret_size() {
+    #[tokio::test]
+    async fn test_phase1_max_secret_size() {
         println!("\n=== test_phase1_max_secret_size ===");
         let service = create_test_service();
         let crypto = CryptoServiceImpl::new();
@@ -720,7 +1021,7 @@ mod tests {
         request.secret = vec![0xAB; 63];
         println!("  Testing max secret size: {} bytes", request.secret.len());
 
-        let result = service.execute_secret_sharing(request);
+        let result = service.execute_secret_sharing(request).await;
         println!("  Result: {:?}", result.is_ok());
         assert!(result.is_ok());
         println!("  [PASS] Max secret size (63 bytes) accepted");
@@ -730,8 +1031,8 @@ mod tests {
     // Error Handling & Status Tests (Task 16)
     // ========================================================================
 
-    #[test]
-    fn test_execute_secret_sharing_validation_fails() {
+    #[tokio::test]
+    async fn test_execute_secret_sharing_validation_fails() {
         println!("\n=== test_execute_secret_sharing_validation_fails ===");
         let service = create_test_service();
         let crypto = CryptoServiceImpl::new();
@@ -739,7 +1040,7 @@ mod tests {
         request.secret = vec![]; // Invalid
         println!("  Testing with empty secret (should fail validation)");
 
-        let result = service.execute_secret_sharing(request);
+        let result = service.execute_secret_sharing(request).await;
         println!("  Result: {:?}", result);
         assert!(matches!(result, Err(WorkflowError::ValidationError(_))));
         println!("  [PASS] Validation correctly failed for empty secret");
@@ -765,8 +1066,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_execute_with_different_threshold_total_combinations() {
+    #[tokio::test]
+    async fn test_execute_with_different_threshold_total_combinations() {
         println!("\n=== test_execute_with_different_threshold_total_combinations ===");
         let service = create_test_service();
         let crypto = CryptoServiceImpl::new();
@@ -780,7 +1081,7 @@ mod tests {
             request.threshold = threshold;
             request.total_shares = total;
 
-            let result = service.execute_secret_sharing(request);
+            let result = service.execute_secret_sharing(request).await;
             assert!(
                 result.is_ok(),
                 "Failed for threshold={threshold}, total={total}"
@@ -798,8 +1099,8 @@ mod tests {
         println!("  [PASS] All threshold/total combinations work correctly");
     }
 
-    #[test]
-    fn test_result_secret_id_is_unique() {
+    #[tokio::test]
+    async fn test_result_secret_id_is_unique() {
         println!("\n=== test_result_secret_id_is_unique ===");
         let service = create_test_service();
         let crypto = CryptoServiceImpl::new();
@@ -808,8 +1109,8 @@ mod tests {
         let request2 = create_test_request(&crypto);
 
         println!("  Executing two workflows to verify unique IDs...");
-        let result1 = service.execute_secret_sharing(request1).unwrap();
-        let result2 = service.execute_secret_sharing(request2).unwrap();
+        let result1 = service.execute_secret_sharing(request1).await.unwrap();
+        let result2 = service.execute_secret_sharing(request2).await.unwrap();
 
         println!("  secret_id_1: {}", result1.secret_id);
         println!("  secret_id_2: {}", result2.secret_id);
@@ -817,5 +1118,71 @@ mod tests {
         // Each execution should generate a unique secret ID
         assert_ne!(result1.secret_id, result2.secret_id);
         println!("  [PASS] Each execution generates unique secret_id");
+    }
+
+    // ========================================================================
+    // Partial Batch Failure Tests
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_execute_secret_sharing_partial_batch_failure() {
+        println!("\n=== test_execute_secret_sharing_partial_batch_failure ===");
+        let (service, mock_storage) = create_mock_service();
+        let crypto = CryptoServiceImpl::new();
+        let request = create_test_request(&crypto);
+
+        mock_storage.set_should_fail_batch_partial(true);
+        println!("  Executing with partial batch failure enabled...");
+
+        let result = service.execute_secret_sharing(request).await;
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        println!("  Error: {:?}", err);
+
+        match err {
+            WorkflowError::PartialStorageFailure {
+                ref capsule_tx_id,
+                ref successful_share_tx_ids,
+                ref failed_shares,
+                failed_count,
+                total_count,
+            } => {
+                assert!(!capsule_tx_id.is_empty(), "capsule_tx_id should be present");
+                assert!(
+                    !successful_share_tx_ids.is_empty(),
+                    "some shares should have succeeded"
+                );
+                assert!(!failed_shares.is_empty(), "some shares should have failed");
+                assert_eq!(failed_count, failed_shares.len());
+                assert_eq!(
+                    total_count,
+                    successful_share_tx_ids.len() + failed_shares.len()
+                );
+
+                for (index_str, error_msg) in failed_shares {
+                    assert!(
+                        !index_str.is_empty(),
+                        "failed share index should not be empty"
+                    );
+                    let _index: usize = index_str.parse().expect("index should be a valid number");
+                    assert!(
+                        !error_msg.is_empty(),
+                        "failed share error message should not be empty"
+                    );
+                }
+                println!("  capsule_tx_id: {}", capsule_tx_id);
+                println!(
+                    "  successful_share_tx_ids: {} items",
+                    successful_share_tx_ids.len()
+                );
+                println!("  failed_shares: {} items", failed_shares.len());
+                println!("  [PASS] PartialStorageFailure contains all expected info");
+            }
+            other => panic!("Expected PartialStorageFailure, got: {:?}", other),
+        }
+
+        assert!(!err.is_recoverable());
+        println!("  [PASS] PartialStorageFailure is not recoverable");
     }
 }

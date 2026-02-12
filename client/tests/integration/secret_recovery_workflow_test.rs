@@ -12,15 +12,18 @@ use std::sync::Arc;
 
 use d_tpres::domain::SecretId;
 use d_tpres::usecase::core::crypto::{CryptoService, CryptoServiceImpl, ShamirShare};
+use d_tpres::usecase::core::storage::ArweaveStorageServiceImpl;
 use d_tpres::usecase::workflow::{
     SecretRecoveryWorkflowService, SecretRecoveryWorkflowServiceImpl,
 };
 use d_tpres::usecase::{SecretRecoveryRequest, WorkflowError};
 
 /// Helper to create test service with real CryptoService
-fn create_integration_service() -> SecretRecoveryWorkflowServiceImpl<CryptoServiceImpl> {
+fn create_integration_service()
+-> SecretRecoveryWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
     let crypto = Arc::new(CryptoServiceImpl::new());
-    SecretRecoveryWorkflowServiceImpl::new(crypto)
+    let storage = Arc::new(ArweaveStorageServiceImpl::default());
+    SecretRecoveryWorkflowServiceImpl::new(crypto, storage)
 }
 
 // ============================================================================
@@ -199,7 +202,8 @@ fn test_phase3_integration_execute_fails_at_storage() {
     println!("========================================");
 
     let crypto = Arc::new(CryptoServiceImpl::new());
-    let service = SecretRecoveryWorkflowServiceImpl::new(crypto.clone());
+    let storage = Arc::new(ArweaveStorageServiceImpl::default());
+    let service = SecretRecoveryWorkflowServiceImpl::new(crypto.clone(), storage);
 
     let (requester_sk, _requester_pk) = crypto.generate_keypair().unwrap();
     let request = SecretRecoveryRequest {
@@ -252,7 +256,8 @@ fn test_phase3_integration_validation_errors() {
     println!("========================================");
 
     let crypto = Arc::new(CryptoServiceImpl::new());
-    let service = SecretRecoveryWorkflowServiceImpl::new(crypto.clone());
+    let storage = Arc::new(ArweaveStorageServiceImpl::default());
+    let service = SecretRecoveryWorkflowServiceImpl::new(crypto.clone(), storage);
 
     println!("\n[Test 1] Empty requester process ID");
     let (requester_sk, _) = crypto.generate_keypair().unwrap();
