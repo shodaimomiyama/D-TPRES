@@ -339,10 +339,10 @@ impl ArweaveStorageService for ArweaveStorageServiceImpl {
         let mut successful = Vec::new();
         let mut failed = Vec::new();
 
-        for (item_payload, tags) in items {
+        for (index, (item_payload, tags)) in items.into_iter().enumerate() {
             match self.store_data(&item_payload, tags) {
                 Ok(tx_id) => successful.push(tx_id),
-                Err(e) => failed.push((String::new(), e.to_string())),
+                Err(e) => failed.push((index.to_string(), e.to_string())),
             }
         }
 
