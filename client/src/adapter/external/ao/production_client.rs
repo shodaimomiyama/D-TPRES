@@ -74,7 +74,7 @@ impl ProductionAOClient {
         message_id: &str,
     ) -> Result<serde_json::Value, AOCommunicationError> {
         let url = format!(
-            "{}/result/{}?process-id={}",
+            "{}/result/{}?process-id={}&no-busy",
             self.config.cu_url(),
             message_id,
             process_id
