@@ -29,6 +29,13 @@ pub enum ActionError {
         /// エラーメッセージ
         message: String,
     },
+    /// Arweave batch storage partially failed (immutable storage, no rollback)
+    PartialStorageFailure {
+        capsule_tx_id: String,
+        successful_share_tx_ids: Vec<String>,
+        failed_shares: Vec<(String, String)>,
+        message: String,
+    },
 }
 
 impl ActionError {
@@ -77,6 +84,9 @@ impl fmt::Display for ActionError {
             Self::CryptoError { message } => {
                 write!(f, "Crypto error: {message}")
             }
+            Self::PartialStorageFailure { message, .. } => {
+                write!(f, "Partial storage failure: {message}")
+            }
         }
     }
 }
@@ -101,6 +111,18 @@ impl From<WorkflowError> for ActionError {
             },
             WorkflowError::ResourceNotFound(resource) => Self::ResourceNotFound { resource },
             WorkflowError::CryptoError(msg) => Self::CryptoError { message: msg },
+            WorkflowError::PartialStorageFailure {
+                capsule_tx_id,
+                successful_share_tx_ids,
+                failed_shares,
+                failed_count,
+                total_count,
+            } => Self::PartialStorageFailure {
+                capsule_tx_id,
+                successful_share_tx_ids,
+                failed_shares,
+                message: format!("{failed_count} of {total_count} share storage operations failed"),
+            },
             _ => Self::WorkflowFailed {
                 message: err.to_string(),
             },
@@ -245,5 +267,48 @@ mod tests {
             }
             _ => panic!("Expected CryptoError"),
         }
+    }
+
+    #[test]
+    fn test_action_error_from_workflow_error_partial_storage_failure() {
+        let workflow_err = WorkflowError::PartialStorageFailure {
+            capsule_tx_id: "tx_capsule_001".to_string(),
+            successful_share_tx_ids: vec!["tx_share_0".to_string(), "tx_share_2".to_string()],
+            failed_shares: vec![
+                ("1".to_string(), "storage error".to_string()),
+                ("3".to_string(), "timeout".to_string()),
+            ],
+            failed_count: 2,
+            total_count: 4,
+        };
+        let action_err: ActionError = workflow_err.into();
+
+        match action_err {
+            ActionError::PartialStorageFailure {
+                capsule_tx_id,
+                successful_share_tx_ids,
+                failed_shares,
+                message,
+            } => {
+                assert_eq!(capsule_tx_id, "tx_capsule_001");
+                assert_eq!(successful_share_tx_ids.len(), 2);
+                assert_eq!(failed_shares.len(), 2);
+                assert!(message.contains("2 of 4"));
+            }
+            _ => panic!("Expected PartialStorageFailure"),
+        }
+    }
+
+    #[test]
+    fn test_action_error_display_partial_storage_failure() {
+        let err = ActionError::PartialStorageFailure {
+            capsule_tx_id: "tx_001".to_string(),
+            successful_share_tx_ids: vec!["tx_s1".to_string()],
+            failed_shares: vec![("1".to_string(), "err".to_string())],
+            message: "1 of 2 share storage operations failed".to_string(),
+        };
+        let display = err.to_string();
+        assert!(display.contains("Partial storage failure"));
+        assert!(display.contains("1 of 2"));
     }
 }

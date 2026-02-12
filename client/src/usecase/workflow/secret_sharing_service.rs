@@ -285,11 +285,15 @@ impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowService
             .batch_store(share_items)
             .map_err(WorkflowError::from)?;
         if !batch_result.failed.is_empty() {
-            return Err(WorkflowError::storage(format!(
-                "batch_store partially failed: {} of {} items failed",
-                batch_result.failed.len(),
-                batch_result.failed.len() + batch_result.successful.len()
-            )));
+            let failed_count = batch_result.failed.len();
+            let total_count = failed_count + batch_result.successful.len();
+            return Err(WorkflowError::PartialStorageFailure {
+                capsule_tx_id,
+                successful_share_tx_ids: batch_result.successful,
+                failed_shares: batch_result.failed,
+                failed_count,
+                total_count,
+            });
         }
         let share_tx_ids = batch_result.successful;
 
@@ -376,6 +380,8 @@ mod tests {
         should_fail_kfrag: Arc<RwLock<bool>>,
         /// Controls whether store_data should fail
         should_fail_store: Arc<RwLock<bool>>,
+        /// Controls whether batch_store should partially fail (odd indices fail)
+        should_fail_batch_partial: Arc<RwLock<bool>>,
     }
 
     #[derive(Debug, Clone)]
@@ -401,6 +407,7 @@ mod tests {
                 tx_counter: Arc::new(RwLock::new(0)),
                 should_fail_kfrag: Arc::new(RwLock::new(false)),
                 should_fail_store: Arc::new(RwLock::new(false)),
+                should_fail_batch_partial: Arc::new(RwLock::new(false)),
             }
         }
 
@@ -426,6 +433,23 @@ mod tests {
 
         fn set_should_fail_store(&self, should_fail: bool) {
             *self.should_fail_store.write().unwrap() = should_fail;
+        }
+
+        fn set_should_fail_batch_partial(&self, should_fail: bool) {
+            *self.should_fail_batch_partial.write().unwrap() = should_fail;
+        }
+
+        fn build_partial_failure_result(&self, item_count: usize) -> BatchResult {
+            let mut successful = Vec::new();
+            let mut failed = Vec::new();
+            for index in 0..item_count {
+                if index % 2 == 1 {
+                    failed.push((index.to_string(), "Mock partial failure".to_string()));
+                } else {
+                    successful.push(self.generate_tx_id());
+                }
+            }
+            BatchResult { successful, failed }
         }
 
         fn generate_tx_id(&self) -> String {
@@ -491,6 +515,10 @@ mod tests {
             }
 
             self.batch_items.write().unwrap().extend(items.clone());
+
+            if *self.should_fail_batch_partial.read().unwrap() {
+                return Ok(self.build_partial_failure_result(items.len()));
+            }
 
             let successful: Vec<String> = items.iter().map(|_| self.generate_tx_id()).collect();
             Ok(BatchResult {
@@ -1090,5 +1118,71 @@ mod tests {
         // Each execution should generate a unique secret ID
         assert_ne!(result1.secret_id, result2.secret_id);
         println!("  [PASS] Each execution generates unique secret_id");
+    }
+
+    // ========================================================================
+    // Partial Batch Failure Tests
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_execute_secret_sharing_partial_batch_failure() {
+        println!("\n=== test_execute_secret_sharing_partial_batch_failure ===");
+        let (service, mock_storage) = create_mock_service();
+        let crypto = CryptoServiceImpl::new();
+        let request = create_test_request(&crypto);
+
+        mock_storage.set_should_fail_batch_partial(true);
+        println!("  Executing with partial batch failure enabled...");
+
+        let result = service.execute_secret_sharing(request).await;
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        println!("  Error: {:?}", err);
+
+        match err {
+            WorkflowError::PartialStorageFailure {
+                ref capsule_tx_id,
+                ref successful_share_tx_ids,
+                ref failed_shares,
+                failed_count,
+                total_count,
+            } => {
+                assert!(!capsule_tx_id.is_empty(), "capsule_tx_id should be present");
+                assert!(
+                    !successful_share_tx_ids.is_empty(),
+                    "some shares should have succeeded"
+                );
+                assert!(!failed_shares.is_empty(), "some shares should have failed");
+                assert_eq!(failed_count, failed_shares.len());
+                assert_eq!(
+                    total_count,
+                    successful_share_tx_ids.len() + failed_shares.len()
+                );
+
+                for (index_str, error_msg) in failed_shares {
+                    assert!(
+                        !index_str.is_empty(),
+                        "failed share index should not be empty"
+                    );
+                    let _index: usize = index_str.parse().expect("index should be a valid number");
+                    assert!(
+                        !error_msg.is_empty(),
+                        "failed share error message should not be empty"
+                    );
+                }
+                println!("  capsule_tx_id: {}", capsule_tx_id);
+                println!(
+                    "  successful_share_tx_ids: {} items",
+                    successful_share_tx_ids.len()
+                );
+                println!("  failed_shares: {} items", failed_shares.len());
+                println!("  [PASS] PartialStorageFailure contains all expected info");
+            }
+            other => panic!("Expected PartialStorageFailure, got: {:?}", other),
+        }
+
+        assert!(!err.is_recoverable());
+        println!("  [PASS] PartialStorageFailure is not recoverable");
     }
 }
