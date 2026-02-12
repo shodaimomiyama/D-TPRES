@@ -27,13 +27,16 @@ use alloc::{vec::Vec, string::String};
 use std::{vec::Vec, string::String};
 ```
 
-### 0.2 シングルスレッド実行
+### 0.2 シングルスレッド実行 (ao/contracts/ のみ)
+
+**重要: このセクションの制約は `ao/contracts/src/` に適用されます。`client/` は async/await を使用できます（AOClient trait が既に async）。**
 
 - **スレッドなし**: AO WASMはシングルスレッド
 - **async/awaitなし**: すべての操作は同期的でなければならない
 - **スレッドローカルストレージなし**: 明示的な状態渡しを使用
 
 ```rust
+// === ao/contracts/ ===
 // 悪い例: AOでは非同期は許可されない
 async fn process_message(msg: Message) -> Result<Response> {
     // AOでは動作しません！
@@ -42,6 +45,20 @@ async fn process_message(msg: Message) -> Result<Response> {
 // 良い例: 同期処理
 fn process_message(msg: Message) -> Result<Response> {
     // 同期操作のみ
+}
+
+// === client/ ===
+// 悪い例: sync メソッド内で runtime を生成 → "runtime inside runtime" panic
+fn send_data(&self) -> Result<()> {
+    let rt = tokio::runtime::Builder::new_current_thread().build()?;
+    rt.block_on(self.ao_client.execute(msg))?; // パニック！
+    Ok(())
+}
+
+// 良い例: async を伝播
+async fn send_data(&self) -> Result<()> {
+    self.ao_client.execute(msg).await?;
+    Ok(())
 }
 ```
 

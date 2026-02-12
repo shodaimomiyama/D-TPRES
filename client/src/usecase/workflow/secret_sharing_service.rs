@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use zeroize::Zeroizing;
 
 use crate::domain::value_objects::SecretId;
@@ -21,6 +22,7 @@ use crate::usecase::error::{WorkflowError, WorkflowResult};
 ///
 /// Defines the contract for secret sharing operations that orchestrate
 /// CryptoService and StorageService to split, encrypt, and distribute secrets.
+#[async_trait]
 pub trait SecretSharingWorkflowService: Send + Sync {
     /// Execute the complete Phase 1 secret sharing workflow
     ///
@@ -45,7 +47,7 @@ pub trait SecretSharingWorkflowService: Send + Sync {
     /// * `WorkflowError::CryptoError` - Cryptographic operation failed
     /// * `WorkflowError::StorageError` - Arweave storage failed
     /// * `WorkflowError::AOCommunicationError` - AO Network communication failed
-    fn execute_secret_sharing(
+    async fn execute_secret_sharing(
         &self,
         request: SecretSharingRequest,
     ) -> WorkflowResult<SecretSharingResult>;
@@ -200,10 +202,11 @@ impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowServiceImp
     }
 }
 
+#[async_trait]
 impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowService
     for SecretSharingWorkflowServiceImpl<C, S>
 {
-    fn execute_secret_sharing(
+    async fn execute_secret_sharing(
         &self,
         request: SecretSharingRequest,
     ) -> WorkflowResult<SecretSharingResult> {
@@ -230,6 +233,7 @@ impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowService
         // Step 7: Send kFrags to Owner-Process via AO
         self.storage_service
             .send_kfrag_to_owner_process(&kfrags, &request.owner_process_id)
+            .await
             .map_err(WorkflowError::from)?;
 
         // Step 8: Store Capsule and encrypted shares on Arweave
@@ -343,6 +347,7 @@ impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowService
 )]
 mod tests {
     use super::*;
+    use crate::adapter::external::mock_ao::MockAOClient;
     use crate::service::error::ServiceResult;
     use crate::usecase::core::crypto::CryptoServiceImpl;
     use crate::usecase::core::storage::{
@@ -430,6 +435,7 @@ mod tests {
         }
     }
 
+    #[async_trait]
     impl ArweaveStorageService for MockStorageService {
         fn store_data(&self, data: &[u8], tags: Vec<Tag>) -> ServiceResult<String> {
             if *self.should_fail_store.read().unwrap() {
@@ -503,7 +509,7 @@ mod tests {
             self.store_data(&data, new_tags)
         }
 
-        fn send_kfrag_to_owner_process(
+        async fn send_kfrag_to_owner_process(
             &self,
             kfrags: &[KeyFragment],
             owner_process_id: &str,
@@ -529,7 +535,8 @@ mod tests {
     fn create_test_service()
     -> SecretSharingWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
         let crypto = Arc::new(CryptoServiceImpl::new());
-        let storage = Arc::new(ArweaveStorageServiceImpl::default());
+        let mock_ao_client = Arc::new(MockAOClient::new());
+        let storage = Arc::new(ArweaveStorageServiceImpl::default().with_ao_client(mock_ao_client));
         SecretSharingWorkflowServiceImpl::new(crypto, storage)
     }
 
@@ -891,8 +898,8 @@ mod tests {
         println!("  [PASS] kFrag count matches n for all test values");
     }
 
-    #[test]
-    fn test_phase1_returns_complete_result() {
+    #[tokio::test]
+    async fn test_phase1_returns_complete_result() {
         println!("\n=== test_phase1_returns_complete_result ===");
         let service = create_test_service();
         let crypto = CryptoServiceImpl::new();
@@ -900,7 +907,7 @@ mod tests {
         let owner_pk = request.owner_public_key.clone();
         println!("  Executing complete PHASE 1 workflow...");
 
-        let result = service.execute_secret_sharing(request);
+        let result = service.execute_secret_sharing(request).await;
         assert!(result.is_ok());
 
         let result = result.unwrap();
@@ -919,8 +926,8 @@ mod tests {
         println!("  [PASS] Complete result returned with all fields populated");
     }
 
-    #[test]
-    fn test_phase1_complete_flow() {
+    #[tokio::test]
+    async fn test_phase1_complete_flow() {
         println!("\n=== test_phase1_complete_flow ===");
         let service = create_test_service();
         let crypto = CryptoServiceImpl::new();
@@ -937,7 +944,7 @@ mod tests {
         println!("  Parameters: threshold=3, total_shares=5");
 
         println!("  Executing PHASE 1 workflow...");
-        let result = service.execute_secret_sharing(request);
+        let result = service.execute_secret_sharing(request).await;
         assert!(result.is_ok());
 
         let result = result.unwrap();
@@ -956,8 +963,8 @@ mod tests {
         println!("  [PASS] Complete PHASE 1 flow executed successfully");
     }
 
-    #[test]
-    fn test_phase1_minimum_threshold() {
+    #[tokio::test]
+    async fn test_phase1_minimum_threshold() {
         println!("\n=== test_phase1_minimum_threshold ===");
         let service = create_test_service();
         let crypto = CryptoServiceImpl::new();
@@ -969,14 +976,14 @@ mod tests {
             constants::MIN_THRESHOLD
         );
 
-        let result = service.execute_secret_sharing(request);
+        let result = service.execute_secret_sharing(request).await;
         println!("  Result: {:?}", result.is_ok());
         assert!(result.is_ok());
         println!("  [PASS] Minimum threshold accepted");
     }
 
-    #[test]
-    fn test_phase1_max_secret_size() {
+    #[tokio::test]
+    async fn test_phase1_max_secret_size() {
         println!("\n=== test_phase1_max_secret_size ===");
         let service = create_test_service();
         let crypto = CryptoServiceImpl::new();
@@ -986,7 +993,7 @@ mod tests {
         request.secret = vec![0xAB; 63];
         println!("  Testing max secret size: {} bytes", request.secret.len());
 
-        let result = service.execute_secret_sharing(request);
+        let result = service.execute_secret_sharing(request).await;
         println!("  Result: {:?}", result.is_ok());
         assert!(result.is_ok());
         println!("  [PASS] Max secret size (63 bytes) accepted");
@@ -996,8 +1003,8 @@ mod tests {
     // Error Handling & Status Tests (Task 16)
     // ========================================================================
 
-    #[test]
-    fn test_execute_secret_sharing_validation_fails() {
+    #[tokio::test]
+    async fn test_execute_secret_sharing_validation_fails() {
         println!("\n=== test_execute_secret_sharing_validation_fails ===");
         let service = create_test_service();
         let crypto = CryptoServiceImpl::new();
@@ -1005,7 +1012,7 @@ mod tests {
         request.secret = vec![]; // Invalid
         println!("  Testing with empty secret (should fail validation)");
 
-        let result = service.execute_secret_sharing(request);
+        let result = service.execute_secret_sharing(request).await;
         println!("  Result: {:?}", result);
         assert!(matches!(result, Err(WorkflowError::ValidationError(_))));
         println!("  [PASS] Validation correctly failed for empty secret");
@@ -1031,8 +1038,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_execute_with_different_threshold_total_combinations() {
+    #[tokio::test]
+    async fn test_execute_with_different_threshold_total_combinations() {
         println!("\n=== test_execute_with_different_threshold_total_combinations ===");
         let service = create_test_service();
         let crypto = CryptoServiceImpl::new();
@@ -1046,7 +1053,7 @@ mod tests {
             request.threshold = threshold;
             request.total_shares = total;
 
-            let result = service.execute_secret_sharing(request);
+            let result = service.execute_secret_sharing(request).await;
             assert!(
                 result.is_ok(),
                 "Failed for threshold={threshold}, total={total}"
@@ -1064,8 +1071,8 @@ mod tests {
         println!("  [PASS] All threshold/total combinations work correctly");
     }
 
-    #[test]
-    fn test_result_secret_id_is_unique() {
+    #[tokio::test]
+    async fn test_result_secret_id_is_unique() {
         println!("\n=== test_result_secret_id_is_unique ===");
         let service = create_test_service();
         let crypto = CryptoServiceImpl::new();
@@ -1074,8 +1081,8 @@ mod tests {
         let request2 = create_test_request(&crypto);
 
         println!("  Executing two workflows to verify unique IDs...");
-        let result1 = service.execute_secret_sharing(request1).unwrap();
-        let result2 = service.execute_secret_sharing(request2).unwrap();
+        let result1 = service.execute_secret_sharing(request1).await.unwrap();
+        let result2 = service.execute_secret_sharing(request2).await.unwrap();
 
         println!("  secret_id_1: {}", result1.secret_id);
         println!("  secret_id_2: {}", result2.secret_id);
