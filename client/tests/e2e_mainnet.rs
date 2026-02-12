@@ -142,10 +142,10 @@ async fn test_mainnet_dry_run() {
         Ok(resp) => {
             assert!(resp.success);
             assert!(
-                resp.message_id.is_some(),
-                "dry_run now returns message_id via MU"
+                resp.message_id.is_none(),
+                "dry_run does not return message_id"
             );
-            println!("Dry run succeeded (message_id: {:?})", resp.message_id);
+            println!("Dry run succeeded");
         }
         Err(e) => {
             panic!("Dry run failed: {e}");
