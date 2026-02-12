@@ -343,6 +343,15 @@ impl DataItemSigner {
                 .map_err(|e| AOCommunicationError::ValidationError {
                     details: format!("Invalid base64url in JWK n: {e}"),
                 })?;
+        if owner_bytes.len() != RSA_OWNER_LENGTH {
+            return Err(AOCommunicationError::ValidationError {
+                details: format!(
+                    "Invalid RSA modulus length: expected {} bytes, got {}",
+                    RSA_OWNER_LENGTH,
+                    owner_bytes.len()
+                ),
+            });
+        }
 
         Ok(Self {
             private_key,
@@ -603,7 +612,7 @@ mod tests {
         use rsa::RsaPrivateKey;
         use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 
-        let private_key = RsaPrivateKey::new(&mut OsRng, 2048).unwrap();
+        let private_key = RsaPrivateKey::new(&mut OsRng, 4096).unwrap();
         let public_key = private_key.to_public_key();
         let n = URL_SAFE_NO_PAD.encode(public_key.n().to_bytes_be());
         let e = URL_SAFE_NO_PAD.encode(public_key.e().to_bytes_be());
