@@ -121,6 +121,7 @@ mod tests {
         assert!(matches!(err, AOCommunicationError::ValidationError { .. }));
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn test_ao_config_from_env_defaults() {
         let config = AOConfig::from_env().unwrap();
