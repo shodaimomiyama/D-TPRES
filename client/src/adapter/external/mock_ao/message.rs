@@ -451,16 +451,19 @@ pub const MAX_ID_LENGTH: usize = 128;
 pub const MAX_BINARY_SIZE: usize = 128 * 1024;
 
 /// Validate a KFrag ID
+#[allow(dead_code)]
 pub fn validate_kfrag_id(id: &str) -> Result<(), String> {
     validate_id(id, "kfrag_id")
 }
 
 /// Validate a Capsule ID
+#[allow(dead_code)]
 pub fn validate_capsule_id(id: &str) -> Result<(), String> {
     validate_id(id, "capsule_id")
 }
 
 /// Validate a process ID
+#[allow(dead_code)]
 pub fn validate_process_id(id: &str) -> Result<(), String> {
     validate_id(id, "process_id")
 }

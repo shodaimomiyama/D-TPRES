@@ -253,6 +253,16 @@ pub enum WorkflowError {
     /// Resource not found errors
     #[error("Resource not found: {0}")]
     ResourceNotFound(String),
+
+    /// Arweave batch storage partially failed (immutable storage, no rollback)
+    #[error("Partial storage failure: {failed_count} of {total_count} items failed")]
+    PartialStorageFailure {
+        capsule_tx_id: String,
+        successful_share_tx_ids: Vec<String>,
+        failed_shares: Vec<(String, String)>,
+        failed_count: usize,
+        total_count: usize,
+    },
 }
 
 /// Conversion from ServiceError to WorkflowError
@@ -525,5 +535,49 @@ mod tests {
         assert!(!WorkflowError::storage("test").is_recoverable());
         assert!(!WorkflowError::ao_communication("test").is_recoverable());
         assert!(!WorkflowError::decryption("test").is_recoverable());
+        assert!(
+            !WorkflowError::PartialStorageFailure {
+                capsule_tx_id: "tx".to_string(),
+                successful_share_tx_ids: vec![],
+                failed_shares: vec![],
+                failed_count: 0,
+                total_count: 0,
+            }
+            .is_recoverable()
+        );
+    }
+
+    #[test]
+    fn test_workflow_error_partial_storage_failure() {
+        let err = WorkflowError::PartialStorageFailure {
+            capsule_tx_id: "tx_capsule_001".to_string(),
+            successful_share_tx_ids: vec!["tx_share_0".to_string()],
+            failed_shares: vec![("1".to_string(), "storage error".to_string())],
+            failed_count: 1,
+            total_count: 2,
+        };
+
+        let msg = err.to_string();
+        assert!(msg.contains("Partial storage failure"));
+        assert!(msg.contains("1 of 2"));
+        assert!(!err.is_recoverable());
+
+        match err {
+            WorkflowError::PartialStorageFailure {
+                capsule_tx_id,
+                successful_share_tx_ids,
+                failed_shares,
+                failed_count,
+                total_count,
+            } => {
+                assert_eq!(capsule_tx_id, "tx_capsule_001");
+                assert_eq!(successful_share_tx_ids.len(), 1);
+                assert_eq!(failed_shares.len(), 1);
+                assert_eq!(failed_count, 1);
+                assert_eq!(total_count, 2);
+                assert_eq!(failed_shares[0].0, "1");
+            }
+            _ => panic!("Expected PartialStorageFailure"),
+        }
     }
 }

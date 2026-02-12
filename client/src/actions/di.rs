@@ -6,26 +6,24 @@ use std::sync::Arc;
 
 use crate::controller::di::ControllerContainer;
 use crate::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
+use crate::usecase::core::storage::{ArweaveStorageService, ArweaveStorageServiceImpl};
 use crate::usecase::workflow::container::WorkflowServiceContainer;
 
 /// Container for Actions layer dependencies
 ///
 /// Aggregates Controller layer, WorkflowService layer, and CryptoService
 /// for simplified access from Actions functions (share, recover, generateKeyPair).
-pub struct ActionsContainer<C: CryptoService> {
+pub struct ActionsContainer<C: CryptoService, S: ArweaveStorageService> {
     controller: ControllerContainer<C>,
-    workflow_services: WorkflowServiceContainer<C>,
+    workflow_services: WorkflowServiceContainer<C, S>,
     crypto_service: Arc<C>,
 }
 
-impl<C: CryptoService> ActionsContainer<C> {
+impl<C: CryptoService, S: ArweaveStorageService> ActionsContainer<C, S> {
     /// Create a new ActionsContainer with custom dependencies
-    ///
-    /// For testing or custom configurations where specific implementations
-    /// need to be injected.
-    pub const fn with_dependencies(
+    pub fn with_dependencies(
         controller: ControllerContainer<C>,
-        workflow_services: WorkflowServiceContainer<C>,
+        workflow_services: WorkflowServiceContainer<C, S>,
         crypto_service: Arc<C>,
     ) -> Self {
         Self {
@@ -41,7 +39,7 @@ impl<C: CryptoService> ActionsContainer<C> {
     }
 
     /// Get reference to WorkflowServiceContainer
-    pub const fn workflow_services(&self) -> &WorkflowServiceContainer<C> {
+    pub const fn workflow_services(&self) -> &WorkflowServiceContainer<C, S> {
         &self.workflow_services
     }
 
@@ -57,15 +55,31 @@ impl<C: CryptoService> ActionsContainer<C> {
     }
 }
 
-/// Default ActionsContainer using CryptoServiceImpl
-pub type DefaultActionsContainer = ActionsContainer<CryptoServiceImpl>;
+/// Default ActionsContainer using concrete implementations
+pub type DefaultActionsContainer = ActionsContainer<CryptoServiceImpl, ArweaveStorageServiceImpl>;
 
 impl DefaultActionsContainer {
     /// Create a new ActionsContainer with default components
     pub fn new() -> Self {
         let crypto_service = Arc::new(CryptoServiceImpl::new());
+        let storage_service = Arc::new(ArweaveStorageServiceImpl::default());
         let controller = ControllerContainer::new(Arc::clone(&crypto_service));
-        let workflow_services = WorkflowServiceContainer::new(Arc::clone(&crypto_service));
+        let workflow_services =
+            WorkflowServiceContainer::new(Arc::clone(&crypto_service), storage_service);
+
+        Self {
+            controller,
+            workflow_services,
+            crypto_service,
+        }
+    }
+
+    /// Create with a pre-configured storage service
+    pub fn with_storage(storage_service: Arc<ArweaveStorageServiceImpl>) -> Self {
+        let crypto_service = Arc::new(CryptoServiceImpl::new());
+        let controller = ControllerContainer::new(Arc::clone(&crypto_service));
+        let workflow_services =
+            WorkflowServiceContainer::new(Arc::clone(&crypto_service), storage_service);
 
         Self {
             controller,
@@ -154,8 +168,12 @@ mod tests {
     #[test]
     fn test_container_with_dependencies() {
         let crypto_service = Arc::new(CryptoServiceImpl::new());
+        let storage_service = Arc::new(ArweaveStorageServiceImpl::default());
         let controller = ControllerContainer::new(Arc::clone(&crypto_service));
-        let workflow_services = WorkflowServiceContainer::new(Arc::clone(&crypto_service));
+        let workflow_services = WorkflowServiceContainer::new(
+            Arc::clone(&crypto_service),
+            Arc::clone(&storage_service),
+        );
 
         let container =
             ActionsContainer::with_dependencies(controller, workflow_services, crypto_service);

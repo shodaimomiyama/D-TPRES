@@ -2,17 +2,23 @@
 //!
 //! This module tests the complete PHASE 1 workflow using real CryptoService
 //! and verifying that all cryptographic operations produce valid outputs.
+#![allow(clippy::large_futures)]
 
 use std::sync::Arc;
 
+use d_tpres::adapter::external::mock_ao::MockAOClient;
 use d_tpres::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
+use d_tpres::usecase::core::storage::ArweaveStorageServiceImpl;
 use d_tpres::usecase::workflow::{SecretSharingWorkflowService, SecretSharingWorkflowServiceImpl};
 use d_tpres::usecase::{SecretSharingRequest, WorkflowError};
 
 /// Helper to create test service with real CryptoService
-fn create_integration_service() -> SecretSharingWorkflowServiceImpl<CryptoServiceImpl> {
+fn create_integration_service()
+-> SecretSharingWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
     let crypto = Arc::new(CryptoServiceImpl::new());
-    SecretSharingWorkflowServiceImpl::new(crypto)
+    let mock_ao = Arc::new(MockAOClient::new());
+    let storage = Arc::new(ArweaveStorageServiceImpl::default().with_ao_client(mock_ao));
+    SecretSharingWorkflowServiceImpl::new(crypto, storage)
 }
 
 /// Helper to create a valid test request
@@ -36,8 +42,8 @@ fn create_valid_request(crypto: &CryptoServiceImpl) -> SecretSharingRequest {
 // PHASE 1 Integration Tests (Task 20)
 // ============================================================================
 
-#[test]
-fn test_phase1_integration_complete_flow() {
+#[tokio::test]
+async fn test_phase1_integration_complete_flow() {
     println!("\n========================================");
     println!("PHASE 1 Integration Test: Complete Flow");
     println!("========================================");
@@ -63,7 +69,7 @@ fn test_phase1_integration_complete_flow() {
     println!("  Total shares (n): {}", request.total_shares);
 
     println!("\n[Step 2] Executing PHASE 1 workflow");
-    let result = service.execute_secret_sharing(request);
+    let result = service.execute_secret_sharing(request).await;
 
     assert!(
         result.is_ok(),
@@ -100,14 +106,14 @@ fn test_phase1_integration_complete_flow() {
     // Verify TX ID format
     for (i, tx_id) in result.share_tx_ids.iter().enumerate() {
         assert!(
-            tx_id.contains("share_tx_"),
+            tx_id.starts_with("tx_"),
             "Share TX ID {} should have correct format",
             i
         );
         println!("  Share[{}] TX: {}", i, tx_id);
     }
     assert!(
-        result.capsule_tx_id.contains("capsule_tx_"),
+        result.capsule_tx_id.starts_with("tx_"),
         "Capsule TX ID should have correct format"
     );
 
@@ -121,7 +127,8 @@ fn test_phase1_integration_crypto_operations_valid() {
     println!("========================================");
 
     let crypto = Arc::new(CryptoServiceImpl::new());
-    let _service = SecretSharingWorkflowServiceImpl::new(crypto.clone());
+    let storage = Arc::new(ArweaveStorageServiceImpl::default());
+    let _service = SecretSharingWorkflowServiceImpl::new(crypto.clone(), storage);
 
     println!("\n[Step 1] Testing symmetric key generation");
     let key1 = crypto.generate_symmetric_key().unwrap();
@@ -192,8 +199,8 @@ fn test_phase1_integration_crypto_operations_valid() {
     println!("\n[PASS] All crypto operations produce valid outputs");
 }
 
-#[test]
-fn test_phase1_integration_various_threshold_combinations() {
+#[tokio::test]
+async fn test_phase1_integration_various_threshold_combinations() {
     println!("\n========================================");
     println!("PHASE 1 Integration Test: Threshold Combinations");
     println!("========================================");
@@ -218,7 +225,7 @@ fn test_phase1_integration_various_threshold_combinations() {
         request.total_shares = total;
         request.secret = b"Test secret for threshold combo".to_vec();
 
-        let result = service.execute_secret_sharing(request);
+        let result = service.execute_secret_sharing(request).await;
         assert!(
             result.is_ok(),
             "Failed for k={}, n={}: {:?}",
@@ -246,8 +253,8 @@ fn test_phase1_integration_various_threshold_combinations() {
     println!("\n[PASS] All threshold combinations work correctly");
 }
 
-#[test]
-fn test_phase1_integration_secret_size_limits() {
+#[tokio::test]
+async fn test_phase1_integration_secret_size_limits() {
     println!("\n========================================");
     println!("PHASE 1 Integration Test: Secret Size Limits");
     println!("========================================");
@@ -268,7 +275,7 @@ fn test_phase1_integration_secret_size_limits() {
         let mut request = create_valid_request(&crypto);
         request.secret = vec![0xAB; size];
 
-        let result = service.execute_secret_sharing(request);
+        let result = service.execute_secret_sharing(request).await;
         assert!(
             result.is_ok(),
             "Failed for size {}: {:?}",
@@ -284,8 +291,8 @@ fn test_phase1_integration_secret_size_limits() {
     println!("\n[PASS] All secret sizes within limits work correctly");
 }
 
-#[test]
-fn test_phase1_integration_unique_outputs() {
+#[tokio::test]
+async fn test_phase1_integration_unique_outputs() {
     println!("\n========================================");
     println!("PHASE 1 Integration Test: Output Uniqueness");
     println!("========================================");
@@ -299,7 +306,7 @@ fn test_phase1_integration_unique_outputs() {
 
     for i in 0..5 {
         let request = create_valid_request(&crypto);
-        let result = service.execute_secret_sharing(request).unwrap();
+        let result = service.execute_secret_sharing(request).await.unwrap();
 
         println!("  Execution {}: secret_id={}", i + 1, result.secret_id);
         secret_ids.push(result.secret_id.as_str().to_string());
@@ -332,8 +339,8 @@ fn test_phase1_integration_unique_outputs() {
     println!("\n[PASS] All outputs are unique across executions");
 }
 
-#[test]
-fn test_phase1_integration_validation_errors() {
+#[tokio::test]
+async fn test_phase1_integration_validation_errors() {
     println!("\n========================================");
     println!("PHASE 1 Integration Test: Validation Errors");
     println!("========================================");
@@ -344,14 +351,14 @@ fn test_phase1_integration_validation_errors() {
     println!("\n[Test 1] Empty secret");
     let mut request = create_valid_request(&crypto);
     request.secret = vec![];
-    let result = service.execute_secret_sharing(request);
+    let result = service.execute_secret_sharing(request).await;
     assert!(matches!(result, Err(WorkflowError::ValidationError(_))));
     println!("  [PASS] Empty secret rejected");
 
     println!("\n[Test 2] Threshold below minimum");
     let mut request = create_valid_request(&crypto);
     request.threshold = 1;
-    let result = service.execute_secret_sharing(request);
+    let result = service.execute_secret_sharing(request).await;
     assert!(matches!(result, Err(WorkflowError::ValidationError(_))));
     println!("  [PASS] Threshold=1 rejected");
 
@@ -359,21 +366,21 @@ fn test_phase1_integration_validation_errors() {
     let mut request = create_valid_request(&crypto);
     request.threshold = 10;
     request.total_shares = 5;
-    let result = service.execute_secret_sharing(request);
+    let result = service.execute_secret_sharing(request).await;
     assert!(matches!(result, Err(WorkflowError::ValidationError(_))));
     println!("  [PASS] Threshold > total rejected");
 
     println!("\n[Test 4] Total shares exceeds maximum");
     let mut request = create_valid_request(&crypto);
     request.total_shares = 255;
-    let result = service.execute_secret_sharing(request);
+    let result = service.execute_secret_sharing(request).await;
     assert!(matches!(result, Err(WorkflowError::ValidationError(_))));
     println!("  [PASS] Total shares > 20 rejected");
 
     println!("\n[Test 5] Empty owner process ID");
     let mut request = create_valid_request(&crypto);
     request.owner_process_id = String::new();
-    let result = service.execute_secret_sharing(request);
+    let result = service.execute_secret_sharing(request).await;
     assert!(matches!(result, Err(WorkflowError::ValidationError(_))));
     println!("  [PASS] Empty process ID rejected");
 
