@@ -64,10 +64,22 @@ impl DefaultActionsContainer {
         let crypto_service = Arc::new(CryptoServiceImpl::new());
         let storage_service = Arc::new(ArweaveStorageServiceImpl::default());
         let controller = ControllerContainer::new(Arc::clone(&crypto_service));
-        let workflow_services = WorkflowServiceContainer::new(
-            Arc::clone(&crypto_service),
-            Arc::clone(&storage_service),
-        );
+        let workflow_services =
+            WorkflowServiceContainer::new(Arc::clone(&crypto_service), storage_service);
+
+        Self {
+            controller,
+            workflow_services,
+            crypto_service,
+        }
+    }
+
+    /// Create with a pre-configured storage service
+    pub fn with_storage(storage_service: Arc<ArweaveStorageServiceImpl>) -> Self {
+        let crypto_service = Arc::new(CryptoServiceImpl::new());
+        let controller = ControllerContainer::new(Arc::clone(&crypto_service));
+        let workflow_services =
+            WorkflowServiceContainer::new(Arc::clone(&crypto_service), storage_service);
 
         Self {
             controller,

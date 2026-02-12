@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use crate::adapter::external::mock_ao::{AOClient, Binary, ExecuteMsg};
@@ -101,6 +102,7 @@ pub struct BatchResult {
 }
 
 /// ArweaveStorageService trait
+#[async_trait]
 pub trait ArweaveStorageService: Send + Sync {
     /// データをArweaveに保存
     fn store_data(&self, data: &[u8], tags: Vec<Tag>) -> ServiceResult<String>;
@@ -124,7 +126,7 @@ pub trait ArweaveStorageService: Send + Sync {
     fn update_tags(&self, transaction_id: &str, new_tags: Vec<Tag>) -> ServiceResult<String>;
 
     /// Send kFrags to Owner-Process via AO Network
-    fn send_kfrag_to_owner_process(
+    async fn send_kfrag_to_owner_process(
         &self,
         kfrags: &[KeyFragment],
         owner_process_id: &str,
@@ -206,6 +208,7 @@ impl ArweaveStorageServiceImpl {
     }
 }
 
+#[async_trait]
 impl ArweaveStorageService for ArweaveStorageServiceImpl {
     fn store_data(&self, payload: &[u8], tags: Vec<Tag>) -> ServiceResult<String> {
         // 入力検証
@@ -370,7 +373,7 @@ impl ArweaveStorageService for ArweaveStorageServiceImpl {
         Ok(new_tx_id)
     }
 
-    fn send_kfrag_to_owner_process(
+    async fn send_kfrag_to_owner_process(
         &self,
         kfrags: &[KeyFragment],
         owner_process_id: &str,
@@ -378,25 +381,20 @@ impl ArweaveStorageService for ArweaveStorageServiceImpl {
         let ao_client = match &self.ao_client {
             Some(client) => client,
             None => {
-                eprintln!("[WARN] send_kfrag_to_owner_process: AOClient not configured, skipping");
-                return Ok(());
+                return Err(ServiceError::ao_network_error(
+                    "AOClient not configured: cannot send kFrags to Owner-Process",
+                ));
             }
         };
-
-        // AOClient is async, but this method is sync
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| {
-                ServiceError::ao_network_error(format!("Failed to create runtime: {e}"))
-            })?;
 
         for kfrag in kfrags {
             let msg = ExecuteMsg::DelegateKFrag {
                 kfrag_id: format!("kfrag-{}", kfrag.id),
                 kfrag: Binary::from(kfrag.key_data.clone()),
             };
-            rt.block_on(ao_client.execute(owner_process_id, msg))
+            ao_client
+                .execute(owner_process_id, msg)
+                .await
                 .map_err(|e| ServiceError::ao_network_error(e.to_string()))?;
         }
 

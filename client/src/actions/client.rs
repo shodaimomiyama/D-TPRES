@@ -75,6 +75,25 @@ impl DTpresClient {
         }
     }
 
+    /// Create a DTpresClient with a pre-configured storage service
+    pub fn with_storage(
+        process_id: String,
+        wallet_address: String,
+        ao_gateway_url: String,
+        arweave_gateway_url: String,
+        storage: Arc<ArweaveStorageServiceImpl>,
+    ) -> Self {
+        let actions = Arc::new(DefaultActionsContainer::with_storage(storage));
+
+        Self {
+            process_id,
+            wallet_address,
+            ao_gateway_url,
+            arweave_gateway_url,
+            actions,
+        }
+    }
+
     pub fn process_id(&self) -> &str {
         &self.process_id
     }

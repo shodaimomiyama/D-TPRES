@@ -1,13 +1,22 @@
+#![allow(clippy::large_futures)]
+
+use std::sync::Arc;
+
 use d_tpres::actions::{ActionError, DTpresClient, InitConfig};
+use d_tpres::adapter::external::mock_ao::MockAOClient;
 use d_tpres::domain::value_objects::SecretId;
+use d_tpres::usecase::core::storage::ArweaveStorageServiceImpl;
 use d_tpres::usecase::dto::SecretMetadata;
 
 fn default_client() -> DTpresClient {
-    DTpresClient::new(
+    let mock_ao = Arc::new(MockAOClient::new());
+    let storage = Arc::new(ArweaveStorageServiceImpl::default().with_ao_client(mock_ao));
+    DTpresClient::with_storage(
         "test_process".to_string(),
         "test_wallet".to_string(),
         "https://ao.arweave.net".to_string(),
         "https://arweave.net".to_string(),
+        storage,
     )
 }
 
@@ -53,8 +62,8 @@ fn test_client_generate_keypair() {
 // ShareBuilder fluent API
 // ============================================================================
 
-#[test]
-fn test_share_basic() {
+#[tokio::test]
+async fn test_share_basic() {
     let client = default_client();
     let (owner_sk, _) = client.generate_keypair().unwrap();
     let (_, requester_pk) = client.generate_keypair().unwrap();
@@ -66,7 +75,8 @@ fn test_share_basic() {
         .total_shares(5)
         .owner_key(owner_sk)
         .requester_key(requester_pk)
-        .execute();
+        .execute()
+        .await;
 
     assert!(result.is_ok());
     let result = result.unwrap();
@@ -74,8 +84,8 @@ fn test_share_basic() {
     assert_eq!(result.kfrag_count, 5);
 }
 
-#[test]
-fn test_share_any_method_order() {
+#[tokio::test]
+async fn test_share_any_method_order() {
     let client = default_client();
     let (owner_sk, _) = client.generate_keypair().unwrap();
     let (_, requester_pk) = client.generate_keypair().unwrap();
@@ -87,7 +97,8 @@ fn test_share_any_method_order() {
         .requester_key(requester_pk)
         .total_shares(5)
         .threshold(3)
-        .execute();
+        .execute()
+        .await;
 
     assert!(result.is_ok());
     let result = result.unwrap();
@@ -95,8 +106,8 @@ fn test_share_any_method_order() {
     assert_eq!(result.kfrag_count, 5);
 }
 
-#[test]
-fn test_share_with_metadata() {
+#[tokio::test]
+async fn test_share_with_metadata() {
     let client = default_client();
     let (owner_sk, _) = client.generate_keypair().unwrap();
     let (_, requester_pk) = client.generate_keypair().unwrap();
@@ -116,13 +127,14 @@ fn test_share_with_metadata() {
         .owner_key(owner_sk)
         .requester_key(requester_pk)
         .metadata(Some(metadata))
-        .execute();
+        .execute()
+        .await;
 
     assert!(result.is_ok());
 }
 
-#[test]
-fn test_share_without_metadata() {
+#[tokio::test]
+async fn test_share_without_metadata() {
     let client = default_client();
     let (owner_sk, _) = client.generate_keypair().unwrap();
     let (_, requester_pk) = client.generate_keypair().unwrap();
@@ -134,13 +146,14 @@ fn test_share_without_metadata() {
         .total_shares(3)
         .owner_key(owner_sk)
         .requester_key(requester_pk)
-        .execute();
+        .execute()
+        .await;
 
     assert!(result.is_ok());
 }
 
-#[test]
-fn test_share_validation_empty_secret() {
+#[tokio::test]
+async fn test_share_validation_empty_secret() {
     let client = default_client();
     let (owner_sk, _) = client.generate_keypair().unwrap();
     let (_, requester_pk) = client.generate_keypair().unwrap();
@@ -152,7 +165,8 @@ fn test_share_validation_empty_secret() {
         .total_shares(3)
         .owner_key(owner_sk)
         .requester_key(requester_pk)
-        .execute();
+        .execute()
+        .await;
 
     assert!(result.is_err());
     match result.unwrap_err() {
@@ -163,8 +177,8 @@ fn test_share_validation_empty_secret() {
     }
 }
 
-#[test]
-fn test_share_validation_invalid_threshold() {
+#[tokio::test]
+async fn test_share_validation_invalid_threshold() {
     let client = default_client();
     let (owner_sk, _) = client.generate_keypair().unwrap();
     let (_, requester_pk) = client.generate_keypair().unwrap();
@@ -176,7 +190,8 @@ fn test_share_validation_invalid_threshold() {
         .total_shares(5)
         .owner_key(owner_sk)
         .requester_key(requester_pk)
-        .execute();
+        .execute()
+        .await;
 
     assert!(result.is_err());
     match result.unwrap_err() {
@@ -187,8 +202,8 @@ fn test_share_validation_invalid_threshold() {
     }
 }
 
-#[test]
-fn test_share_multiple_unique_ids() {
+#[tokio::test]
+async fn test_share_multiple_unique_ids() {
     let client = default_client();
     let mut ids = Vec::new();
 
@@ -204,6 +219,7 @@ fn test_share_multiple_unique_ids() {
             .owner_key(owner_sk)
             .requester_key(requester_pk)
             .execute()
+            .await
             .unwrap();
 
         ids.push(result.secret_id.as_str().to_string());
@@ -261,8 +277,8 @@ fn test_recover_builder_order_independence() {
 // Roundtrip (share -> recover)
 // ============================================================================
 
-#[test]
-fn test_share_then_recover_roundtrip() {
+#[tokio::test]
+async fn test_share_then_recover_roundtrip() {
     let client = default_client();
     let (owner_sk, _) = client.generate_keypair().unwrap();
     let (requester_sk, requester_pk) = client.generate_keypair().unwrap();
@@ -274,7 +290,8 @@ fn test_share_then_recover_roundtrip() {
         .total_shares(3)
         .owner_key(owner_sk)
         .requester_key(requester_pk)
-        .execute();
+        .execute()
+        .await;
 
     assert!(share_result.is_ok());
     let share_result = share_result.unwrap();

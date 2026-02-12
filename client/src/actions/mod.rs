@@ -112,7 +112,7 @@ impl<C: CryptoService, S: ArweaveStorageService> ActionsContainer<C, S> {
     /// ```
     #[deprecated(since = "0.2.0", note = "use DTpresClient::share() builder instead")]
     #[allow(clippy::too_many_arguments)]
-    pub fn share(
+    pub async fn share(
         &self,
         secret: Vec<u8>,
         threshold: u8,
@@ -154,7 +154,8 @@ impl<C: CryptoService, S: ArweaveStorageService> ActionsContainer<C, S> {
         let result = self
             .workflow_services()
             .secret_sharing_service()
-            .execute_secret_sharing(request)?;
+            .execute_secret_sharing(request)
+            .await?;
 
         Ok(result)
     }
@@ -255,26 +256,39 @@ impl<C: CryptoService, S: ArweaveStorageService> ActionsContainer<C, S> {
 }
 
 #[cfg(test)]
-#[allow(deprecated)]
+#[allow(deprecated, clippy::large_futures)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_share_valid_params() {
-        let container = DefaultActionsContainer::new();
+    fn create_test_container() -> DefaultActionsContainer {
+        use std::sync::Arc;
+
+        use crate::adapter::external::mock_ao::MockAOClient;
+        use crate::usecase::core::storage::ArweaveStorageServiceImpl;
+
+        let mock_ao = Arc::new(MockAOClient::new());
+        let storage = Arc::new(ArweaveStorageServiceImpl::default().with_ao_client(mock_ao));
+        DefaultActionsContainer::with_storage(storage)
+    }
+
+    #[tokio::test]
+    async fn test_share_valid_params() {
+        let container = create_test_container();
         let (owner_sk, owner_pk) = container.generate_keypair().unwrap();
         let (_, requester_pk) = container.generate_keypair().unwrap();
 
-        let result = container.share(
-            b"test secret data".to_vec(),
-            3,
-            5,
-            owner_sk,
-            owner_pk,
-            requester_pk,
-            "owner_process_123".to_string(),
-            None,
-        );
+        let result = container
+            .share(
+                b"test secret data".to_vec(),
+                3,
+                5,
+                owner_sk,
+                owner_pk,
+                requester_pk,
+                "owner_process_123".to_string(),
+                None,
+            )
+            .await;
 
         assert!(result.is_ok());
         let result = result.unwrap();
@@ -282,22 +296,24 @@ mod tests {
         assert_eq!(result.kfrag_count, 5);
     }
 
-    #[test]
-    fn test_share_empty_secret() {
+    #[tokio::test]
+    async fn test_share_empty_secret() {
         let container = DefaultActionsContainer::new();
         let (owner_sk, owner_pk) = container.generate_keypair().unwrap();
         let (_, requester_pk) = container.generate_keypair().unwrap();
 
-        let result = container.share(
-            vec![],
-            3,
-            5,
-            owner_sk,
-            owner_pk,
-            requester_pk,
-            "owner_process_123".to_string(),
-            None,
-        );
+        let result = container
+            .share(
+                vec![],
+                3,
+                5,
+                owner_sk,
+                owner_pk,
+                requester_pk,
+                "owner_process_123".to_string(),
+                None,
+            )
+            .await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -308,22 +324,24 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_share_zero_threshold() {
+    #[tokio::test]
+    async fn test_share_zero_threshold() {
         let container = DefaultActionsContainer::new();
         let (owner_sk, owner_pk) = container.generate_keypair().unwrap();
         let (_, requester_pk) = container.generate_keypair().unwrap();
 
-        let result = container.share(
-            b"test secret".to_vec(),
-            0,
-            5,
-            owner_sk,
-            owner_pk,
-            requester_pk,
-            "owner_process".to_string(),
-            None,
-        );
+        let result = container
+            .share(
+                b"test secret".to_vec(),
+                0,
+                5,
+                owner_sk,
+                owner_pk,
+                requester_pk,
+                "owner_process".to_string(),
+                None,
+            )
+            .await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -334,22 +352,24 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_share_threshold_exceeds_total() {
+    #[tokio::test]
+    async fn test_share_threshold_exceeds_total() {
         let container = DefaultActionsContainer::new();
         let (owner_sk, owner_pk) = container.generate_keypair().unwrap();
         let (_, requester_pk) = container.generate_keypair().unwrap();
 
-        let result = container.share(
-            b"test secret".to_vec(),
-            6,
-            5,
-            owner_sk,
-            owner_pk,
-            requester_pk,
-            "owner_process".to_string(),
-            None,
-        );
+        let result = container
+            .share(
+                b"test secret".to_vec(),
+                6,
+                5,
+                owner_sk,
+                owner_pk,
+                requester_pk,
+                "owner_process".to_string(),
+                None,
+            )
+            .await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -360,9 +380,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_share_result_has_valid_secret_id() {
-        let container = DefaultActionsContainer::new();
+    #[tokio::test]
+    async fn test_share_result_has_valid_secret_id() {
+        let container = create_test_container();
         let (owner_sk, owner_pk) = container.generate_keypair().unwrap();
         let (_, requester_pk) = container.generate_keypair().unwrap();
 
@@ -377,14 +397,15 @@ mod tests {
                 "owner_process".to_string(),
                 None,
             )
+            .await
             .unwrap();
 
         assert!(!result.secret_id.as_str().is_empty());
     }
 
-    #[test]
-    fn test_share_result_kfrag_count_matches() {
-        let container = DefaultActionsContainer::new();
+    #[tokio::test]
+    async fn test_share_result_kfrag_count_matches() {
+        let container = create_test_container();
         let (owner_sk, owner_pk) = container.generate_keypair().unwrap();
         let (_, requester_pk) = container.generate_keypair().unwrap();
 
@@ -399,16 +420,17 @@ mod tests {
                 "owner_process".to_string(),
                 None,
             )
+            .await
             .unwrap();
 
         assert_eq!(result.kfrag_count, 7);
     }
 
-    #[test]
-    fn test_share_with_metadata() {
+    #[tokio::test]
+    async fn test_share_with_metadata() {
         use crate::usecase::dto::SecretMetadata;
 
-        let container = DefaultActionsContainer::new();
+        let container = create_test_container();
         let (owner_sk, owner_pk) = container.generate_keypair().unwrap();
         let (_, requester_pk) = container.generate_keypair().unwrap();
 
@@ -420,23 +442,25 @@ mod tests {
         };
         let options = ShareOptions::with_metadata(metadata);
 
-        let result = container.share(
-            b"test secret".to_vec(),
-            3,
-            5,
-            owner_sk,
-            owner_pk,
-            requester_pk,
-            "owner_process".to_string(),
-            Some(options),
-        );
+        let result = container
+            .share(
+                b"test secret".to_vec(),
+                3,
+                5,
+                owner_sk,
+                owner_pk,
+                requester_pk,
+                "owner_process".to_string(),
+                Some(options),
+            )
+            .await;
 
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_share_various_threshold_combinations() {
-        let container = DefaultActionsContainer::new();
+    #[tokio::test]
+    async fn test_share_various_threshold_combinations() {
+        let container = create_test_container();
 
         let combinations = [(2, 3), (3, 5), (5, 10), (2, 10)];
 
@@ -444,16 +468,18 @@ mod tests {
             let (owner_sk, owner_pk) = container.generate_keypair().unwrap();
             let (_, requester_pk) = container.generate_keypair().unwrap();
 
-            let result = container.share(
-                b"test secret".to_vec(),
-                threshold,
-                total,
-                owner_sk,
-                owner_pk,
-                requester_pk,
-                "owner_process".to_string(),
-                None,
-            );
+            let result = container
+                .share(
+                    b"test secret".to_vec(),
+                    threshold,
+                    total,
+                    owner_sk,
+                    owner_pk,
+                    requester_pk,
+                    "owner_process".to_string(),
+                    None,
+                )
+                .await;
 
             assert!(
                 result.is_ok(),
@@ -553,25 +579,25 @@ mod tests {
         assert_ne!(pk1.key_data, pk2.key_data);
     }
 
-    #[test]
-    fn test_generate_keypair_usable_with_share() {
-        let container = DefaultActionsContainer::new();
+    #[tokio::test]
+    async fn test_generate_keypair_usable_with_share() {
+        let container = create_test_container();
 
-        // Generate keys
         let (owner_sk, owner_pk) = container.generate_keypair().unwrap();
         let (_, requester_pk) = container.generate_keypair().unwrap();
 
-        // Use keys in share
-        let result = container.share(
-            b"test secret".to_vec(),
-            3,
-            5,
-            owner_sk,
-            owner_pk,
-            requester_pk,
-            "owner_process".to_string(),
-            None,
-        );
+        let result = container
+            .share(
+                b"test secret".to_vec(),
+                3,
+                5,
+                owner_sk,
+                owner_pk,
+                requester_pk,
+                "owner_process".to_string(),
+                None,
+            )
+            .await;
 
         assert!(result.is_ok());
     }

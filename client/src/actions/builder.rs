@@ -166,8 +166,8 @@ impl<C: CryptoService, Ss: ArweaveStorageService, S, T, N, O, R>
 }
 
 impl<C: CryptoService, Ss: ArweaveStorageService> ShareBuilder<C, Ss, Set, Set, Set, Set, Set> {
-    #[allow(deprecated, clippy::missing_const_for_fn)]
-    pub fn execute(self) -> ActionResult<SecretSharingResult> {
+    #[allow(deprecated, clippy::missing_const_for_fn, clippy::large_futures)]
+    pub async fn execute(self) -> ActionResult<SecretSharingResult> {
         let mut secret = self.secret.ok_or_else(|| {
             ActionError::validation_failed("missing_secret", "secret is required")
         })?;
@@ -193,16 +193,18 @@ impl<C: CryptoService, Ss: ArweaveStorageService> ShareBuilder<C, Ss, Set, Set, 
         let secret = std::mem::take(&mut *secret);
         let options = self.metadata.map(ShareOptions::with_metadata);
 
-        self.container.share(
-            secret,
-            threshold,
-            total_shares,
-            owner_secret_key,
-            owner_public_key,
-            requester_public_key,
-            self.process_id,
-            options,
-        )
+        self.container
+            .share(
+                secret,
+                threshold,
+                total_shares,
+                owner_secret_key,
+                owner_public_key,
+                requester_public_key,
+                self.process_id,
+                options,
+            )
+            .await
     }
 }
 
