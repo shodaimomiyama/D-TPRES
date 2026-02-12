@@ -160,23 +160,24 @@ impl ProductionAOClient {
 
         let output = json.get("Output");
         let data = if let Some(obj) = output {
-            if obj.get("data").is_some() {
-                obj.get("data")
-                    .and_then(|d| d.as_str())
-                    .filter(|s| !s.is_empty())
-                    .map(|data_str| {
-                        use base64::{
-                            Engine,
-                            engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
-                        };
-                        match STANDARD
-                            .decode(data_str)
-                            .or_else(|_| URL_SAFE_NO_PAD.decode(data_str))
-                        {
-                            Ok(decoded) => Binary::from(decoded),
-                            Err(_) => Binary::from(data_str.as_bytes().to_vec()),
-                        }
-                    })
+            if let Some(data_str) = obj
+                .get("data")
+                .and_then(|d| d.as_str())
+                .filter(|s| !s.is_empty())
+            {
+                use base64::{
+                    Engine,
+                    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+                };
+                Some(
+                    match STANDARD
+                        .decode(data_str)
+                        .or_else(|_| URL_SAFE_NO_PAD.decode(data_str))
+                    {
+                        Ok(decoded) => Binary::from(decoded),
+                        Err(_) => Binary::from(data_str.as_bytes().to_vec()),
+                    },
+                )
             } else if obj.is_object() || obj.is_array() {
                 let serialized = serde_json::to_vec(obj).map_err(|e| {
                     AOCommunicationError::DeserializationError {
