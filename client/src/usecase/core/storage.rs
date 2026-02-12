@@ -9,9 +9,12 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
+use crate::adapter::external::mock_ao::{AOClient, Binary, ExecuteMsg};
 use crate::service::error::{ServiceError, ServiceResult};
+use crate::usecase::core::crypto::KeyFragment;
 
 /// Arweaveトランザクション
 #[derive(Debug, Clone)]
@@ -99,6 +102,7 @@ pub struct BatchResult {
 }
 
 /// ArweaveStorageService trait
+#[async_trait]
 pub trait ArweaveStorageService: Send + Sync {
     /// データをArweaveに保存
     fn store_data(&self, data: &[u8], tags: Vec<Tag>) -> ServiceResult<String>;
@@ -120,15 +124,21 @@ pub trait ArweaveStorageService: Send + Sync {
 
     /// タグを更新（新しいトランザクションとして作成）
     fn update_tags(&self, transaction_id: &str, new_tags: Vec<Tag>) -> ServiceResult<String>;
+
+    /// Send kFrags to Owner-Process via AO Network
+    async fn send_kfrag_to_owner_process(
+        &self,
+        kfrags: &[KeyFragment],
+        owner_process_id: &str,
+    ) -> ServiceResult<()>;
 }
 
 /// ArweaveStorageService実装
 pub struct ArweaveStorageServiceImpl {
     config: StorageConfig,
-    // AO環境では実際のArweave操作は外部システムが担当
-    // ここではキャッシュとシミュレーション用の構造を保持
     cache: Arc<RwLock<HashMap<String, ArweaveTransaction>>>,
     transaction_counter: Arc<RwLock<u64>>,
+    ao_client: Option<Arc<dyn AOClient>>,
 }
 
 impl ArweaveStorageServiceImpl {
@@ -138,7 +148,15 @@ impl ArweaveStorageServiceImpl {
             config,
             cache: Arc::new(RwLock::new(HashMap::new())),
             transaction_counter: Arc::new(RwLock::new(0)),
+            ao_client: None,
         }
+    }
+
+    /// Set AOClient for AO Network communication
+    #[must_use]
+    pub fn with_ao_client(mut self, ao_client: Arc<dyn AOClient>) -> Self {
+        self.ao_client = Some(ao_client);
+        self
     }
 
     /// トランザクションIDを生成
@@ -190,6 +208,7 @@ impl ArweaveStorageServiceImpl {
     }
 }
 
+#[async_trait]
 impl ArweaveStorageService for ArweaveStorageServiceImpl {
     fn store_data(&self, payload: &[u8], tags: Vec<Tag>) -> ServiceResult<String> {
         // 入力検証
@@ -320,10 +339,10 @@ impl ArweaveStorageService for ArweaveStorageServiceImpl {
         let mut successful = Vec::new();
         let mut failed = Vec::new();
 
-        for (item_payload, tags) in items {
+        for (index, (item_payload, tags)) in items.into_iter().enumerate() {
             match self.store_data(&item_payload, tags) {
                 Ok(tx_id) => successful.push(tx_id),
-                Err(e) => failed.push((String::new(), e.to_string())),
+                Err(e) => failed.push((index.to_string(), e.to_string())),
             }
         }
 
@@ -352,6 +371,34 @@ impl ArweaveStorageService for ArweaveStorageServiceImpl {
         let new_tx_id = self.store_data(&existing_tx.data, new_tags)?;
 
         Ok(new_tx_id)
+    }
+
+    async fn send_kfrag_to_owner_process(
+        &self,
+        kfrags: &[KeyFragment],
+        owner_process_id: &str,
+    ) -> ServiceResult<()> {
+        let ao_client = match &self.ao_client {
+            Some(client) => client,
+            None => {
+                return Err(ServiceError::ao_network_error(
+                    "AOClient not configured: cannot send kFrags to Owner-Process",
+                ));
+            }
+        };
+
+        for kfrag in kfrags {
+            let msg = ExecuteMsg::DelegateKFrag {
+                kfrag_id: format!("kfrag-{}", kfrag.id),
+                kfrag: Binary::from(kfrag.key_data.clone()),
+            };
+            ao_client
+                .execute(owner_process_id, msg)
+                .await
+                .map_err(|e| ServiceError::ao_network_error(e.to_string()))?;
+        }
+
+        Ok(())
     }
 }
 

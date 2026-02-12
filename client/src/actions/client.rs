@@ -9,6 +9,7 @@ use crate::actions::builder::{NotSet, RecoverBuilder, ShareBuilder};
 use crate::actions::di::DefaultActionsContainer;
 use crate::actions::error::{ActionError, ActionResult};
 use crate::usecase::core::crypto::{CryptoServiceImpl, PublicKey, SecretKey};
+use crate::usecase::core::storage::ArweaveStorageServiceImpl;
 
 /// Client initialization configuration
 pub struct InitConfig {
@@ -74,6 +75,25 @@ impl DTpresClient {
         }
     }
 
+    /// Create a DTpresClient with a pre-configured storage service
+    pub fn with_storage(
+        process_id: String,
+        wallet_address: String,
+        ao_gateway_url: String,
+        arweave_gateway_url: String,
+        storage: Arc<ArweaveStorageServiceImpl>,
+    ) -> Self {
+        let actions = Arc::new(DefaultActionsContainer::with_storage(storage));
+
+        Self {
+            process_id,
+            wallet_address,
+            ao_gateway_url,
+            arweave_gateway_url,
+            actions,
+        }
+    }
+
     pub fn process_id(&self) -> &str {
         &self.process_id
     }
@@ -91,12 +111,24 @@ impl DTpresClient {
     }
 
     /// Create a ShareBuilder for the share operation
-    pub fn share(&self) -> ShareBuilder<CryptoServiceImpl, NotSet, NotSet, NotSet, NotSet, NotSet> {
+    pub fn share(
+        &self,
+    ) -> ShareBuilder<
+        CryptoServiceImpl,
+        ArweaveStorageServiceImpl,
+        NotSet,
+        NotSet,
+        NotSet,
+        NotSet,
+        NotSet,
+    > {
         ShareBuilder::new(Arc::clone(&self.actions), self.process_id.clone())
     }
 
     /// Create a RecoverBuilder for the recover operation
-    pub fn recover(&self) -> RecoverBuilder<CryptoServiceImpl, NotSet, NotSet> {
+    pub fn recover(
+        &self,
+    ) -> RecoverBuilder<CryptoServiceImpl, ArweaveStorageServiceImpl, NotSet, NotSet> {
         RecoverBuilder::new(Arc::clone(&self.actions), self.process_id.clone())
     }
 

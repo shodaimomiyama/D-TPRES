@@ -6,11 +6,14 @@
 //! Note: Storage operations are mocked since Issue #47 (AO Network communication)
 //! is not yet implemented. The tests focus on cryptographic correctness using
 //! only public APIs.
+#![allow(clippy::large_futures)]
 
 use std::sync::Arc;
 
+use d_tpres::adapter::external::mock_ao::MockAOClient;
 use d_tpres::usecase::SecretSharingRequest;
 use d_tpres::usecase::core::crypto::{CryptoService, CryptoServiceImpl, ShamirShare};
+use d_tpres::usecase::core::storage::ArweaveStorageServiceImpl;
 use d_tpres::usecase::workflow::{SecretSharingWorkflowService, SecretSharingWorkflowServiceImpl};
 
 // ============================================================================
@@ -377,14 +380,16 @@ fn test_roundtrip_keypair_generation_consistency() {
     println!("\n[PASS] All keypairs work correctly and independently");
 }
 
-#[test]
-fn test_roundtrip_workflow_services_integration() {
+#[tokio::test]
+async fn test_roundtrip_workflow_services_integration() {
     println!("\n========================================");
     println!("Roundtrip Test: Workflow Services Integration");
     println!("========================================");
 
     let crypto = Arc::new(CryptoServiceImpl::new());
-    let sharing_service = SecretSharingWorkflowServiceImpl::new(crypto.clone());
+    let mock_ao = Arc::new(MockAOClient::new());
+    let storage = Arc::new(ArweaveStorageServiceImpl::default().with_ao_client(mock_ao));
+    let sharing_service = SecretSharingWorkflowServiceImpl::new(crypto.clone(), storage);
 
     let (owner_sk, owner_pk) = crypto.generate_keypair().unwrap();
     let (_requester_sk, requester_pk) = crypto.generate_keypair().unwrap();
@@ -409,7 +414,10 @@ fn test_roundtrip_workflow_services_integration() {
     );
 
     println!("\n[Step 2] Execute PHASE 1 workflow");
-    let phase1_result = sharing_service.execute_secret_sharing(request).unwrap();
+    let phase1_result = sharing_service
+        .execute_secret_sharing(request)
+        .await
+        .unwrap();
     println!("  Secret ID: {}", phase1_result.secret_id);
     println!("  Capsule TX: {}", phase1_result.capsule_tx_id);
     println!("  kFrag count: {}", phase1_result.kfrag_count);

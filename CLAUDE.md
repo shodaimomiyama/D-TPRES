@@ -169,6 +169,24 @@ pub fn handle_message(msg: AOMessage, repo: &dyn Repository) -> Result<Response>
 }
 ```
 
+## Directory-Specific Async Policy
+
+D-TPRES has two Rust codebases with different async constraints:
+
+| Directory | async/await | tokio | Reason |
+|-----------|------------|-------|--------|
+| `ao/contracts/src/` | Prohibited | Not available | AO WASM single-threaded constraint |
+| `client/` | Required for I/O | Available (non-wasm32) | Client-side library with network operations |
+
+### `ao/contracts/src/` - Sync Only
+The "AO Stateless Execution Constraints" above apply exclusively to this directory.
+
+### `client/` - Async for Network I/O
+- `AOClient` trait uses `#[async_trait]` - all AO Network calls are async
+- Network operations (Arweave, AO) must use async/await, not nested runtimes
+- **Anti-pattern**: `tokio::runtime::Builder::new_current_thread().block_on()` inside sync methods — causes "runtime inside runtime" panic
+- Propagate async up the call chain instead
+
 ## Security and Cryptographic Requirements
 
 ### Memory Management for Secrets
