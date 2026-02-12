@@ -197,16 +197,8 @@ impl ProductionAOClient {
 
         let output = json.get("Output");
 
-        // CWAO CU returns query results directly in Output as a JSON object
         if let Some(obj) = output {
-            if obj.is_object() || obj.is_array() {
-                let serialized = serde_json::to_vec(obj).map_err(|e| {
-                    AOCommunicationError::DeserializationError {
-                        details: format!("Failed to serialize Output: {e}"),
-                    }
-                })?;
-                return Ok(Binary::from(serialized));
-            }
+            // Standard AO CU: Output.data is a base64-encoded string
             if let Some(data_str) = obj.get("data").and_then(|d| d.as_str()) {
                 use base64::{
                     Engine,
@@ -219,6 +211,15 @@ impl ProductionAOClient {
                     Ok(decoded) => Ok(Binary::from(decoded)),
                     Err(_) => Ok(Binary::from(data_str.as_bytes().to_vec())),
                 };
+            }
+            // CWAO CU: Output is a direct JSON object/array without data field
+            if obj.is_object() || obj.is_array() {
+                let serialized = serde_json::to_vec(obj).map_err(|e| {
+                    AOCommunicationError::DeserializationError {
+                        details: format!("Failed to serialize Output: {e}"),
+                    }
+                })?;
+                return Ok(Binary::from(serialized));
             }
         }
 
@@ -295,7 +296,7 @@ mod tests {
         use rsa::RsaPrivateKey;
         use rsa::traits::{PrivateKeyParts, PublicKeyParts};
 
-        let private_key = RsaPrivateKey::new(&mut OsRng, 2048).unwrap();
+        let private_key = RsaPrivateKey::new(&mut OsRng, 4096).unwrap();
         let public_key = private_key.to_public_key();
         let n = URL_SAFE_NO_PAD.encode(public_key.n().to_bytes_be());
         let e = URL_SAFE_NO_PAD.encode(public_key.e().to_bytes_be());
