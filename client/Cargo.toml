@@ -20,19 +20,25 @@ cw-storage-plus = "0.13.4"
 thiserror = "1"
 async-trait = "0.1"
 base64 = "0.22"
-reqwest = { version = "0.12", default-features = false, features = ["json"] }
-sha2 = "0.10"
-rsa = { version = "0.9", features = ["sha2"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rsa = { version = "0.9", features = ["sha2"] }
+sha2 = "0.10"
 tokio = { version = "1", features = ["time", "rt"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2", features = ["js"] }
 serde_json = "1.0"
+rsa = { version = "0.9", optional = true }
+sha2 = { version = "0.10", features = ["oid"], optional = true }
+reqwest = { version = "0.12", features = ["json"], default-features = false, optional = true }
+
+[features]
+production-ao = ["dep:reqwest", "dep:rsa", "dep:sha2"]
 
 [dev-dependencies]
 cw-multi-test = "0.13.4"
 tokio = { version = "1", features = ["rt", "macros"] }
+wiremock = "0.5"
 dotenvy = "0.15"
