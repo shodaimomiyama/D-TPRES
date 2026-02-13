@@ -294,8 +294,10 @@ const RSA_SIG_LENGTH: usize = 512;
 const RSA_OWNER_LENGTH: usize = 512;
 
 /// Signs UnsignedDataItems with an Arweave RSA key
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct DataItemSigner {
-    private_key: RsaPrivateKey,
+    #[zeroize(skip)]
+    signing_key: SigningKey<Sha256>,
     owner_bytes: Vec<u8>,
 }
 
@@ -353,8 +355,10 @@ impl DataItemSigner {
             });
         }
 
+        let signing_key = SigningKey::<Sha256>::new(private_key);
+
         Ok(Self {
-            private_key,
+            signing_key,
             owner_bytes,
         })
     }
@@ -362,8 +366,7 @@ impl DataItemSigner {
     /// Sign a DataItem and return complete ANS-104 signed bytes
     pub fn sign(&self, item: &UnsignedDataItem) -> Result<Vec<u8>, AOCommunicationError> {
         let deep_hash = self.build_deep_hash(item);
-        let signing_key = SigningKey::<Sha256>::new(self.private_key.clone());
-        let signature = signing_key.sign_with_rng(&mut OsRng, &deep_hash);
+        let signature = self.signing_key.sign_with_rng(&mut OsRng, &deep_hash);
         let sig_bytes = signature.to_bytes();
 
         let mut result = Vec::new();
