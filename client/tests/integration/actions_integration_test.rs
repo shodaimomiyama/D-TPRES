@@ -11,13 +11,15 @@ use std::sync::Arc;
 
 use d_tpres::actions::{ActionError, DefaultActionsContainer, RecoverOptions, ShareOptions};
 use d_tpres::adapter::external::mock_ao::MockAOClient;
+use d_tpres::usecase::core::contract_storage::ContractStorageImpl;
 use d_tpres::usecase::core::storage::ArweaveStorageServiceImpl;
 use d_tpres::usecase::dto::SecretMetadata;
 
 fn create_test_container() -> DefaultActionsContainer {
     let mock_ao = Arc::new(MockAOClient::new());
-    let storage = Arc::new(ArweaveStorageServiceImpl::default().with_ao_client(mock_ao));
-    DefaultActionsContainer::with_storage(storage)
+    let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    DefaultActionsContainer::with_storage(arweave, contract)
 }
 
 // ============================================================================

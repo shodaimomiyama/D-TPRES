@@ -803,8 +803,7 @@ D-TPRES Controller層は、TERASOLUNAガイドラインの4つの責務を確実
 
 ### 次のステップ
 
-- [AOメッセージハンドラー詳細設計](./ao_message_handler.md)
-- [UseCase層ハンドラー設計](../usecase/handler_overview.md)
+- [UseCase層ハンドラー設計](../usecase/usecase_overview.md)
 
 ---
 

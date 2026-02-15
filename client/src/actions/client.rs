@@ -6,10 +6,11 @@
 use std::sync::Arc;
 
 use crate::actions::builder::{NotSet, RecoverBuilder, ShareBuilder};
-use crate::actions::di::DefaultActionsContainer;
+use crate::actions::di::{DefaultActionsContainer, DefaultStorageService};
 use crate::actions::error::{ActionError, ActionResult};
-use crate::usecase::core::crypto::{CryptoServiceImpl, PublicKey, SecretKey};
-use crate::usecase::core::storage::ArweaveStorageServiceImpl;
+use crate::usecase::core::crypto::{
+    CryptoServiceImpl as CoreCryptoServiceImpl, PublicKey, SecretKey,
+};
 
 /// Client initialization configuration
 pub struct InitConfig {
@@ -75,15 +76,20 @@ impl DTpresClient {
         }
     }
 
-    /// Create a DTpresClient with a pre-configured storage service
+    /// Create a DTpresClient with pre-configured storage components
     pub fn with_storage(
         process_id: String,
         wallet_address: String,
         ao_gateway_url: String,
         arweave_gateway_url: String,
-        storage: Arc<ArweaveStorageServiceImpl>,
+        arweave: Arc<crate::usecase::core::storage::ArweaveStorageServiceImpl>,
+        contract: Arc<
+            crate::usecase::core::contract_storage::ContractStorageImpl<
+                crate::adapter::external::mock_ao::MockAOClient,
+            >,
+        >,
     ) -> Self {
-        let actions = Arc::new(DefaultActionsContainer::with_storage(storage));
+        let actions = Arc::new(DefaultActionsContainer::with_storage(arweave, contract));
 
         Self {
             process_id,
@@ -114,8 +120,8 @@ impl DTpresClient {
     pub fn share(
         &self,
     ) -> ShareBuilder<
-        CryptoServiceImpl,
-        ArweaveStorageServiceImpl,
+        CoreCryptoServiceImpl,
+        DefaultStorageService,
         NotSet,
         NotSet,
         NotSet,
@@ -128,7 +134,7 @@ impl DTpresClient {
     /// Create a RecoverBuilder for the recover operation
     pub fn recover(
         &self,
-    ) -> RecoverBuilder<CryptoServiceImpl, ArweaveStorageServiceImpl, NotSet, NotSet> {
+    ) -> RecoverBuilder<CoreCryptoServiceImpl, DefaultStorageService, NotSet, NotSet> {
         RecoverBuilder::new(Arc::clone(&self.actions), self.process_id.clone())
     }
 

@@ -10,19 +10,34 @@
 
 use std::sync::Arc;
 
+use d_tpres::adapter::external::mock_ao::MockAOClient;
 use d_tpres::domain::SecretId;
-use d_tpres::usecase::core::crypto::{CryptoService, CryptoServiceImpl, ShamirShare};
+use d_tpres::usecase::core::contract_storage::ContractStorageImpl;
+use d_tpres::usecase::core::crypto::{
+    CryptoService, CryptoServiceImpl as CoreCryptoServiceImpl, ShamirShare,
+};
 use d_tpres::usecase::core::storage::ArweaveStorageServiceImpl;
+use d_tpres::usecase::service::{
+    CryptoServiceImpl as ServiceCryptoServiceImpl, StorageServiceImpl as ServiceStorageServiceImpl,
+};
 use d_tpres::usecase::workflow::{
     SecretRecoveryWorkflowService, SecretRecoveryWorkflowServiceImpl,
 };
 use d_tpres::usecase::{SecretRecoveryRequest, WorkflowError};
 
+type TestCryptoService = ServiceCryptoServiceImpl<CoreCryptoServiceImpl>;
+type TestStorageService =
+    ServiceStorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<MockAOClient>>;
+
 /// Helper to create test service with real CryptoService
 fn create_integration_service()
--> SecretRecoveryWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
-    let crypto = Arc::new(CryptoServiceImpl::new());
-    let storage = Arc::new(ArweaveStorageServiceImpl::default());
+-> SecretRecoveryWorkflowServiceImpl<TestCryptoService, TestStorageService> {
+    let core_crypto = Arc::new(CoreCryptoServiceImpl::new());
+    let crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
+    let mock_ao = Arc::new(MockAOClient::new());
+    let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
     SecretRecoveryWorkflowServiceImpl::new(crypto, storage)
 }
 
@@ -36,7 +51,7 @@ fn test_phase3_integration_aes_decryption_roundtrip() {
     println!("PHASE 3 Integration Test: AES Decryption Roundtrip");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
+    let crypto = Arc::new(CoreCryptoServiceImpl::new());
 
     println!("\n[Step 1] Generate symmetric key and encrypt shares");
     let symmetric_key = crypto.generate_symmetric_key().unwrap();
@@ -83,7 +98,7 @@ fn test_phase3_integration_aes_decryption_wrong_key() {
     println!("PHASE 3 Integration Test: AES Decryption Wrong Key");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
+    let crypto = Arc::new(CoreCryptoServiceImpl::new());
 
     println!("\n[Step 1] Encrypt with correct key");
     let correct_key = crypto.generate_symmetric_key().unwrap();
@@ -109,7 +124,7 @@ fn test_phase3_integration_shamir_reconstruction() {
     println!("PHASE 3 Integration Test: Shamir Reconstruction");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
+    let crypto = Arc::new(CoreCryptoServiceImpl::new());
 
     let original_secret = b"Top secret message for Shamir!";
     println!(
@@ -163,7 +178,7 @@ fn test_phase3_integration_shamir_various_thresholds() {
     println!("PHASE 3 Integration Test: Various Shamir Thresholds");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
+    let crypto = Arc::new(CoreCryptoServiceImpl::new());
 
     let test_cases = [
         (2, 2, "minimum k=n=2"),
@@ -201,11 +216,15 @@ fn test_phase3_integration_execute_fails_at_storage() {
     println!("PHASE 3 Integration Test: Execute Fails at Storage");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
-    let storage = Arc::new(ArweaveStorageServiceImpl::default());
-    let service = SecretRecoveryWorkflowServiceImpl::new(crypto.clone(), storage);
+    let core_crypto = Arc::new(CoreCryptoServiceImpl::new());
+    let service_crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
+    let mock_ao = Arc::new(MockAOClient::new());
+    let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
+    let service = SecretRecoveryWorkflowServiceImpl::new(service_crypto, storage);
 
-    let (requester_sk, _requester_pk) = crypto.generate_keypair().unwrap();
+    let (requester_sk, _requester_pk) = core_crypto.generate_keypair().unwrap();
     let request = SecretRecoveryRequest {
         secret_id: SecretId::generate(),
         requester_secret_key: requester_sk,
@@ -255,12 +274,16 @@ fn test_phase3_integration_validation_errors() {
     println!("PHASE 3 Integration Test: Validation Errors");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
-    let storage = Arc::new(ArweaveStorageServiceImpl::default());
-    let service = SecretRecoveryWorkflowServiceImpl::new(crypto.clone(), storage);
+    let core_crypto = Arc::new(CoreCryptoServiceImpl::new());
+    let service_crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
+    let mock_ao = Arc::new(MockAOClient::new());
+    let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
+    let service = SecretRecoveryWorkflowServiceImpl::new(service_crypto, storage);
 
     println!("\n[Test 1] Empty requester process ID");
-    let (requester_sk, _) = crypto.generate_keypair().unwrap();
+    let (requester_sk, _) = core_crypto.generate_keypair().unwrap();
     let request = SecretRecoveryRequest {
         secret_id: SecretId::generate(),
         requester_secret_key: requester_sk,
@@ -282,7 +305,7 @@ fn test_phase3_integration_crypto_service_keypair_generation() {
     println!("PHASE 3 Integration Test: Keypair Generation");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
+    let crypto = Arc::new(CoreCryptoServiceImpl::new());
 
     println!("\n[Test] Generate multiple keypairs and verify uniqueness");
     let mut public_keys = Vec::new();
@@ -319,7 +342,7 @@ fn test_phase3_integration_pre_capsule_creation() {
     println!("PHASE 3 Integration Test: PRE Capsule Creation");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
+    let crypto = Arc::new(CoreCryptoServiceImpl::new());
 
     println!("\n[Step 1] Generate owner keypair");
     let (_owner_sk, owner_pk) = crypto.generate_keypair().unwrap();
@@ -348,7 +371,7 @@ fn test_phase3_integration_kfrag_generation() {
     println!("PHASE 3 Integration Test: kFrag Generation");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
+    let crypto = Arc::new(CoreCryptoServiceImpl::new());
 
     println!("\n[Step 1] Generate owner and requester keypairs");
     let (owner_sk, owner_pk) = crypto.generate_keypair().unwrap();

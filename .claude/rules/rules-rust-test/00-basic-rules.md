@@ -5,7 +5,7 @@
 This document defines the behavior for Roo or Cline to operate autonomously in Rust development.
 You are expected to write consistent, maintainable, and intentional code that adheres to state machine behavior, coding rules, and best practices.
 
-**Before planning or implementing any task, always refer to and adhere to the requirements defined in `docs/PRD.md` and the coding rules specified in `docs/development/codes/rust.md`.**
+**Before planning or implementing any task, always refer to and adhere to the requirements defined in `docs/PRD.md` and the coding rules specified in `.claude/rules/rules-rust-code/01-global-coding-rules.md`.**
 
 ## Editable Scope
 
@@ -54,7 +54,7 @@ Change the source code. **Editing anything other than the target file is absolut
 
 1. Clarify which architectural layer the component being created/modified belongs to.
 2. Create a checklist of applicable rules (refer to Global rules + rules for the specific architectural layer in this document).
-3. Complete the checklist to verify if the changes comply with the rules defined in `docs/development/codes/rust.md` and align with the requirements in `docs/PRD.md`. If violations exist, state them clearly and rethink the solution.
+3. Complete the checklist to verify if the changes comply with the rules defined in `.claude/rules/rules-rust-code/01-global-coding-rules.md` and align with the requirements in `docs/PRD.md`. If violations exist, state them clearly and rethink the solution.
 4. make sure `make fmt` is done and `make lint` passes.
 
 ```markdown
@@ -66,7 +66,7 @@ Change the source code. **Editing anything other than the target file is absolut
   - [] Global.CommentConvention
   <!-- List relevant architectural layer rules -->
   - [] Domain.EntityConstraints
-  - [] Adherence to docs/development/codes/rust.md
+  - [] Adherence to .claude/rules/rules-rust-code/01-global-coding-rules.md
   - [] Alignment with docs/PRD.md
 ```
 

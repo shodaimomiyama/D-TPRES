@@ -59,7 +59,8 @@
       "Bash(cargo read-manifest:*)",
       "Bash(gh api:*)",
       "Bash(rustc:*)",
-      "Bash(gh pr view:*)"
+      "Bash(gh pr view:*)",
+      "Bash(test:*)"
     ],
     "deny": []
   },

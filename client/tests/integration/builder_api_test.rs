@@ -5,18 +5,21 @@ use std::sync::Arc;
 use d_tpres::actions::{ActionError, DTpresClient, InitConfig};
 use d_tpres::adapter::external::mock_ao::MockAOClient;
 use d_tpres::domain::value_objects::SecretId;
+use d_tpres::usecase::core::contract_storage::ContractStorageImpl;
 use d_tpres::usecase::core::storage::ArweaveStorageServiceImpl;
 use d_tpres::usecase::dto::SecretMetadata;
 
 fn default_client() -> DTpresClient {
     let mock_ao = Arc::new(MockAOClient::new());
-    let storage = Arc::new(ArweaveStorageServiceImpl::default().with_ao_client(mock_ao));
+    let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
     DTpresClient::with_storage(
         "test_process".to_string(),
         "test_wallet".to_string(),
         "https://ao.arweave.net".to_string(),
         "https://arweave.net".to_string(),
-        storage,
+        arweave,
+        contract,
     )
 }
 

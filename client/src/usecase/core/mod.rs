@@ -4,9 +4,11 @@
 //! これらのサービスは、ビジネスロジックの実装と計算処理に特化し、
 //! データ永続化はRepository層に委譲します。
 
+pub mod contract_storage;
 pub mod crypto;
 pub mod storage;
 
 // Re-export service traits and implementations
+pub use contract_storage::{ContractStorage, ContractStorageImpl};
 pub use crypto::{CryptoService, CryptoServiceImpl};
 pub use storage::{ArweaveStorageService, ArweaveStorageServiceImpl};
