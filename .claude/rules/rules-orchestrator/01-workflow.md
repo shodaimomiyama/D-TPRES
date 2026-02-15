@@ -190,19 +190,19 @@ stateDiagram-v2
 
 2. **設計/仕様ドキュメントの更新:**
     * 設計ドキュメントや仕様に必要な変更を特定する
-    * [`docs/development/`](docs/development/)の関連ファイルを更新する
-    * 例：[`docs/development/architecture/architecture_overview.md`](docs/development/architecture/architecture_overview.md)でアーキテクチャ変更を記録
-    * 例：[`docs/development/lifecycle/`](docs/development/lifecycle/)でライフサイクル変更を更新
+    * [`docs/`](docs/)の関連ファイルを更新する
+    * 例：[`docs/architecture/architecture_overview.md`](docs/architecture/architecture_overview.md)でアーキテクチャ変更を記録
+    * 例：[`docs/lifecycle/`](docs/lifecycle/)でライフサイクル変更を更新
 
 3. **UseCaseハンドラー（`src/usecase/handlers/`）の分析:**
     * プロセスロール固有のハンドラーを調査する
-    * Owner: [`docs/development/usecase/owner/owner_handlers.md`](docs/development/usecase/owner/owner_handlers.md)
-    * Holder: [`docs/development/usecase/holder/holder_handlers.md`](docs/development/usecase/holder/holder_handlers.md)
-    * Requester: [`docs/development/usecase/requester/requester_handlers.md`](docs/development/usecase/requester/requester_handlers.md)
+    * Owner: [`docs/usecase/owner/owner_handlers.md`](docs/usecase/owner/owner_handlers.md)
+    * Holder: [`docs/usecase/holder/holder_handlers.md`](docs/usecase/holder/holder_handlers.md)
+    * Requester: [`docs/usecase/requester/requester_handlers.md`](docs/usecase/requester/requester_handlers.md)
     * AOメッセージ受信からController層への橋渡し機能を理解する
 
 4. **Controller Components（`src/controller/`）の分析:**
-    * [`docs/development/controller/controller_overview.md`](docs/development/controller/controller_overview.md)でController層の役割を確認
+    * [`docs/controller/controller_overview.md`](docs/controller/controller_overview.md)でController層の役割を確認
     * MessageHandler: メッセージ処理統括
     * MessageRouter: アクション振り分け
     * MessageValidator: 妥当性検証
@@ -210,25 +210,25 @@ stateDiagram-v2
     * 各コンポーネントの連携フローを理解する
 
 5. **Service層（Workflow + Core）の分析:**
-    * Workflow Services: [`docs/development/service/workflow-service/workflow-service.md`](docs/development/service/workflow-service/workflow-service.md)
+    * Workflow Services: [`docs/service/workflow-service/workflow-service.md`](docs/service/workflow-service/workflow-service.md)
       - AccessWorkflow, RecoveryWorkflow, DistributionWorkflow
-    * Core Services: [`docs/development/service/core-service/core-service.md`](docs/development/service/core-service/core-service.md)
+    * Core Services: [`docs/service/core-service/core-service.md`](docs/service/core-service/core-service.md)
       - CryptoService, ProcessService, StorageService, EVMVerificationService
     * サービス間の依存関係とワークフロー管理を理解する
 
 6. **Domain Entities（`src/domain/entity/`）の分析:**
-    * [`docs/development/domain/entity/entities.md`](docs/development/domain/entity/entities.md)でエンティティ設計を確認
+    * [`docs/domain/entity/entities.md`](docs/domain/entity/entities.md)でエンティティ設計を確認
     * ProcessEntity, ShareEntity, CapsuleEntity, AccessRequestEntity, RekeyFragmentEntity
     * エンティティのライフサイクルとAOステートレス制約での永続化方法を理解する
 
 7. **Infrastructure Repository実装（`src/infrastructure/`）の分析:**
-    * [`docs/development/domain/infrastructure/repository_implementations.md`](docs/development/domain/infrastructure/repository_implementations.md)
+    * [`docs/domain/infrastructure/repository_implementations.md`](docs/domain/infrastructure/repository_implementations.md)
     * ArweaveRepositoryImpl: 永続化実装
     * elciao Bridge: EVM連携アダプタ
     * AOステートレス環境での状態管理戦略を理解する
 
 8. **AOステートレス制約の考慮:**
-    * [`docs/development/ao/ao_process_model.md`](docs/development/ao/ao_process_model.md)でAO制約を確認
+    * [`docs/ao-model/ao_process_model.md`](docs/ao-model/ao_process_model.md)でAO制約を確認
     * メッセージ間でのメモリ非永続性
     * Compute Units間での実行分散
     * 明示的な状態保存・復元の必要性

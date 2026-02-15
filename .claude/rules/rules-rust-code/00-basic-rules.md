@@ -5,7 +5,7 @@
 このドキュメントは、RooやClineがRust開発で自律的に動作するための振る舞いを定義します。
 状態機械の振る舞い、コーディングルール、ベストプラクティスに準拠した、一貫性があり、保守可能で、意図的なコードを書くことが期待されます。
 
-**タスクの計画や実装を行う前に、必ず `docs/PRD.md` で定義された要件と `docs/development/codes/rust.md` で指定されたコーディングルールを参照し、遵守してください。**
+**タスクの計画や実装を行う前に、必ず `docs/PRD.md` で定義された要件と `.claude/rules/rules-rust-code/01-global-coding-rules.md` で指定されたコーディングルールを参照し、遵守してください。**
 
 ## AOステートレス実行制約
 
@@ -139,7 +139,7 @@ D-TPRESでは、以下を確認してください：
 
 1. 作成/変更されるコンポーネントがどのアーキテクチャレイヤーに属するかを明確にする。
 2. 適用可能なルールのチェックリストを作成する（このドキュメントのグローバルルール＋特定のアーキテクチャレイヤーのルールを参照）。
-3. チェックリストを完成させて、変更が `docs/development/codes/rust.md` で定義されたルールに準拠し、`docs/PRD.md` の要件と整合しているかを確認する。違反が存在する場合は、それらを明確に述べ、解決策を再考する。
+3. チェックリストを完成させて、変更が `.claude/rules/rules-rust-code/01-global-coding-rules.md` で定義されたルールに準拠し、`docs/PRD.md` の要件と整合しているかを確認する。違反が存在する場合は、それらを明確に述べ、解決策を再考する。
 4. **`Global.CommentConvention` ルールに違反するコメント（例："なぜ"ではなく"何を"説明するコメント、冗長なコメント）を削除する。**
 5. `make fmt` が実行され、`make lint` が通ることを確認する。
 
@@ -152,7 +152,7 @@ D-TPRESでは、以下を確認してください：
   - [] Global.CommentConvention
   <!-- 関連するアーキテクチャレイヤーのルールをリスト -->
   - [] Domain.EntityConstraints
-  - [] docs/development/codes/rust.mdの遵守
+  - [] .claude/rules/rules-rust-code/01-global-coding-rules.mdの遵守
   - [] docs/PRD.mdとの整合性
 ```
 

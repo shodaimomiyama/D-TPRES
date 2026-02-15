@@ -251,10 +251,13 @@ The project has specific security restrictions in `.claude/settings.json`:
 
 Extensive project documentation is available in the `docs/` directory:
 - `docs/PRD.md` - Product Requirements Document with system specifications
-- `docs/development/architecture/` - System architecture and design philosophy
-- `docs/development/domain/` - Domain entities and repository designs
-- `docs/development/service/` - Service layer specifications
-- `docs/development/usecase/` - UseCase handlers for each role
-- `docs/development/lifecycle/` - Process and access lifecycles
-- `docs/features/` - Feature specifications for each component
-- `docs/development/codes/rust.md` - Detailed Rust coding rules and conventions
+- `docs/status.md` - Current implementation status
+- `docs/architecture/` - System architecture and design philosophy
+- `docs/domain/` - Domain entities, repositories, and infrastructure designs
+- `docs/service/` - Service layer specifications (core + workflow)
+- `docs/usecase/` - UseCase handlers for each role (Owner, Holder, Requester)
+- `docs/controller/` - Controller layer design (handler, router, validator, extractor, DTOs)
+- `docs/lifecycle/` - Process, secret, and access lifecycles
+- `docs/ao-model/` - AO process model and stateless execution patterns
+- `docs/contracts/` - AO contract architecture, implementation, and state management
+- `docs/operations/` - Testing and workflow documentation

@@ -108,7 +108,7 @@ AOプロセスは以下の特性を持つ実行環境で動作します：
 - **メッセージドリブン**: すべての処理はメッセージハンドラーとして実装され、メッセージ受信がトリガーとなる
 - **状態の非永続性**: メモリ上のEntityインスタンスは次回メッセージ処理時には存在しない
 
-> 📘 **詳細な技術仕様**: AOの実行モデルの詳細については[AO Process Model and Stateless Execution](../ao/ao_process_model.md)を参照してください。
+> 📘 **詳細な技術仕様**: AOの実行モデルの詳細については[AO Process Model and Stateless Execution](../ao-model/ao_process_model.md)を参照してください。
 
 #### 設計上の対応
 
@@ -804,7 +804,7 @@ D-TPRES domain層は以下の特徴を持つ設計となっています：
 ---
 
 **関連ドキュメント**: 
-- [AOプロセスモデルとステートレス実行](../ao/ao_process_model.md) - AOの実行モデルの詳細な説明
+- [AOプロセスモデルとステートレス実行](../ao-model/ao_process_model.md) - AOの実行モデルの詳細な説明
 
 ---
 
