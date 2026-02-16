@@ -69,11 +69,16 @@ pub trait CryptoService: Send + Sync {
 
     fn generate_symmetric_key(&self) -> ServiceResult<Vec<u8>>;
 
+    fn verifying_key_bytes(&self) -> ServiceResult<Vec<u8>>;
+
     fn decrypt_pre_capsule(
         &self,
         capsule: &Capsule,
         cfrags: &[CFragData],
         requester_secret_key: &SecretKey,
+        owner_public_key: &PublicKey,
+        ciphertext: &[u8],
+        verifying_pk_bytes: &[u8],
     ) -> ServiceResult<Vec<u8>>;
 }
 
@@ -173,13 +178,26 @@ impl<C: CoreCryptoService> CryptoService for CryptoServiceImpl<C> {
         self.inner.generate_symmetric_key()
     }
 
+    fn verifying_key_bytes(&self) -> ServiceResult<Vec<u8>> {
+        self.inner.verifying_key_bytes()
+    }
+
     fn decrypt_pre_capsule(
         &self,
         capsule: &Capsule,
         cfrags: &[CFragData],
         requester_secret_key: &SecretKey,
+        owner_public_key: &PublicKey,
+        ciphertext: &[u8],
+        verifying_pk_bytes: &[u8],
     ) -> ServiceResult<Vec<u8>> {
-        self.inner
-            .decrypt_pre_capsule(capsule, cfrags, requester_secret_key)
+        self.inner.decrypt_pre_capsule(
+            capsule,
+            cfrags,
+            requester_secret_key,
+            owner_public_key,
+            ciphertext,
+            verifying_pk_bytes,
+        )
     }
 }

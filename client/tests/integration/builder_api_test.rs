@@ -242,12 +242,14 @@ async fn test_share_multiple_unique_ids() {
 async fn test_recover_nonexistent_secret() {
     let client = default_client();
     let (requester_sk, _) = client.generate_keypair().unwrap();
+    let (_, owner_pk) = client.generate_keypair().unwrap();
     let fake_id = SecretId::new("nonexistent_secret_id");
 
     let result = client
         .recover()
         .secret_id(&fake_id)
         .requester_key(requester_sk)
+        .owner_key(owner_pk)
         .execute()
         .await;
 
@@ -265,16 +267,17 @@ async fn test_recover_nonexistent_secret() {
 async fn test_recover_builder_order_independence() {
     let client = default_client();
     let (requester_sk, _) = client.generate_keypair().unwrap();
+    let (_, owner_pk) = client.generate_keypair().unwrap();
     let fake_id = SecretId::new("some_secret");
 
     let result = client
         .recover()
         .requester_key(requester_sk)
+        .owner_key(owner_pk)
         .secret_id(&fake_id)
         .execute()
         .await;
 
-    // Execution will fail (no storage), but the API compiles and runs
     assert!(result.is_err());
 }
 
@@ -303,10 +306,12 @@ async fn test_share_then_recover_roundtrip() {
 
     // Recover will fail since in-memory storage doesn't persist across builder calls,
     // but this validates the full API compiles and share succeeds
+    let (_, owner_pk_for_recover) = client.generate_keypair().unwrap();
     let recover_result = client
         .recover()
         .secret_id(&share_result.secret_id)
         .requester_key(requester_sk)
+        .owner_key(owner_pk_for_recover)
         .execute()
         .await;
 
