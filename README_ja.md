@@ -184,6 +184,14 @@ cargo test
 - [製品要件ドキュメント](docs/PRD.md) - 詳細なシステム要件と仕様
 - [開発状況](docs/status.md) - 現在の進捗とマイルストーン
 - [アーキテクチャ](docs/architecture/) - システムアーキテクチャと設計思想
+- **クライアントライブラリ** (`docs/client/`)
+  - [Domain](docs/client/domain.md) - エンティティ、値オブジェクト、エラー型
+  - [Repositories](docs/client/repositories.md) - リポジトリインターフェース
+  - [UseCase](docs/client/usecase.md) - Core / Service / Workflow レイヤー
+  - [Controller](docs/client/controller.md) - バリデーター、エクストラクター
+  - [Actions](docs/client/actions.md) - 公開API、ビルダー、DIコンテナ
+  - [Adapter](docs/client/adapter.md) - Arweave/AOインフラストラクチャ
+- **AOコントラクト** - [概要](docs/contracts/contracts_overview.md)
 
 ## 貢献
 

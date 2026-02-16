@@ -185,6 +185,14 @@ Legend:
 - [Product Requirements Document](docs/PRD.md) - Detailed system requirements and specifications
 - [Development Status](docs/status.md) - Current progress and milestones
 - [Architecture](docs/architecture/) - System architecture and design philosophy
+- **Client Library** (`docs/client/`)
+  - [Domain](docs/client/domain.md) - Entities, value objects, error types
+  - [Repositories](docs/client/repositories.md) - Repository interfaces
+  - [UseCase](docs/client/usecase.md) - Core, Service, and Workflow layers
+  - [Controller](docs/client/controller.md) - Validators and extractors
+  - [Actions](docs/client/actions.md) - Public API, builders, DI container
+  - [Adapter](docs/client/adapter.md) - Arweave/AO infrastructure
+- **AO Contracts** - [Overview](docs/contracts/contracts_overview.md)
 
 ## Contributing
 
