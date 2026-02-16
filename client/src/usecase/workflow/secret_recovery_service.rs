@@ -307,12 +307,13 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
 )]
 mod tests {
     use super::*;
+    use crate::adapter::external::ao::{Binary, CFragEntry};
     use crate::adapter::external::mock_ao::MockAOClient;
     use crate::usecase::core::contract_storage::ContractStorageImpl;
     use crate::usecase::core::crypto::{
         CryptoService as CoreCryptoService, CryptoServiceImpl as CoreCryptoServiceImpl,
     };
-    use crate::usecase::core::storage::ArweaveStorageServiceImpl;
+    use crate::usecase::core::storage::{ArweaveStorageService, ArweaveStorageServiceImpl};
     use crate::usecase::service::{
         CryptoServiceImpl as ServiceCryptoServiceImpl,
         StorageServiceImpl as ServiceStorageServiceImpl,
@@ -352,6 +353,28 @@ mod tests {
                 holder_id: format!("holder-{}", i),
             })
             .collect()
+    }
+
+    struct TestComponents {
+        arweave: Arc<ArweaveStorageServiceImpl>,
+        mock_ao: Arc<MockAOClient>,
+    }
+
+    fn create_test_service_with_components() -> (
+        SecretRecoveryWorkflowServiceImpl<TestCryptoService, TestStorageService>,
+        TestComponents,
+    ) {
+        let core_crypto = Arc::new(CoreCryptoServiceImpl::new());
+        let crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
+        let mock_ao = Arc::new(MockAOClient::new());
+        let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+        let contract = Arc::new(ContractStorageImpl::new(Arc::clone(&mock_ao)));
+        let storage = Arc::new(ServiceStorageServiceImpl::new(
+            Arc::clone(&arweave),
+            contract,
+        ));
+        let service = SecretRecoveryWorkflowServiceImpl::new(crypto, storage);
+        (service, TestComponents { arweave, mock_ao })
     }
 
     // ========================================================================
@@ -887,5 +910,142 @@ mod tests {
         assert_eq!(cloned.cfrag_data, cfrag.cfrag_data);
         assert_eq!(cloned.holder_id, cfrag.holder_id);
         println!("  [PASS] CFragData clone works correctly");
+    }
+
+    // ========================================================================
+    // Integration Tests (Step 7.3)
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_retrieve_capsule_with_metadata_success() {
+        let (service, components) = create_test_service_with_components();
+        let secret_id = SecretId::new("test-secret-abc");
+        let capsule_data = vec![10, 20, 30, 40, 50];
+
+        components
+            .arweave
+            .store_data(
+                &capsule_data,
+                vec![
+                    Tag {
+                        name: "type".to_string(),
+                        value: "capsule".to_string(),
+                    },
+                    Tag {
+                        name: "secret_id".to_string(),
+                        value: secret_id.as_str().to_string(),
+                    },
+                    Tag {
+                        name: "threshold_k".to_string(),
+                        value: "3".to_string(),
+                    },
+                    Tag {
+                        name: "threshold_n".to_string(),
+                        value: "5".to_string(),
+                    },
+                ],
+            )
+            .unwrap();
+
+        let result = service.retrieve_capsule_with_metadata(&secret_id).await;
+        assert!(result.is_ok());
+
+        let (capsule, threshold_k) = result.unwrap();
+        assert_eq!(capsule.capsule_bytes, capsule_data);
+        assert_eq!(threshold_k, 3);
+    }
+
+    #[tokio::test]
+    async fn test_retrieve_capsule_missing_threshold_tag() {
+        let (service, components) = create_test_service_with_components();
+        let secret_id = SecretId::new("test-secret-def");
+        let capsule_data = vec![10, 20, 30];
+
+        components
+            .arweave
+            .store_data(
+                &capsule_data,
+                vec![
+                    Tag {
+                        name: "type".to_string(),
+                        value: "capsule".to_string(),
+                    },
+                    Tag {
+                        name: "secret_id".to_string(),
+                        value: secret_id.as_str().to_string(),
+                    },
+                ],
+            )
+            .unwrap();
+
+        let result = service.retrieve_capsule_with_metadata(&secret_id).await;
+        assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_retrieve_cfrags_from_ao() {
+        let (service, components) = create_test_service_with_components();
+        let secret_id = SecretId::new("test-secret-ghi");
+        let process_id = "requester-process-456";
+
+        let test_cfrags = vec![
+            CFragEntry {
+                cfrag_data: Binary::new(vec![1, 2, 3]),
+                holder_id: "holder-1".to_string(),
+            },
+            CFragEntry {
+                cfrag_data: Binary::new(vec![4, 5, 6]),
+                holder_id: "holder-2".to_string(),
+            },
+        ];
+
+        components
+            .mock_ao
+            .set_cfrags_for_secret(process_id, secret_id.as_str(), test_cfrags);
+
+        let result = service.retrieve_cfrags(&secret_id, process_id).await;
+        assert!(result.is_ok());
+
+        let cfrags = result.unwrap();
+        assert_eq!(cfrags.len(), 2);
+        assert_eq!(cfrags[0].cfrag_data, vec![1, 2, 3]);
+        assert_eq!(cfrags[0].holder_id, "holder-1");
+        assert_eq!(cfrags[1].cfrag_data, vec![4, 5, 6]);
+        assert_eq!(cfrags[1].holder_id, "holder-2");
+    }
+
+    #[tokio::test]
+    async fn test_retrieve_encrypted_shares_sorted() {
+        let (service, components) = create_test_service_with_components();
+        let secret_id = SecretId::new("test-secret-jkl");
+
+        for i in 0..3u8 {
+            components
+                .arweave
+                .store_data(
+                    &vec![100 + i; 16],
+                    vec![
+                        Tag {
+                            name: "type".to_string(),
+                            value: "encrypted_share".to_string(),
+                        },
+                        Tag {
+                            name: "secret_id".to_string(),
+                            value: secret_id.as_str().to_string(),
+                        },
+                        Tag {
+                            name: "index".to_string(),
+                            value: i.to_string(),
+                        },
+                    ],
+                )
+                .unwrap();
+        }
+
+        let result = service.retrieve_encrypted_shares(&secret_id);
+        assert!(result.is_ok());
+
+        let shares = result.unwrap();
+        assert_eq!(shares.len(), 3);
     }
 }
