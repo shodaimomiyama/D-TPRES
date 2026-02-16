@@ -254,8 +254,8 @@ impl<C: CoreCryptoService, Ss: StorageService, S> RecoverBuilder<C, Ss, S, NotSe
 }
 
 impl<C: CoreCryptoService, Ss: StorageService> RecoverBuilder<C, Ss, Set, Set> {
-    #[allow(deprecated, clippy::missing_const_for_fn)]
-    pub fn execute(self) -> ActionResult<crate::usecase::dto::SecretRecoveryResult> {
+    #[allow(deprecated, clippy::missing_const_for_fn, clippy::large_futures)]
+    pub async fn execute(self) -> ActionResult<crate::usecase::dto::SecretRecoveryResult> {
         let secret_id = self.secret_id.ok_or_else(|| {
             ActionError::validation_failed("missing_secret_id", "secret_id is required")
         })?;
@@ -265,5 +265,6 @@ impl<C: CoreCryptoService, Ss: StorageService> RecoverBuilder<C, Ss, Set, Set> {
 
         self.container
             .recover(&secret_id, requester_key, self.process_id, None)
+            .await
     }
 }

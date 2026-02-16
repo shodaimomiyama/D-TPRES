@@ -238,8 +238,8 @@ async fn test_share_multiple_unique_ids() {
 // RecoverBuilder fluent API
 // ============================================================================
 
-#[test]
-fn test_recover_nonexistent_secret() {
+#[tokio::test]
+async fn test_recover_nonexistent_secret() {
     let client = default_client();
     let (requester_sk, _) = client.generate_keypair().unwrap();
     let fake_id = SecretId::new("nonexistent_secret_id");
@@ -248,7 +248,8 @@ fn test_recover_nonexistent_secret() {
         .recover()
         .secret_id(&fake_id)
         .requester_key(requester_sk)
-        .execute();
+        .execute()
+        .await;
 
     assert!(result.is_err());
     match result.unwrap_err() {
@@ -260,8 +261,8 @@ fn test_recover_nonexistent_secret() {
     }
 }
 
-#[test]
-fn test_recover_builder_order_independence() {
+#[tokio::test]
+async fn test_recover_builder_order_independence() {
     let client = default_client();
     let (requester_sk, _) = client.generate_keypair().unwrap();
     let fake_id = SecretId::new("some_secret");
@@ -270,7 +271,8 @@ fn test_recover_builder_order_independence() {
         .recover()
         .requester_key(requester_sk)
         .secret_id(&fake_id)
-        .execute();
+        .execute()
+        .await;
 
     // Execution will fail (no storage), but the API compiles and runs
     assert!(result.is_err());
@@ -305,7 +307,8 @@ async fn test_share_then_recover_roundtrip() {
         .recover()
         .secret_id(&share_result.secret_id)
         .requester_key(requester_sk)
-        .execute();
+        .execute()
+        .await;
 
     assert!(recover_result.is_err());
     match recover_result.unwrap_err() {

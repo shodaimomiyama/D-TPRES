@@ -253,6 +253,14 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
                         name: "secret_id".to_string(),
                         value: secret_id.as_str().to_string(),
                     },
+                    Tag {
+                        name: "threshold_k".to_string(),
+                        value: request.threshold.to_string(),
+                    },
+                    Tag {
+                        name: "threshold_n".to_string(),
+                        value: request.total_shares.to_string(),
+                    },
                 ],
             )
             .map_err(WorkflowError::from)?;
@@ -579,15 +587,15 @@ mod tests {
 
         async fn retrieve_cfrags(
             &self,
-            _capsule_id: &str,
-            _contract_id: &str,
-        ) -> ServiceResult<Vec<Vec<u8>>> {
+            _secret_id: &str,
+            _requester_process_id: &str,
+        ) -> ServiceResult<Vec<crate::usecase::core::crypto::CFragData>> {
             Err(crate::service::error::ServiceError::System(
                 crate::service::error::SystemException::Internal("Not implemented".to_string()),
             ))
         }
 
-        async fn retrieve_threshold(&self, _contract_id: &str) -> ServiceResult<u8> {
+        fn retrieve_encrypted_shares(&self, _secret_id: &str) -> ServiceResult<Vec<Vec<u8>>> {
             Err(crate::service::error::ServiceError::System(
                 crate::service::error::SystemException::Internal("Not implemented".to_string()),
             ))

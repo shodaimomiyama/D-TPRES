@@ -20,9 +20,7 @@ use formix::usecase::core::storage::ArweaveStorageServiceImpl;
 use formix::usecase::service::{
     CryptoServiceImpl as ServiceCryptoServiceImpl, StorageServiceImpl as ServiceStorageServiceImpl,
 };
-use formix::usecase::workflow::{
-    SecretRecoveryWorkflowService, SecretRecoveryWorkflowServiceImpl,
-};
+use formix::usecase::workflow::{SecretRecoveryWorkflowService, SecretRecoveryWorkflowServiceImpl};
 use formix::usecase::{SecretRecoveryRequest, WorkflowError};
 
 type TestCryptoService = ServiceCryptoServiceImpl<CoreCryptoServiceImpl>;
@@ -210,8 +208,8 @@ fn test_phase3_integration_shamir_various_thresholds() {
     println!("\n[PASS] All threshold combinations work correctly");
 }
 
-#[test]
-fn test_phase3_integration_execute_fails_at_storage() {
+#[tokio::test]
+async fn test_phase3_integration_execute_fails_at_storage() {
     println!("\n========================================");
     println!("PHASE 3 Integration Test: Execute Fails at Storage");
     println!("========================================");
@@ -236,19 +234,18 @@ fn test_phase3_integration_execute_fails_at_storage() {
     println!("    requester_process_id: {}", request.requester_process_id);
 
     println!("\n  Executing PHASE 3 workflow...");
-    let result = service.execute_secret_recovery(request);
+    let result = service.execute_secret_recovery(request).await;
 
-    // Should fail at the first storage operation (cFrag retrieval)
     assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
     if let Err(WorkflowError::ResourceNotFound(msg)) = result {
-        println!("  [EXPECTED] Failed at storage: {}", msg);
+        println!("  [EXPECTED] Failed at capsule retrieval: {}", msg);
     }
 
-    println!("\n[PASS] Workflow correctly fails at unimplemented storage operation");
+    println!("\n[PASS] Workflow correctly fails at capsule retrieval");
 }
 
-#[test]
-fn test_phase3_integration_can_recover_fails_at_storage() {
+#[tokio::test]
+async fn test_phase3_integration_can_recover_fails_at_storage() {
     println!("\n========================================");
     println!("PHASE 3 Integration Test: can_recover Fails at Storage");
     println!("========================================");
@@ -257,19 +254,18 @@ fn test_phase3_integration_can_recover_fails_at_storage() {
     let secret_id = SecretId::generate();
 
     println!("  Checking can_recover for secret_id: {}", secret_id);
-    let result = service.can_recover(&secret_id, "requester-123");
+    let result = service.can_recover(&secret_id, "requester-123").await;
 
-    // Should fail at threshold retrieval
     assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
     if let Err(WorkflowError::ResourceNotFound(msg)) = result {
-        println!("  [EXPECTED] Failed at storage: {}", msg);
+        println!("  [EXPECTED] Failed at capsule retrieval: {}", msg);
     }
 
-    println!("\n[PASS] can_recover correctly fails at unimplemented storage operation");
+    println!("\n[PASS] can_recover correctly fails at capsule retrieval");
 }
 
-#[test]
-fn test_phase3_integration_validation_errors() {
+#[tokio::test]
+async fn test_phase3_integration_validation_errors() {
     println!("\n========================================");
     println!("PHASE 3 Integration Test: Validation Errors");
     println!("========================================");
@@ -290,7 +286,7 @@ fn test_phase3_integration_validation_errors() {
         requester_process_id: String::new(),
     };
 
-    let result = service.execute_secret_recovery(request);
+    let result = service.execute_secret_recovery(request).await;
     assert!(matches!(result, Err(WorkflowError::ValidationError(_))));
     if let Err(WorkflowError::ValidationError(msg)) = result {
         println!("  [PASS] Validation error: {}", msg);

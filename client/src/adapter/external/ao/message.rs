@@ -136,6 +136,9 @@ pub enum QueryMsg {
         start_after: Option<String>,
         limit: Option<u32>,
     },
+
+    /// Get all CFrags associated with a secret
+    GetCFragsBySecret { secret_id: String },
 }
 
 // =====================================================================
@@ -303,6 +306,21 @@ pub struct ListCapsulesByKFragResponse {
     pub next_start_after: Option<String>,
 }
 
+/// Response for GetCFragsBySecret query
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct GetCFragsBySecretResponse {
+    pub cfrags: Vec<CFragEntry>,
+}
+
+/// A single cFrag entry returned from AO contract
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CFragEntry {
+    pub cfrag_data: Binary,
+    pub holder_id: String,
+}
+
 // =====================================================================
 // AO Message Tags
 // =====================================================================
@@ -440,6 +458,10 @@ impl ValidateMessage for QueryMsg {
                         return Err("limit must be between 1 and 100".to_string());
                     }
                 }
+                Ok(())
+            }
+            Self::GetCFragsBySecret { secret_id } => {
+                validate_id(secret_id, "secret_id")?;
                 Ok(())
             }
         }
