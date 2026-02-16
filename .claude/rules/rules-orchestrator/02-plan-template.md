@@ -53,8 +53,8 @@
 
 **依存関係:**
 
-* **外部ライブラリ:** [例: umbral-pre, serde, elciao]
-* **外部サービス:** [例: Arweave, AO Network, EVM Networks]
+* **外部ライブラリ:** [例: umbral-pre, serde]
+* **外部サービス:** [例: Arweave, AO Network]
 * **内部モジュール:** 
   - UseCase: [例: Owner/Holder/Requester Handlers]
   - Controller: [例: MessageHandler, MessageRouter, MessageValidator]

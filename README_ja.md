@@ -11,11 +11,10 @@ Arweaveに保存された暗号化データに対する安全で許可不要な�
 
 ## 概要
 
-FORMIXは、真に分散型の鍵管理システムを作成するために3つの異なるインフラストラクチャレイヤーを組み合わせています：
+FORMIXは、真に分散型の鍵管理システムを作成するために2つのインフラストラクチャレイヤーを組み合わせています：
 
 - **Arweave**: 暗号化データとカプセルの不変ストレージ
 - **AO Network**: WebAssemblyベースの分散実行環境
-- **EVMスマートコントラクト**: 決定論的アクセス制御検証
 
 このシステムにより、データ所有者はArweaveにデータを暗号化して保存しながら、k-of-n閾値プロキシ再暗号化スキームを通じて認可されたユーザーが復号できるようになり、永続的な鍵管理サーバーを必要としません。
 
@@ -27,9 +26,9 @@ FORMIXは、真に分散型の鍵管理システムを作成するために3つ�
 - 鍵管理における単一障害点なし
 
 ### 完全分散型
-- **許可不要**: EVMスマートコントラクトが決定論的にアクセス条件を定義
+- **許可不要**: k-of-n閾値暗号による暗号的アクセス制御
 - **ステートレス**: すべてのプロセスは一時的で再作成可能
-- **信頼不要**: ストレージとアクセス制御レイヤー間で統一されたコンセンサス
+- **信頼不要**: Arweave永続ストレージとAO分散コンピューティングによる統一されたコンセンサス
 
 ### マルチロールWebAssemblyアーキテクチャ
 単一のRustコードベースがWebAssemblyにコンパイルされ、AOで異なるロールで実行：
@@ -50,10 +49,6 @@ flowchart TD
         AB[A-Browser]
     end
 
-    subgraph Ethereum
-        SC[verifyAccess]
-    end
-
     subgraph AO_Network
         subgraph P_Group
             PO[Owner-Process]
@@ -71,9 +66,6 @@ flowchart TD
     OB -->|spawn| PO
     OB -->|upload| AR[Arweave]
     AB -->|spawn| RP
-    AB -->|verify| SC
-    SC -->|event| elciao[elciao]
-    elciao --> RP
     RP --> PO
     PO -->|split| H1 & H2 & H3
     RP -->|wrap| H1 & H2 & H3
@@ -84,35 +76,22 @@ flowchart TD
 
 ## 暗号化フロー
 
-システムは6つの異なるフェーズで動作します：
+システムは3つのフェーズで動作します：
 
-### フェーズ0: プロセス生成と鍵準備
-ユーザーはロール固有の設定でAO上に同一のWebAssemblyプロセスを生成します。
+### フェーズ1: 秘密の分割と初期配布（クライアント側）
+- **1.1**: 所有者がShamir秘密分散（k-of-n）を実行
+- **1.2**: Umbralカプセル作成・kFrag生成
+- **1.3**: 暗号化データをArweaveに保存
 
-### フェーズ1: 秘密分散と公開ストレージ
-- 所有者がShamir秘密共有（k-of-n）を生成
-- プロキシ再暗号化を使用して暗号化カプセルを作成
-- カプセルと暗号化された共有をArweaveに保存
+### フェーズ2: キーフラグメントの分散管理（AO Network側）
+- **2.1**: Owner-ProcessによるHolder選出・kFrag配布
+- **2.2**: Holder-ProcessによるkFrag保存・再暗号化
+- **2.3**: cFrag生成・保存
 
-### フェーズ2: アクセス要求とEVM検証
-- アクセサーが鍵ペアを生成し、EVMスマートコントラクトに検証を提出
-- コントラクトが条件（例：トークン所有権）を検証し、検証イベントを発行
-- elciaoブリッジがイベントをキャプチャし、AOプロセス用のProofPkgを作成
-
-### フェーズ3: 再暗号化鍵フラグメンテーション
-- Owner-Processが秘密鍵からアクセサーの公開鍵への再暗号化鍵を生成
-- Shamir共有を使用して再暗号化鍵をkフラグメントに分割
-- オンラインHolderプロセスにフラグメントを配布
-
-### フェーズ4: k-of-nプロキシ再暗号化
-- Requester-ProcessがHolderプロセスと調整
-- 各Holderが鍵フラグメントでプロキシ再暗号化を実行
-- 暗号フラグメントをRequester-Processに返却
-
-### フェーズ5: クライアント復号と秘密再構築
-- アクセサーがk個の暗号フラグメントと元のカプセルを収集
-- フラグメントを結合して再暗号化されたカプセルを再構築
-- 秘密鍵で復号して元の秘密を回復
+### フェーズ3: 秘密の復元（クライアント側）
+- **3.1**: Requester-ProcessによるcFrag収集
+- **3.2**: カプセル復号・フラグメント結合
+- **3.3**: Shamir補間による秘密復元
 
 ## 開発
 
@@ -159,8 +138,7 @@ cargo test
 | 暗号化 | `umbral-pre`, `sssa`, `aes-gcm` | 閾値PRE、秘密分散、暗号化 |
 | ランタイム | AO + HyperBEAM | WebAssembly実行環境 |
 | ストレージ | Arweave, ao-sqlite | 永続データと状態ストレージ |
-| ブロックチェーンブリッジ | elciao | ArweaveとのEVMイベント統合 |
-| フロントエンド | WebCrypto API, ethers.js | ブラウザベースの鍵生成と暗号化 |
+| フロントエンド | WebCrypto API | ブラウザベースの鍵生成と暗号化 |
 | デプロイメント | ao-deploy | Arweaveプロセスデプロイメント |
 
 ## セキュリティ
@@ -180,18 +158,21 @@ cargo test
 
 ## 現在の状況
 
-このプロジェクトは初期開発段階です。現在の実装には以下が含まれます：
+**全体進捗率**: 45% — Phase1（MVP版）開発中。ドメイン層完了、サービス層ほぼ実装完了、Actions/Controller実装済み、60テスト通過。
 
 | コンポーネント | 状況 | 備考 |
 |-----------|--------|-------|
-| プロジェクト構造 | ✅ | 基本ドキュメントとコード構成 |
-| Rustツールチェーン | ✅ | バージョン1.86.0設定 |
-| コアアーキテクチャ | ✅ | マルチロールWebAssembly設計 |
-| 暗号化プリミティブ | 🟡 | Umbral-PRE統合進行中 |
-| AOプロセス実装 | 🟡 | 基本プロセス生成実装済み |
-| EVMスマートコントラクト | ⬜️ | アクセス制御コントラクト保留中 |
+| プロジェクト構造 | ✅ | ドキュメント・コード構成・CI/CD基盤 |
+| Rustツールチェーン | ✅ | バージョン1.86.0、Edition 2024 |
+| コアアーキテクチャ | ✅ | マルチロールWebAssembly設計、レイヤードアーキテクチャ |
+| ドメイン層 | ✅ | エンティティ5種（Secret, Capsule, KFrag, CFrag, ShareCollection）、値オブジェクト、Repository Interface実装完了 |
+| 暗号サービス (CryptoService) | ✅ | Shamir秘密分散、Umbral PRE、kFrag/cFrag生成・復号、全テスト通過 |
+| ストレージサービス | ✅ | ArweaveStorageService + ContractStorage (AO) 実装済み |
+| ワークフローサービス | ✅ | SecretSharingWorkflow + SecretRecoveryWorkflow 実装済み |
+| アプリケーション層 | ✅ | Actions (share, recover, generateKeyPair)、Controller (validators, extractors) |
+| インフラストラクチャ層 | 🟡 | ArweaveClient, AOClient (Production + Mock)、Repository実装 |
 | ブラウザフロントエンド | ⬜️ | WebCrypto API統合予定 |
-| エンドツーエンドテスト | ⬜️ | テストフレームワーク設定保留中 |
+| テスト | 🟡 | 60テスト通過（ユニット + 統合）、カバレッジ拡大予定 |
 
 凡例：
 - ✅ 完了
@@ -201,9 +182,8 @@ cargo test
 ## ドキュメント
 
 - [製品要件ドキュメント](docs/PRD.md) - 詳細なシステム要件と仕様
-- [開発状況](docs/development/status.md) - 現在の進捗とマイルストーン
-- [ドメインモデル](docs/development/models/domain_model.md) - システムエンティティと関係
-- [サービスドキュメント](docs/development/services/) - 個別コンポーネント仕様
+- [開発状況](docs/status.md) - 現在の進捗とマイルストーン
+- [アーキテクチャ](docs/architecture/) - システムアーキテクチャと設計思想
 
 ## 貢献
 
@@ -222,4 +202,3 @@ cargo test
 - [Umbral Proxy Re-Encryption](https://github.com/nucypher/umbral-pre)
 - [Arweave](https://www.arweave.org/) 永続ストレージ
 - [AO Network](https://ao.arweave.net/) 分散コンピューティング
-- [elciao](https://github.com/weaveVM/elciao) EVMブリッジ 
