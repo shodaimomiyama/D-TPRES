@@ -10,11 +10,17 @@
 
 use std::sync::Arc;
 
-use d_tpres::adapter::external::mock_ao::MockAOClient;
-use d_tpres::usecase::SecretSharingRequest;
-use d_tpres::usecase::core::crypto::{CryptoService, CryptoServiceImpl, ShamirShare};
-use d_tpres::usecase::core::storage::ArweaveStorageServiceImpl;
-use d_tpres::usecase::workflow::{SecretSharingWorkflowService, SecretSharingWorkflowServiceImpl};
+use formix::adapter::external::mock_ao::MockAOClient;
+use formix::usecase::SecretSharingRequest;
+use formix::usecase::core::contract_storage::ContractStorageImpl;
+use formix::usecase::core::crypto::{
+    CryptoService, CryptoServiceImpl as CoreCryptoServiceImpl, ShamirShare,
+};
+use formix::usecase::core::storage::ArweaveStorageServiceImpl;
+use formix::usecase::service::{
+    CryptoServiceImpl as ServiceCryptoServiceImpl, StorageServiceImpl as ServiceStorageServiceImpl,
+};
+use formix::usecase::workflow::{SecretSharingWorkflowService, SecretSharingWorkflowServiceImpl};
 
 // ============================================================================
 // PHASE 1 → PHASE 3 Roundtrip Tests (Task 22)
@@ -26,7 +32,7 @@ fn test_roundtrip_shamir_reconstruction() {
     println!("Roundtrip Test: Shamir Secret Reconstruction");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
+    let crypto = Arc::new(CoreCryptoServiceImpl::new());
 
     let original_secret = b"Top secret message for roundtrip test!";
     let secret_data: Vec<u8> = original_secret.to_vec();
@@ -81,7 +87,7 @@ fn test_roundtrip_aes_encryption_decryption() {
     println!("Roundtrip Test: AES-GCM Encryption/Decryption");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
+    let crypto = Arc::new(CoreCryptoServiceImpl::new());
 
     let test_data = [
         b"Short message".to_vec(),
@@ -114,7 +120,7 @@ fn test_roundtrip_complete_phase1_to_phase3_crypto_flow() {
     println!("Roundtrip Test: Complete PHASE 1 → PHASE 3 Crypto Flow");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
+    let crypto = Arc::new(CoreCryptoServiceImpl::new());
 
     let original_secret = b"Complete workflow test secret!";
     let secret_data: Vec<u8> = original_secret.to_vec();
@@ -205,7 +211,7 @@ fn test_roundtrip_various_threshold_combinations() {
     println!("Roundtrip Test: Various Threshold Combinations");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
+    let crypto = Arc::new(CoreCryptoServiceImpl::new());
 
     let test_cases = [
         (2, 2, "minimum k=n=2"),
@@ -246,7 +252,7 @@ fn test_roundtrip_secret_size_variations() {
     println!("Roundtrip Test: Secret Size Variations");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
+    let crypto = Arc::new(CoreCryptoServiceImpl::new());
 
     let test_sizes = [
         (1, "minimum 1 byte"),
@@ -282,7 +288,7 @@ fn test_roundtrip_multiple_secrets_isolated() {
     println!("Roundtrip Test: Multiple Secrets Isolation");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
+    let crypto = Arc::new(CoreCryptoServiceImpl::new());
 
     let secrets = [
         b"First secret message".to_vec(),
@@ -335,7 +341,7 @@ fn test_roundtrip_keypair_generation_consistency() {
     println!("Roundtrip Test: Keypair Generation Consistency");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
+    let crypto = Arc::new(CoreCryptoServiceImpl::new());
 
     println!("\n[Step 1] Generate multiple keypairs");
     let mut keypairs = Vec::new();
@@ -386,13 +392,16 @@ async fn test_roundtrip_workflow_services_integration() {
     println!("Roundtrip Test: Workflow Services Integration");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
+    let core_crypto = Arc::new(CoreCryptoServiceImpl::new());
+    let service_crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
     let mock_ao = Arc::new(MockAOClient::new());
-    let storage = Arc::new(ArweaveStorageServiceImpl::default().with_ao_client(mock_ao));
-    let sharing_service = SecretSharingWorkflowServiceImpl::new(crypto.clone(), storage);
+    let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
+    let sharing_service = SecretSharingWorkflowServiceImpl::new(service_crypto, storage);
 
-    let (owner_sk, owner_pk) = crypto.generate_keypair().unwrap();
-    let (_requester_sk, requester_pk) = crypto.generate_keypair().unwrap();
+    let (owner_sk, owner_pk) = core_crypto.generate_keypair().unwrap();
+    let (_requester_sk, requester_pk) = core_crypto.generate_keypair().unwrap();
 
     let original_secret = b"Integration test secret!";
     let secret_data: Vec<u8> = original_secret.to_vec();
@@ -432,17 +441,19 @@ async fn test_roundtrip_workflow_services_integration() {
     println!("\n[Step 4] Test crypto operations that PHASE 3 would use");
 
     // Test Shamir reconstruction (simulate key shares)
-    let key_shares = crypto
-        .split_secret_shamir(&crypto.generate_symmetric_key().unwrap(), 3, 5)
+    let key_shares = core_crypto
+        .split_secret_shamir(&core_crypto.generate_symmetric_key().unwrap(), 3, 5)
         .unwrap();
     let key_subset: Vec<ShamirShare> = key_shares.into_iter().take(3).collect();
-    let _ = crypto.reconstruct_secret_shamir(&key_subset, 3).unwrap();
+    let _ = core_crypto
+        .reconstruct_secret_shamir(&key_subset, 3)
+        .unwrap();
     println!("  [PASS] Shamir reconstruction works");
 
     // Test AES decryption
-    let sym_key = crypto.generate_symmetric_key().unwrap();
-    let encrypted = crypto.aes_gcm_encrypt(&sym_key, &secret_data).unwrap();
-    let decrypted = crypto.aes_gcm_decrypt(&sym_key, &encrypted).unwrap();
+    let sym_key = core_crypto.generate_symmetric_key().unwrap();
+    let encrypted = core_crypto.aes_gcm_encrypt(&sym_key, &secret_data).unwrap();
+    let decrypted = core_crypto.aes_gcm_decrypt(&sym_key, &encrypted).unwrap();
     assert_eq!(decrypted, secret_data);
     println!("  [PASS] AES decryption works");
 

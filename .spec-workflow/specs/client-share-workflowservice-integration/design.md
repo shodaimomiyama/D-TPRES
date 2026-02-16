@@ -227,7 +227,7 @@ fn get_secret_status(&self, secret_id: &SecretId) -> WorkflowResult<SecretStatus
 | `type` | `encrypted_share` | 暗号化シェアトランザクション |
 | `secret_id` | `{SecretId}` | 秘密の一意識別子 |
 | `index` | `{0..n}` | シェアのインデックス番号 |
-| `protocol` | `d-tpres` | プロトコル識別子 |
+| `protocol` | `formix` | プロトコル識別子 |
 
 ## Error Handling
 

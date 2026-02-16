@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-**AO Network通信基盤**: Issue [#47](https://github.com/shodaimomiyama/D-TPRES/issues/47) で実装
+**AO Network通信基盤**: Issue [#47](https://github.com/shodaimomiyama/FORMIX/issues/47) で実装
 - StorageService: `send_kfrag_to_owner_process()`, `retrieve_cfrags_from_requester_process()`, `retrieve_capsule()`
 - KFrag/CFragのRepository層
 - AOClient (adapter/external)
@@ -340,4 +340,4 @@
 **Total Tasks:** 25
 **Estimated Test Functions:** 56 (51 + 5 for CryptoService AES-GCM)
 
-**Prerequisites (別Issue):** [#47](https://github.com/shodaimomiyama/D-TPRES/issues/47) - AO Network通信基盤
+**Prerequisites (別Issue):** [#47](https://github.com/shodaimomiyama/FORMIX/issues/47) - AO Network通信基盤

@@ -2,7 +2,7 @@
 
 ## 目的
 
-このドキュメントはD-TPRES（決定論的閾値プロキシ再暗号化システム）開発のためのタスクプランモードの動作を定義します。主な責任は以下の通りです：
+このドキュメントはFORMIX（決定論的閾値プロキシ再暗号化システム）開発のためのタスクプランモードの動作を定義します。主な責任は以下の通りです：
 
 * **タスク理解と計画立案:** ユーザーリクエストを正確に解釈し、暗号システム実装のための詳細な実行計画を作成し、プランファイル（`.claude/rules-orchestrator/99-current-task-plan.md`）に文書化する
 * **サブタスク分解と管理:** 計画を細かいサブタスクに分割し、各サブタスクがコンテキストサイズの20%以下になるよう管理する。プランファイル内で各サブタスクのステータスを追跡する
@@ -173,98 +173,78 @@ stateDiagram-v2
 1. **暗号実装:** `crypto-impl`モードを使用
 2. **WASM実装:** `wasm-build`モードを使用
 3. **AOプロセス実装:** `ao-process`モードを使用
-4. **EVMブリッジ実装:** `evm-bridge`モードを使用
-5. **ブラウザ暗号統合:** `browser-crypto`モードを使用
-6. **Rustテスト実装:** `rust-test`モードを使用
-7. **PR作成:** `pr`モードを使用
+4. **ブラウザ暗号統合:** `browser-crypto`モードを使用
+5. **Rustテスト実装:** `rust-test`モードを使用
+6. **PR作成:** `pr`モードを使用
 
-## D-TPRES タスク計画ワークフロー例
+## FORMIX タスク計画ワークフロー例
 
-このセクションでは、D-TPRES開発者が従う典型的なタスク計画ワークフローの概要を示します。AOステートレス実行モデルと実際のアーキテクチャに基づいています。
+このセクションでは、FORMIX開発者が従う典型的なタスク計画ワークフローの概要を示します。AOステートレス実行モデルと実際のアーキテクチャに基づいています。
 
 1. **タスクの理解:**
     * 割り当てられたタスクの要件と目的を徹底的にレビューする
     * 要求者と曖昧な点を明確にする
-    * 実装が影響するライフサイクル（Process/Secret/Access）とプロセスロール（Owner/Holder/Requester）を特定する
-    * AOステートレス実行制約への影響を評価する
+    * 仕様は `.spec-workflow/steering/` を参照する
+    * [`docs/PRD.md`](docs/PRD.md)で製品要件を確認する
 
-2. **設計/仕様ドキュメントの更新:**
-    * 設計ドキュメントや仕様に必要な変更を特定する
-    * [`docs/development/`](docs/development/)の関連ファイルを更新する
-    * 例：[`docs/development/architecture/architecture_overview.md`](docs/development/architecture/architecture_overview.md)でアーキテクチャ変更を記録
-    * 例：[`docs/development/lifecycle/`](docs/development/lifecycle/)でライフサイクル変更を更新
+2. **設計/仕様ドキュメントの確認:**
+    * [`docs/architecture/architecture_overview.md`](docs/architecture/architecture_overview.md)でアーキテクチャを確認
+    * [`docs/architecture/architecture_design_philosophy.md`](docs/architecture/architecture_design_philosophy.md)で設計思想を確認
+    * `.spec-workflow/steering/` で仕様を確認
 
-3. **UseCaseハンドラー（`src/usecase/handlers/`）の分析:**
-    * プロセスロール固有のハンドラーを調査する
-    * Owner: [`docs/development/usecase/owner/owner_handlers.md`](docs/development/usecase/owner/owner_handlers.md)
-    * Holder: [`docs/development/usecase/holder/holder_handlers.md`](docs/development/usecase/holder/holder_handlers.md)
-    * Requester: [`docs/development/usecase/requester/requester_handlers.md`](docs/development/usecase/requester/requester_handlers.md)
-    * AOメッセージ受信からController層への橋渡し機能を理解する
+3. **Actions層（`client/src/actions/`）の分析:**
+    * `client.rs`: share, recover, generateKeyPair アクション
+    * `builder.rs`: ActionsBuilder (DI設定)
+    * `di.rs`: 型エイリアスとDIコンテナ
 
-4. **Controller Components（`src/controller/`）の分析:**
-    * [`docs/development/controller/controller_overview.md`](docs/development/controller/controller_overview.md)でController層の役割を確認
-    * MessageHandler: メッセージ処理統括
-    * MessageRouter: アクション振り分け
-    * MessageValidator: 妥当性検証
-    * MessageContextExtractor: DTO変換
-    * 各コンポーネントの連携フローを理解する
+4. **Controller層（`client/src/controller/`）の分析:**
+    * `validator.rs`: ShareValidator, RecoverValidator
+    * `extractor.rs`: ShareExtractor, RecoverExtractor
 
-5. **Service層（Workflow + Core）の分析:**
-    * Workflow Services: [`docs/development/service/workflow-service/workflow-service.md`](docs/development/service/workflow-service/workflow-service.md)
-      - AccessWorkflow, RecoveryWorkflow, DistributionWorkflow
-    * Core Services: [`docs/development/service/core-service/core-service.md`](docs/development/service/core-service/core-service.md)
-      - CryptoService, ProcessService, StorageService, EVMVerificationService
-    * サービス間の依存関係とワークフロー管理を理解する
+5. **Service層（`client/src/usecase/`）の分析:**
+    * Workflow Services: `workflow/secret_sharing_service.rs`, `workflow/secret_recovery_service.rs`
+    * Service Layer: `service/crypto_service.rs`, `service/storage_service.rs`
+    * Core Services: `core/crypto.rs`, `core/storage.rs`, `core/contract_storage.rs`
 
-6. **Domain Entities（`src/domain/entity/`）の分析:**
-    * [`docs/development/domain/entity/entities.md`](docs/development/domain/entity/entities.md)でエンティティ設計を確認
-    * ProcessEntity, ShareEntity, CapsuleEntity, AccessRequestEntity, RekeyFragmentEntity
-    * エンティティのライフサイクルとAOステートレス制約での永続化方法を理解する
+6. **Domain Entities（`client/src/domain/entities/`）の分析:**
+    * Secret, Capsule, KFrag, CFrag, ShareCollection
+    * Value Objects: ids, KeyPair, SecretData, SymmetricKey
 
-7. **Infrastructure Repository実装（`src/infrastructure/`）の分析:**
-    * [`docs/development/domain/infrastructure/repository_implementations.md`](docs/development/domain/infrastructure/repository_implementations.md)
-    * ArweaveRepositoryImpl: 永続化実装
-    * elciao Bridge: EVM連携アダプタ
-    * AOステートレス環境での状態管理戦略を理解する
+7. **Repository Interfaces（`client/src/repositories/`）の分析:**
+    * SecretRepository, CapsuleRepository, KFragRepository, CFragRepository, ShareCollectionRepository
 
-8. **AOステートレス制約の考慮:**
-    * [`docs/development/ao/ao_process_model.md`](docs/development/ao/ao_process_model.md)でAO制約を確認
-    * メッセージ間でのメモリ非永続性
-    * Compute Units間での実行分散
-    * 明示的な状態保存・復元の必要性
-    * 各実装においてステートレス制約への対応を計画
+8. **Infrastructure（`client/src/adapter/`）の分析:**
+    * `repository_impl/`: Arweaveバックエンドのリポジトリ実装
+    * `external/arweave/`: ArweaveClient
+    * `external/ao/`: AOClient (trait + ProductionAOClient)
+    * `external/mock_ao/`: MockAOClient
 
 9. **実装サブタスクの計画:**
-    * 実装作業をAOメッセージ処理単位で分解する
-    * 各プロセスロール（Owner/Holder/Requester）に対応するサブタスクを計画
-    * ライフサイクル（Process/Secret/Access）の各段階を考慮
+    * 実装作業を論理的な単位で分解する
+    * 変更の影響範囲を特定する
 
 10. **依存関係によるサブタスクの順序付け:**
-    * AOステートレス実行を考慮した順序で配置：
+    * レイヤー依存関係を考慮した順序で配置：
         1. Domain Entitiesの変更（状態構造の定義）
-        2. Repository実装の変更（永続化戦略）
+        2. Repository Interfacesの変更
         3. Core Servicesの変更（基本機能）
-        4. Workflow Servicesの変更（ビジネスロジック）
-        5. Controller Componentsの変更（メッセージ処理）
-        6. UseCase Handlersの変更（ロール固有処理）
-        7. WASM ビルドと検証
+        4. Service Layerの変更（コアのラッピング）
+        5. Workflow Servicesの変更（ビジネスロジック）
+        6. Controller/Actionsの変更
+        7. Adapter（リポジトリ実装）の変更
 
 11. **テストサブタスクの計画:**
-    * AOステートレス環境でのテストを計画する
-    * 各メッセージ処理の独立性を確認
-    * 状態保存・復元の正確性をテスト
-    * プロセスロール固有のテストケースを作成
-    * 統合テストでライフサイクル全体をテスト
+    * 各レイヤーのユニットテストを計画
+    * 統合テストでワークフロー全体をテスト
+    * セキュリティ関連のテストケースを作成
 
 12. **セキュリティ考慮事項:**
-    * AOステートレス環境でのセキュリティ制約を評価
-    * メッセージ間での秘密情報の適切なクリア
-    * プロセスロール間のアクセス制御検証
+    * 秘密情報のメモリ安全性（Zeroize）を確認
     * 暗号操作の正確性とタイミング攻撃耐性を確認
 
 ## AOステートレス制約への対応
 
-D-TPRESはAOネットワーク上で動作するため、以下の制約への対応が必要です：
+FORMIXはAOネットワーク上で動作するため、以下の制約への対応が必要です：
 
 ### 1. メモリ非永続性
 - **制約**: メッセージ処理間でメモリは保持されない

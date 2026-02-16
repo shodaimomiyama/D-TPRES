@@ -1,7 +1,7 @@
 //! Actions Layer Integration Tests
 //!
 //! This module tests the Actions layer API (share, recover, generate_keypair)
-//! which serves as the developer-facing facade for D-TPRES operations.
+//! which serves as the developer-facing facade for FORMIX operations.
 //!
 //! Note: Complete roundtrip tests (share → recover) require storage implementation.
 //! Tests marked with `_storage_pending` will be fully functional once Issue #47 is complete.
@@ -9,15 +9,17 @@
 
 use std::sync::Arc;
 
-use d_tpres::actions::{ActionError, DefaultActionsContainer, RecoverOptions, ShareOptions};
-use d_tpres::adapter::external::mock_ao::MockAOClient;
-use d_tpres::usecase::core::storage::ArweaveStorageServiceImpl;
-use d_tpres::usecase::dto::SecretMetadata;
+use formix::actions::{ActionError, DefaultActionsContainer, RecoverOptions, ShareOptions};
+use formix::adapter::external::mock_ao::MockAOClient;
+use formix::usecase::core::contract_storage::ContractStorageImpl;
+use formix::usecase::core::storage::ArweaveStorageServiceImpl;
+use formix::usecase::dto::SecretMetadata;
 
 fn create_test_container() -> DefaultActionsContainer {
     let mock_ao = Arc::new(MockAOClient::new());
-    let storage = Arc::new(ArweaveStorageServiceImpl::default().with_ao_client(mock_ao));
-    DefaultActionsContainer::with_storage(storage)
+    let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    DefaultActionsContainer::with_storage(arweave, contract)
 }
 
 // ============================================================================

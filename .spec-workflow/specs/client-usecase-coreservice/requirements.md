@@ -2,7 +2,7 @@
 
 ## Introduction
 
-D-TPRESクライアントライブラリのUseCase層におけるCoreService群の仕様を定義する。CoreServiceは複数のUseCaseService（SecretSharingService、SecretRecoveryService等）から呼び出される共通業務ロジックを提供し、tech.mdで定義された以下の2つのサービスで構成される：
+FORMIXクライアントライブラリのUseCase層におけるCoreService群の仕様を定義する。CoreServiceは複数のUseCaseService（SecretSharingService、SecretRecoveryService等）から呼び出される共通業務ロジックを提供し、tech.mdで定義された以下の2つのサービスで構成される：
 
 1. **CryptoService**: TPRE・Shamir操作（純粋な暗号ロジック）
    - Umbral TPRE（umbral-pre 0.11）
@@ -49,7 +49,7 @@ client/src/usecase/
 
 #### Design Note
 
-CryptoServiceはD-TPRESの中核となる暗号機能を提供する。tech.mdで定義された以下のライブラリを使用：
+CryptoServiceはFORMIXの中核となる暗号機能を提供する。tech.mdで定義された以下のライブラリを使用：
 
 - **umbral-pre 0.11**: 閾値プロキシ再暗号化（Umbral）
 - **shamirsecretsharing 0.1**: シャミア秘密分散（k-of-n）

@@ -1,6 +1,6 @@
 //! Repository layer - Repository Interface definitions
 //!
-//! This module defines the Repository Interface traits for D-TPRES domain entities.
+//! This module defines the Repository Interface traits for FORMIX domain entities.
 //! Repository interfaces abstract persistence operations and enable Dependency Inversion (DIP).
 
 use async_trait::async_trait;

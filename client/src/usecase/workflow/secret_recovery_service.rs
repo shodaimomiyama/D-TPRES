@@ -6,10 +6,10 @@
 use std::sync::Arc;
 
 use crate::domain::value_objects::SecretId;
-use crate::usecase::core::crypto::{CFragData, Capsule, CryptoService, SecretKey, ShamirShare};
-use crate::usecase::core::storage::ArweaveStorageService;
+use crate::usecase::core::crypto::{CFragData, Capsule, SecretKey, ShamirShare};
 use crate::usecase::dto::{SecretRecoveryRequest, SecretRecoveryResult};
 use crate::usecase::error::{WorkflowError, WorkflowResult};
+use crate::usecase::service::{CryptoService, StorageService};
 
 // ============================================================================
 // SecretRecoveryWorkflowService Trait
@@ -75,16 +75,16 @@ pub trait SecretRecoveryWorkflowService: Send + Sync {
 ///
 /// Orchestrates CryptoService and StorageService to implement
 /// the complete Phase 3 secret recovery workflow.
-pub struct SecretRecoveryWorkflowServiceImpl<C: CryptoService, S: ArweaveStorageService> {
+pub struct SecretRecoveryWorkflowServiceImpl<C: CryptoService, ST: StorageService> {
     crypto_service: Arc<C>,
     #[allow(dead_code)]
-    storage_service: Arc<S>,
+    storage_service: Arc<ST>,
 }
 
 #[allow(clippy::cast_possible_truncation, clippy::indexing_slicing)]
-impl<C: CryptoService, S: ArweaveStorageService> SecretRecoveryWorkflowServiceImpl<C, S> {
+impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, ST> {
     /// Create a new SecretRecoveryWorkflowServiceImpl
-    pub fn new(crypto_service: Arc<C>, storage_service: Arc<S>) -> Self {
+    pub fn new(crypto_service: Arc<C>, storage_service: Arc<ST>) -> Self {
         Self {
             crypto_service,
             storage_service,
@@ -234,8 +234,8 @@ impl<C: CryptoService, S: ArweaveStorageService> SecretRecoveryWorkflowServiceIm
 }
 
 #[allow(clippy::cast_possible_truncation)]
-impl<C: CryptoService, S: ArweaveStorageService> SecretRecoveryWorkflowService
-    for SecretRecoveryWorkflowServiceImpl<C, S>
+impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
+    for SecretRecoveryWorkflowServiceImpl<C, ST>
 {
     fn execute_secret_recovery(
         &self,
@@ -301,17 +301,35 @@ impl<C: CryptoService, S: ArweaveStorageService> SecretRecoveryWorkflowService
 )]
 mod tests {
     use super::*;
-    use crate::usecase::core::crypto::CryptoServiceImpl;
+    use crate::adapter::external::mock_ao::MockAOClient;
+    use crate::usecase::core::contract_storage::ContractStorageImpl;
+    use crate::usecase::core::crypto::{
+        CryptoService as CoreCryptoService, CryptoServiceImpl as CoreCryptoServiceImpl,
+    };
     use crate::usecase::core::storage::ArweaveStorageServiceImpl;
+    use crate::usecase::service::{
+        CryptoServiceImpl as ServiceCryptoServiceImpl,
+        StorageServiceImpl as ServiceStorageServiceImpl,
+    };
+
+    type TestCryptoService = ServiceCryptoServiceImpl<CoreCryptoServiceImpl>;
+    type TestStorageService =
+        ServiceStorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<MockAOClient>>;
 
     fn create_test_service()
-    -> SecretRecoveryWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
-        let crypto = Arc::new(CryptoServiceImpl::new());
-        let storage = Arc::new(ArweaveStorageServiceImpl::default());
+    -> SecretRecoveryWorkflowServiceImpl<TestCryptoService, TestStorageService> {
+        let core_crypto = Arc::new(CoreCryptoServiceImpl::new());
+        let crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
+
+        let mock_ao = Arc::new(MockAOClient::new());
+        let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+        let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+        let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
+
         SecretRecoveryWorkflowServiceImpl::new(crypto, storage)
     }
 
-    fn create_test_request(crypto: &CryptoServiceImpl) -> SecretRecoveryRequest {
+    fn create_test_request(crypto: &CoreCryptoServiceImpl) -> SecretRecoveryRequest {
         let (requester_sk, _requester_pk) = crypto.generate_keypair().unwrap();
 
         SecretRecoveryRequest {
@@ -338,7 +356,7 @@ mod tests {
     fn test_validate_request_valid() {
         println!("\n=== test_validate_request_valid ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let request = create_test_request(&crypto);
         println!("  Created request with secret_id: {}", request.secret_id);
 
@@ -357,7 +375,7 @@ mod tests {
     fn test_validate_request_empty_process_id() {
         println!("\n=== test_validate_request_empty_process_id ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let mut request = create_test_request(&crypto);
         request.requester_process_id = String::new();
         println!("  Testing with empty requester_process_id");
@@ -468,7 +486,7 @@ mod tests {
     fn test_execute_recovery_storage_not_implemented() {
         println!("\n=== test_execute_recovery_storage_not_implemented ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let request = create_test_request(&crypto);
         println!("  Executing PHASE 3 recovery (should fail - storage not implemented)...");
 
@@ -598,7 +616,7 @@ mod tests {
     fn test_decrypt_shares_with_valid_key() {
         println!("\n=== test_decrypt_shares_with_valid_key ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
 
         // Generate a valid symmetric key
         let symmetric_key = crypto.generate_symmetric_key().unwrap();
@@ -646,7 +664,7 @@ mod tests {
     fn test_decrypt_shares_with_invalid_key() {
         println!("\n=== test_decrypt_shares_with_invalid_key ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
 
         let correct_key = crypto.generate_symmetric_key().unwrap();
         let wrong_key = crypto.generate_symmetric_key().unwrap();
@@ -668,7 +686,7 @@ mod tests {
     fn test_decrypt_shares_empty_input() {
         println!("\n=== test_decrypt_shares_empty_input ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let symmetric_key = crypto.generate_symmetric_key().unwrap();
 
         println!("  Testing with empty shares array...");
@@ -691,7 +709,7 @@ mod tests {
     fn test_reconstruct_secret_with_valid_shares() {
         println!("\n=== test_reconstruct_secret_with_valid_shares ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
 
         // Create original secret and split it
         let original_secret = b"Test secret!".to_vec();
@@ -724,7 +742,7 @@ mod tests {
     fn test_reconstruct_secret_insufficient_shares() {
         println!("\n=== test_reconstruct_secret_insufficient_shares ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
 
         let original_secret = b"Test secret!".to_vec();
         println!(
@@ -814,7 +832,7 @@ mod tests {
     fn test_workflow_fails_at_first_storage_operation() {
         println!("\n=== test_workflow_fails_at_first_storage_operation ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let request = create_test_request(&crypto);
         println!("  Executing workflow (should fail at first storage operation)...");
 

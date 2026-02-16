@@ -4,7 +4,7 @@ description: "AO固有機能を活用した普遍的Entity/Repository設計 - �
 tags: ["ao-native", "entity-design", "repository-pattern", "universal-design", "data-layer"]
 status: "design-specification"
 created: "2025-06-24"
-author: "D-TPRES Development Team"
+author: "FORMIX Development Team"
 reference: "AO Technical Documentation & TERASOLUNA Guidelines"
 ---
 
@@ -32,8 +32,8 @@ graph TB
         A5[ao.outbox - Messages/Spawns]
     end
     
-    subgraph "D-TPRES Entity Layer"
-        B1[ProcessEntity - D-TPRES specific data]
+    subgraph "FORMIX Entity Layer"
+        B1[ProcessEntity - FORMIX specific data]
         B2[SecretEntity - Cryptographic secrets]
         B3[ShareEntity - Data fragments]
         B4[FragmentEntity - Key fragments]
@@ -77,14 +77,14 @@ graph TB
 
 ### 2.1 ProcessEntity - プロセス固有データ
 
-**用途**: AO固有プロパティを除く、D-TPRES固有のプロセスデータ
+**用途**: AO固有プロパティを除く、FORMIX固有のプロセスデータ
 
 ```rust
 /// プロセスエンティティ（データ保持のみ）
-/// AO固有プロパティ（ao.id, ao.env等）は使用せず、D-TPRES固有データのみ管理
+/// AO固有プロパティ（ao.id, ao.env等）は使用せず、FORMIX固有データのみ管理
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProcessEntity {
-    /// D-TPRES固有プロセス識別子（AOのao.idとは別管理）
+    /// FORMIX固有プロセス識別子（AOのao.idとは別管理）
     pub dtpres_process_id: String,
     
     /// プロセス名（ユーザー定義）
@@ -363,7 +363,7 @@ pub struct RequestEntity {
     /// 要求対象秘密ID
     pub secret_id: String,
     
-    /// 要求者プロセスID（D-TPRES ID）
+    /// 要求者プロセスID（FORMIX ID）
     pub requester_process_id: String,
     
     /// 要求者AO Process ID
@@ -794,7 +794,7 @@ where
     /// ストレージ用タグ作成
     fn create_storage_tags(&self, id: &ID) -> HashMap<String, String> {
         let mut tags = HashMap::new();
-        tags.insert("App-Name".to_string(), "D-TPRES".to_string());
+        tags.insert("App-Name".to_string(), "FORMIX".to_string());
         tags.insert("Entity-Type".to_string(), self.entity_type.to_string());
         tags.insert("Entity-Id".to_string(), id.to_string());
         tags.insert("Timestamp".to_string(), 
@@ -809,7 +809,7 @@ where
     /// クエリ用タグ作成
     fn create_query_tags(&self, id: &ID) -> HashMap<String, String> {
         let mut tags = HashMap::new();
-        tags.insert("App-Name".to_string(), "D-TPRES".to_string());
+        tags.insert("App-Name".to_string(), "FORMIX".to_string());
         tags.insert("Entity-Type".to_string(), self.entity_type.to_string());
         tags.insert("Entity-Id".to_string(), id.to_string());
         tags
@@ -1032,7 +1032,7 @@ impl IndexManager for ArweaveIndexManager {
         // 既存インデックス取得
         let query_tags = {
             let mut tags = HashMap::new();
-            tags.insert("App-Name".to_string(), "D-TPRES".to_string());
+            tags.insert("App-Name".to_string(), "FORMIX".to_string());
             tags.insert("Index-Key".to_string(), index_key.to_string());
             tags
         };
@@ -1054,7 +1054,7 @@ impl IndexManager for ArweaveIndexManager {
         let index_data = serde_json::to_vec(&entity_ids)?;
         let index_tags = {
             let mut tags = HashMap::new();
-            tags.insert("App-Name".to_string(), "D-TPRES".to_string());
+            tags.insert("App-Name".to_string(), "FORMIX".to_string());
             tags.insert("Index-Key".to_string(), index_key.to_string());
             tags.insert("Data-Type".to_string(), "Index".to_string());
             tags
@@ -1142,7 +1142,7 @@ graph TB
         B4[Data Persistence]
     end
     
-    subgraph "D-TPRES Business Logic"
+    subgraph "FORMIX Business Logic"
         C1[Secret Sharing]
         C2[Fragment Distribution]
         C3[Reencryption Requests]
@@ -1167,12 +1167,12 @@ graph TB
 pub struct AoEnvironmentIntegration;
 
 impl AoEnvironmentIntegration {
-    /// AO Process IDをD-TPRES Process IDにマッピング
+    /// AO Process IDをFORMIX Process IDにマッピング
     pub fn map_ao_to_dtpres_id(ao_process_id: &str) -> String {
         format!("dtpres_{}", ao_process_id)
     }
     
-    /// D-TPRES Process IDからAO Process IDを逆引き
+    /// FORMIX Process IDからAO Process IDを逆引き
     pub fn map_dtpres_to_ao_id(dtpres_process_id: &str) -> Option<String> {
         if dtpres_process_id.starts_with("dtpres_") {
             Some(dtpres_process_id.strip_prefix("dtpres_").unwrap().to_string())
@@ -1194,13 +1194,13 @@ impl AoEnvironmentIntegration {
         config
     }
     
-    /// AOタグからD-TPRESメタデータを抽出
+    /// AOタグからFORMIXメタデータを抽出
     pub fn extract_dtpres_metadata_from_tags(tags: &HashMap<String, String>) -> Option<HashMap<String, String>> {
         let mut metadata = HashMap::new();
         
         for (key, value) in tags {
-            if key.starts_with("D-TPRES-") {
-                let metadata_key = key.strip_prefix("D-TPRES-").unwrap();
+            if key.starts_with("FORMIX-") {
+                let metadata_key = key.strip_prefix("FORMIX-").unwrap();
                 metadata.insert(metadata_key.to_string(), value.clone());
             }
         }

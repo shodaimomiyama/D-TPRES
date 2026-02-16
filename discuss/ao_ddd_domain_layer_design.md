@@ -1,19 +1,19 @@
 ---
-title: "Actor-Oriented DDD ドメイン層設計: D-TPRES Entity・Repository アーキテクチャ"
+title: "Actor-Oriented DDD ドメイン層設計: FORMIX Entity・Repository アーキテクチャ"
 description: "ArweaveKVS基盤でのActor-Oriented Domain-Driven Designにおけるドメイン層の詳細設計と実装ガイドライン"
 tags: ["ao-ddd", "domain-layer", "entity-design", "repository-pattern", "arweave-kvs"]
 status: "design-review"
 created: "2025-06-23"
-author: "D-TPRES Development Team"
+author: "FORMIX Development Team"
 ---
 
-# Actor-Oriented DDD ドメイン層設計: D-TPRES Entity・Repository アーキテクチャ
+# Actor-Oriented DDD ドメイン層設計: FORMIX Entity・Repository アーキテクチャ
 
 ## 1. エグゼクティブサマリー
 
 ### 1.1 設計目標
 
-本ドキュメントは、D-TPRESプロジェクトにおけるActor-Oriented Domain-Driven Design (AO-DDD)パターンの核心となる**ドメイン層**の詳細設計を定義します。特に以下の3つの主要コンポーネントに焦点を当てます：
+本ドキュメントは、FORMIXプロジェクトにおけるActor-Oriented Domain-Driven Design (AO-DDD)パターンの核心となる**ドメイン層**の詳細設計を定義します。特に以下の3つの主要コンポーネントに焦点を当てます：
 
 1. **Domain Entities**: 暗号学的ドメインモデルを表現するエンティティクラス群
 2. **Repository Interfaces**: KVS最適化されたリポジトリ抽象化層
@@ -1073,7 +1073,7 @@ impl<E: DomainEntity> ArweaveKVSRepository<E> {
 
 ---
 
-*本設計ドキュメントは、D-TPRESプロジェクトのActor-Oriented Domain-Driven Designアーキテクチャの核心となるドメイン層の詳細仕様です。実装チームとのレビューを経て、プロトタイプ開発に移行します。*
+*本設計ドキュメントは、FORMIXプロジェクトのActor-Oriented Domain-Driven Designアーキテクチャの核心となるドメイン層の詳細仕様です。実装チームとのレビューを経て、プロトタイプ開発に移行します。*
 
 **Document Status**: Design Review Ready  
 **Next Phase**: Team Review → Prototype Implementation  

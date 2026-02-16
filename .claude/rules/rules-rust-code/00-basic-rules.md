@@ -5,13 +5,13 @@
 このドキュメントは、RooやClineがRust開発で自律的に動作するための振る舞いを定義します。
 状態機械の振る舞い、コーディングルール、ベストプラクティスに準拠した、一貫性があり、保守可能で、意図的なコードを書くことが期待されます。
 
-**タスクの計画や実装を行う前に、必ず `docs/PRD.md` で定義された要件と `docs/development/codes/rust.md` で指定されたコーディングルールを参照し、遵守してください。**
+**タスクの計画や実装を行う前に、必ず `docs/PRD.md` で定義された要件と `.claude/rules/rules-rust-code/01-global-coding-rules.md` で指定されたコーディングルールを参照し、遵守してください。**
 
 ## AOステートレス実行制約
 
 **重要: このセクションの制約は `ao/contracts/src/` に適用されます。`client/` は async/await を使用できます。**
 
-**D-TPRESにとって重要**: AOネットワークは以下の制約でステートレスにプロセスを実行します：
+**FORMIXにとって重要**: AOネットワークは以下の制約でステートレスにプロセスを実行します：
 
 1. **メッセージ間でのメモリ非永続性**
    - 各メッセージ実行はクリーンなメモリで開始
@@ -94,14 +94,14 @@ stateDiagram-v2
 
 ### 3.1. 情報収集
 
-必要に応じてソースコード、コンパイル結果、リント結果を観察します。情報が不足している場合はプリントデバッグも必要です。D-TPRESでは特に以下に注意してください：
+必要に応じてソースコード、コンパイル結果、リント結果を観察します。情報が不足している場合はプリントデバッグも必要です。FORMIXでは特に以下に注意してください：
 - AOステートレス実行制約
 - 暗号操作とセキュリティ要件
 - プロセスロール（Owner/Holder/Requester）の分離
 
 ### 3.2. 状態ロードステップ（AOステートレス環境）
 
-**D-TPRESにとって重要**: AOはステートレスに実行されるため、任意の操作の前にプロセス状態を明示的にロードする必要があります。
+**FORMIXにとって重要**: AOはステートレスに実行されるため、任意の操作の前にプロセス状態を明示的にロードする必要があります。
 
 **アクション:**
 - 実装されているプロセスロール（Owner/Holder/Requester）を特定
@@ -127,7 +127,7 @@ repository.save_process_state(process_id, &updated_state)?;
 
 ソースコードを変更します。**対象ファイル以外の編集は絶対に禁止されています。**
 
-D-TPRESでは、以下を確認してください：
+FORMIXでは、以下を確認してください：
 - async/awaitの不使用（AO制約）
 - 暗号秘密情報に対するZeroizeの適切な使用
 - 正しいプロセスロール認証チェック
@@ -139,7 +139,7 @@ D-TPRESでは、以下を確認してください：
 
 1. 作成/変更されるコンポーネントがどのアーキテクチャレイヤーに属するかを明確にする。
 2. 適用可能なルールのチェックリストを作成する（このドキュメントのグローバルルール＋特定のアーキテクチャレイヤーのルールを参照）。
-3. チェックリストを完成させて、変更が `docs/development/codes/rust.md` で定義されたルールに準拠し、`docs/PRD.md` の要件と整合しているかを確認する。違反が存在する場合は、それらを明確に述べ、解決策を再考する。
+3. チェックリストを完成させて、変更が `.claude/rules/rules-rust-code/01-global-coding-rules.md` で定義されたルールに準拠し、`docs/PRD.md` の要件と整合しているかを確認する。違反が存在する場合は、それらを明確に述べ、解決策を再考する。
 4. **`Global.CommentConvention` ルールに違反するコメント（例："なぜ"ではなく"何を"説明するコメント、冗長なコメント）を削除する。**
 5. `make fmt` が実行され、`make lint` が通ることを確認する。
 
@@ -152,7 +152,7 @@ D-TPRESでは、以下を確認してください：
   - [] Global.CommentConvention
   <!-- 関連するアーキテクチャレイヤーのルールをリスト -->
   - [] Domain.EntityConstraints
-  - [] docs/development/codes/rust.mdの遵守
+  - [] .claude/rules/rules-rust-code/01-global-coding-rules.mdの遵守
   - [] docs/PRD.mdとの整合性
 ```
 
@@ -163,7 +163,7 @@ D-TPRESでは、以下を確認してください：
 
 ### 3.6. 状態永続化ステップ（AOステートレス環境）
 
-**D-TPRESにとって重要**: メッセージ処理後、次のメッセージ実行のために状態を明示的に永続化する必要があります。
+**FORMIXにとって重要**: メッセージ処理後、次のメッセージ実行のために状態を明示的に永続化する必要があります。
 
 **アクション:**
 - すべての状態変更がエンティティに取り込まれていることを確認
@@ -200,121 +200,45 @@ match process_operation(&mut state) {
 ## ディレクトリ構造
 
 ```
-D-TPRES/
-├── src/                           # AO WebAssembly (Rust) - レイヤードアーキテクチャ
-│   ├── main.rs                    # AOエントリーポイント & ハンドラー登録
+FORMIX/
+├── client/src/                    # Client Library (Rust) - レイヤードアーキテクチャ
+│   ├── lib.rs                     # ライブラリエクスポート
 │   ├── di.rs                      # 依存性注入コンテナ
-│   ├── lib.rs                     # WASMライブラリエクスポート
 │   │
-│   ├── usecase/                   # UseCase Layer - AOメッセージハンドラー
-│   │   ├── mod.rs                 # 公開エクスポート
-│   │   ├── handlers/              # ロールベースメッセージハンドラー
-│   │   │   ├── mod.rs
-│   │   │   ├── owner_handlers.rs  # Ownerロールハンドラー
-│   │   │   ├── holder_handlers.rs # Holderロールハンドラー
-│   │   │   ├── requester_handlers.rs # Requesterロールハンドラー
-│   │   │   └── common_handlers.rs # 共通ハンドラーユーティリティ
-│   │   ├── context.rs             # ハンドラーコンテキスト管理
-│   │   └── errors.rs              # UseCase層エラー定義
+│   ├── actions/                   # Actions Layer - クライアントAPIエントリーポイント
+│   │   ├── client.rs              # share, recover, generateKeyPair アクション
+│   │   ├── builder.rs             # ActionsBuilder (DI設定)
+│   │   ├── di.rs                  # 型エイリアスとDIコンテナ
+│   │   └── options.rs             # アクションオプション/パラメータ
 │   │
-│   ├── controller/                # Controller Layer - メッセージ処理
-│   │   ├── mod.rs
-│   │   ├── message_handler.rs     # 中央MessageHandler
-│   │   ├── router.rs              # MessageRouter実装
-│   │   ├── validator.rs           # MessageValidator & バリデーションロジック
-│   │   ├── extractor.rs           # MessageContextExtractor & DTOs
-│   │   ├── response.rs            # レスポンス生成ユーティリティ
-│   │   └── errors.rs              # Controller層エラー定義
+│   ├── controller/                # Controller Layer - バリデーション & DTO抽出
+│   │   ├── validator.rs           # ShareValidator, RecoverValidator
+│   │   └── extractor.rs           # ShareExtractor, RecoverExtractor
 │   │
-│   ├── service/                   # Service Layer - ビジネスロジック
-│   │   ├── mod.rs
-│   │   ├── workflow/              # Workflow Services (Phaseオーケストレーション)
-│   │   │   ├── mod.rs
-│   │   │   ├── secret_sharing.rs  # Phase 1: SecretSharingWorkflowService
-│   │   │   ├── access_request.rs  # Phase 2: AccessRequestWorkflowService
-│   │   │   ├── reencryption.rs    # Phase 3-4: ReencryptionWorkflowService
-│   │   │   └── secret_recovery.rs # Phase 5: SecretRecoveryWorkflowService
+│   ├── usecase/                   # UseCase Layer - ビジネスロジック
 │   │   ├── core/                  # Core Services (基本操作)
-│   │   │   ├── mod.rs
-│   │   │   ├── crypto.rs          # CryptoService (TPRE, Shamir)
-│   │   │   ├── process.rs         # ProcessManagementService
-│   │   │   ├── messaging.rs       # MessageRoutingService
-│   │   │   └── storage.rs         # ArweaveStorageService
-│   │   ├── container.rs           # ServiceContainer for DI
-│   │   └── errors.rs              # Service層エラー定義
+│   │   │   ├── crypto.rs          # CoreCryptoService (TPRE, Shamir)
+│   │   │   ├── storage.rs         # ArweaveStorageService
+│   │   │   └── contract_storage.rs # ContractStorage (AO状態)
+│   │   ├── service/               # Service Layer (コアのラッピング)
+│   │   │   ├── crypto_service.rs  # ServiceCryptoService
+│   │   │   └── storage_service.rs # ServiceStorageService
+│   │   └── workflow/              # Workflow Services (フェーズ調整)
+│   │       ├── secret_sharing_service.rs  # Phase 1: 秘密分割・配布
+│   │       └── secret_recovery_service.rs # Phase 3: 秘密復元
 │   │
-│   ├── domain/                    # Domain Layer - エンティティ & Repository Interface
-│   │   ├── mod.rs
-│   │   ├── entities/              # 純粋データ構造
-│   │   │   ├── mod.rs
-│   │   │   ├── process.rs         # ProcessEntity
-│   │   │   ├── share.rs           # ShareEntity
-│   │   │   ├── capsule.rs         # CapsuleEntity
-│   │   │   ├── access_request.rs  # AccessRequestEntity
-│   │   │   ├── rekey_fragment.rs  # RekeyFragmentEntity
-│   │   │   └── reencryption.rs    # ReencryptionEntity
-│   │   ├── repositories/          # Repository Interface (DIP)
-│   │   │   ├── mod.rs
-│   │   │   ├── process.rs         # ProcessEntityRepository trait
-│   │   │   ├── share.rs           # ShareEntityRepository trait
-│   │   │   ├── capsule.rs         # CapsuleEntityRepository trait
-│   │   │   ├── access_request.rs  # AccessRequestEntityRepository trait
-│   │   │   ├── rekey_fragment.rs  # RekeyFragmentEntityRepository trait
-│   │   │   └── reencryption.rs    # ReencryptionEntityRepository trait
-│   │   ├── value_objects/         # ドメイン値オブジェクト
-│   │   │   ├── mod.rs
-│   │   │   ├── process_role.rs    # ProcessRole enum
-│   │   │   ├── secret_id.rs       # SecretId値オブジェクト
-│   │   │   └── phase.rs           # Phase enum
-│   │   └── errors.rs              # Domain層エラー定義
+│   ├── domain/                    # Domain Layer - エンティティ
+│   │   ├── entities/              # Secret, Capsule, KFrag, CFrag, ShareCollection
+│   │   └── value_objects/         # IDs, KeyPair, SecretData, SymmetricKey
 │   │
-│   ├── infrastructure/            # Infrastructure Layer - 技術実装
-│   │   ├── mod.rs
-│   │   ├── repositories/          # Repository実装
-│   │   │   ├── mod.rs
-│   │   │   ├── arweave_base.rs    # 基盤ArweaveRepository実装
-│   │   │   ├── process_impl.rs    # ProcessEntityRepositoryImpl
-│   │   │   ├── share_impl.rs      # ShareEntityRepositoryImpl
-│   │   │   ├── capsule_impl.rs    # CapsuleEntityRepositoryImpl
-│   │   │   ├── access_request_impl.rs # AccessRequestEntityRepositoryImpl
-│   │   │   ├── rekey_fragment_impl.rs # RekeyFragmentEntityRepositoryImpl
-│   │   │   └── reencryption_impl.rs # ReencryptionEntityRepositoryImpl
-│   │   ├── external/              # 外部システムアダプター
-│   │   │   ├── mod.rs
-│   │   │   ├── arweave_client.rs  # ArweaveClient
-│   │   │   └── evm_bridge.rs      # elciao EVM bridge
-│   │   ├── cache.rs               # メッセージスコープキャッシュ
-│   │   └── errors.rs              # Infrastructure層エラー定義
+│   ├── repositories/              # Repository Interfaces (DIP)
 │   │
-│   ├── crypto/                    # 暗号化ユーティリティ
-│   │   ├── mod.rs
-│   │   ├── umbral.rs              # Umbral TPRE操作
-│   │   ├── shamir.rs              # Shamir Secret Sharing
-│   │   └── utils.rs               # 暗号化ユーティリティ関数
-│   │
-│   └── utils/                     # 共有ユーティリティ
-│       ├── mod.rs
-│       ├── serialization.rs       # Serdeヘルパー
-│       ├── time.rs                # タイムスタンプユーティリティ
-│       └── constants.rs           # システム定数
+│   └── adapter/                   # Infrastructure Layer
+│       ├── repository_impl/       # Arweaveバックエンドのリポジトリ実装
+│       └── external/              # ArweaveClient, AOClient, MockAOClient
 │
 ├── browser/                       # ブラウザフロントエンド
-│   ├── packages/
-│   │   ├── core/                  # 共通ライブラリ
-│   │   │   ├── crypto/            # WebCrypto + WASM統合
-│   │   │   ├── ao/                # AO通信ライブラリ
-│   │   │   └── types/             # 共通型定義
-│   │   ├── o-browser/             # データ所有者UI
-│   │   └── a-browser/             # アクセス者UI
-│   ├── shared/                    # 共通コンポーネント
-│   └── package.json
-├── contracts/                     # EVM Smart Contracts
-│   ├── src/
-│   │   └── VerifyAccess.sol
-│   └── package.json
 ├── wasm/                          # WebAssembly ビルド成果物
-│   ├── umbral_wasm.js
-│   └── umbral_wasm.wasm
 ├── scripts/                       # ビルド・デプロイスクリプト
-└── docs/
+└── docs/                          # ドキュメント
 ```

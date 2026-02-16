@@ -1,19 +1,19 @@
 ---
-title: "D-TPRES データアクセスパターン分析: KVS vs RDBS 設計決定"
-description: "D-TPRESのデータアクセスパターンの詳細分析による最適なストレージアーキテクチャの評価"
+title: "FORMIX データアクセスパターン分析: KVS vs RDBS 設計決定"
+description: "FORMIXのデータアクセスパターンの詳細分析による最適なストレージアーキテクチャの評価"
 tags: ["technical-decision", "architecture", "data-access", "storage"]
 status: "draft"
 created: "2025-06-19"
-author: "D-TPRES Development Team"
+author: "FORMIX Development Team"
 ---
 
-# D-TPRES データアクセスパターン分析: KVS vs RDBS 設計決定
+# FORMIX データアクセスパターン分析: KVS vs RDBS 設計決定
 
 ## 1. エグゼクティブサマリー
 
 ### 1.1 問題の定義
 
-D-TPRES（Deterministic Threshold Proxy Re-Encryption System）の現在の設計では、各AOプロセスがao-sqliteを使用してローカル状態を管理し、差分ページをArweaveに永続化する**RDBS中心設計**を採用しています。
+FORMIX（Deterministic Threshold Proxy Re-Encryption System）の現在の設計では、各AOプロセスがao-sqliteを使用してローカル状態を管理し、差分ページをArweaveに永続化する**RDBS中心設計**を採用しています。
 
 しかし、以下の技術的課題が明らかになりました：
 
@@ -21,7 +21,7 @@ D-TPRES（Deterministic Threshold Proxy Re-Encryption System）の現在の設�
 - **Arweaveとの本質的なミスマッチ**: SQLiteの関係モデル vs Arweaveの単純KVS
 - **分散特性との不整合**: 各プロセスが独立動作するのに複雑なJOIN処理
 
-本分析では、D-TPRESの**実際のアクセスパターン**を詳細に調査し、**KVS中心設計**への移行の妥当性を評価します。
+本分析では、FORMIXの**実際のアクセスパターン**を詳細に調査し、**KVS中心設計**への移行の妥当性を評価します。
 
 ### 1.2 分析方法論
 
@@ -47,7 +47,7 @@ D-TPRES（Deterministic Threshold Proxy Re-Encryption System）の現在の設�
 
 ---
 
-## 2. D-TPRES アーキテクチャ概要
+## 2. FORMIX アーキテクチャ概要
 
 ### 2.1 現在のシステムアーキテクチャ
 
@@ -809,7 +809,7 @@ class ArweaveKVStoreImpl implements ArweaveKVStore {
     const tx = await this.arweave.createTransaction({ data });
     
     // Add metadata tags
-    tx.addTag('App', 'D-TPRES');
+    tx.addTag('App', 'FORMIX');
     tx.addTag('Type', entity.entity_type);
     tx.addTag('Entity-ID', entity.entity_id);
     tx.addTag('Version', '1.0');
@@ -899,7 +899,7 @@ class ComplexQueryService {
   // Find all key fragments for a specific data
   async find_kfrags_for_data(data_id: DataId): Promise<KeyFragment[]> {
     const tx_ids = await this.graphql.query_by_tags([
-      { name: 'App', values: ['D-TPRES'] },
+      { name: 'App', values: ['FORMIX'] },
       { name: 'Type', values: ['key_fragment'] },
       { name: 'Data-ID', values: [data_id] }
     ]);
@@ -910,7 +910,7 @@ class ComplexQueryService {
   // Find online holders for assignment
   async find_available_holders(min_reputation: number): Promise<ProcessActor[]> {
     const tx_ids = await this.graphql.query_by_tags([
-      { name: 'App', values: ['D-TPRES'] },
+      { name: 'App', values: ['FORMIX'] },
       { name: 'Type', values: ['process_actor'] },
       { name: 'Role', values: ['holder'] },
       { name: 'Status', values: ['online'] }
@@ -1381,7 +1381,7 @@ const riskComparison = {
 
 ### 10.1 戦略的決定: KVSファーストアーキテクチャ
 
-D-TPRESの実際のアクセスパターン、パフォーマンス要件、実装複雑度の包括的分析に基づき、以下の理由で**KVSファーストアーキテクチャの採用を強く推奨**します：
+FORMIXの実際のアクセスパターン、パフォーマンス要件、実装複雑度の包括的分析に基づき、以下の理由で**KVSファーストアーキテクチャの採用を強く推奨**します：
 
 #### 主要な正当化理由
 1. **アクセスパターン整合性**: 操作の90%以上がtx_idベースアクセスに完全にマップする単純な主キールックアップ
@@ -1391,7 +1391,7 @@ D-TPRESの実際のアクセスパターン、パフォーマンス要件、実�
 
 #### 反対論への対応
 - **"複雑なクエリが不可欠"**: 分析により複雑なクエリは主にデバッグ/管理用で、コアワークフローには不要
-- **"RDBSはACID保証を提供"**: D-TPRES暗号化プロトコルがデータベーストランザクションより強力な保証を提供
+- **"RDBSはACID保証を提供"**: FORMIX暗号化プロトコルがデータベーストランザクションより強力な保証を提供
 - **"SQLの方が保守しやすい"**: クエリパターンが非常に単純なため、KVSが実際に保守性を向上
 
 ### 10.2 推奨実装戦略
@@ -1558,9 +1558,9 @@ const validationFramework = {
 
 ### 11.1 分析サマリー
 
-D-TPRESデータアクセスパターンのこの包括的分析は、**KVSファーストアーキテクチャの明確で説得力のあるケース**を明らかにしています：
+FORMIXデータアクセスパターンのこの包括的分析は、**KVSファーストアーキテクチャの明確で説得力のあるケース**を明らかにしています：
 
-1. **アクセスパターン現実**: D-TPRES操作の圧倒的多数（90%以上）がArweaveのtx_idベースアクセスモデルに完全にマップする単純な主キールックアップ
+1. **アクセスパターン現実**: FORMIX操作の圧倒的多数（90%以上）がArweaveのtx_idベースアクセスモデルに完全にマップする単純な主キールックアップ
 
 2. **パフォーマンス優位性**: KVS設計はクリティカルパスパフォーマンスで3-6倍の改善を提供し、ロック競合とスケーリングボトルネックを排除
 
@@ -1578,7 +1578,7 @@ D-TPRESデータアクセスパターンのこの包括的分析は、**KVSフ�
 
 ### 11.3 戦略的含意
 
-KVSファーストアーキテクチャの採用はD-TPRESを以下に位置づけ：
+KVSファーストアーキテクチャの採用はFORMIXを以下に位置づけ：
 
 1. **より迅速な市場投入**: Phase 1の開発時間で3-4倍削減
 2. **より良いスケーラビリティ**: 線形スケーリング特性 vs 二次的RDBSスケーリングコスト
@@ -1596,13 +1596,13 @@ KVSファーストアーキテクチャの採用はD-TPRESを以下に位置づ�
 
 分析はこの推奨事項を強く支持し、実装パスはプロジェクトの進行に伴い決定が最適であることを確保する十分な検証チェックポイントを提供します。
 
-**推奨事項: D-TPRESにKVSファーストアーキテクチャを採用し、即座に実装開始。**
+**推奨事項: FORMIXにKVSファーストアーキテクチャを採用し、即座に実装開始。**
 
 ---
 
 ## 付録A: 詳細クエリパターン分析
 
-[D-TPRESのすべてのクエリパターンの詳細技術分析（頻度測定と最適化戦略付き）]
+[FORMIXのすべてのクエリパターンの詳細技術分析（頻度測定と最適化戦略付き）]
 
 ## 付録B: パフォーマンスベンチマーク方法論
 

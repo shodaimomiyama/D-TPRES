@@ -2,13 +2,13 @@
 
 ## Introduction
 
-D-TPRESクライアントライブラリのActions層は、開発者向けエンドポイント関数（Facadeパターン）を提供する最上位層です。structure.mdに基づき、以下の3つの主要API関数で構成されます：
+FORMIXクライアントライブラリのActions層は、開発者向けエンドポイント関数（Facadeパターン）を提供する最上位層です。structure.mdに基づき、以下の3つの主要API関数で構成されます：
 
 - **`share()`** - Phase 1: 秘密分割と配布
 - **`recover()`** - Phase 3: 秘密復元
 - **`generateKeyPair()`** - PRE鍵ペア生成
 
-Actions層は内部実装の複雑さを隠蔽し、開発者が最小限のパラメータでD-TPRES機能を利用できるようにします。
+Actions層は内部実装の複雑さを隠蔽し、開発者が最小限のパラメータでFORMIX機能を利用できるようにします。
 
 ## Alignment with Product Vision
 

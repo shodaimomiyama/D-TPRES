@@ -1,14 +1,14 @@
 ---
-title: "D-TPRES 普遍的Entity・Repository設計: TERASOLUNA準拠のドメイン層アーキテクチャ"
+title: "FORMIX 普遍的Entity・Repository設計: TERASOLUNA準拠のドメイン層アーキテクチャ"
 description: "各プロセスが持つべき普遍的なEntityクラス、Repository interface、Repository実装の設計概観"
 tags: ["entity-design", "repository-pattern", "terasoluna", "domain-layer", "arweave-persistence"]
 status: "design-review"
 created: "2025-06-23"
-author: "D-TPRES Development Team"
+author: "FORMIX Development Team"
 reference: "https://terasolunaorg.github.io/guideline/current/ja/ImplementationAtEachLayer/DomainLayer.html"
 ---
 
-# D-TPRES 普遍的Entity・Repository設計: TERASOLUNA準拠のドメイン層アーキテクチャ
+# FORMIX 普遍的Entity・Repository設計: TERASOLUNA準拠のドメイン層アーキテクチャ
 
 ## 1. 設計方針
 
@@ -685,7 +685,7 @@ where
     /// ストレージ用タグ作成
     fn create_storage_tags(&self, id: &ID) -> HashMap<String, String> {
         let mut tags = HashMap::new();
-        tags.insert("App-Name".to_string(), "D-TPRES".to_string());
+        tags.insert("App-Name".to_string(), "FORMIX".to_string());
         tags.insert("Entity-Type".to_string(), self.entity_type.to_string());
         tags.insert("Entity-Id".to_string(), id.to_string());
         tags.insert("Timestamp".to_string(), SystemTime::now()
@@ -1266,7 +1266,7 @@ gantt
 
 ---
 
-*本設計は、D-TPRESプロジェクトの普遍的Entity・Repository層の包括的な設計仕様です。TERASOLUNAガイドラインに準拠し、各プロセスの多機能性と Arweave KVSの特性を最大限活用します。*
+*本設計は、FORMIXプロジェクトの普遍的Entity・Repository層の包括的な設計仕様です。TERASOLUNAガイドラインに準拠し、各プロセスの多機能性と Arweave KVSの特性を最大限活用します。*
 
 **Document Status**: Ready for Implementation  
 **Compliance**: TERASOLUNA DDD Guidelines  

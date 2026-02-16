@@ -2,7 +2,7 @@
 
 ## Overview
 
-本設計書は、D-TPRESクライアントライブラリのUseCase層におけるWorkflow Serviceの設計を定義します。SecretSharingWorkflowServiceとSecretRecoveryWorkflowServiceは、既存のCore Services（CryptoService、ArweaveStorageService）をオーケストレーションし、PHASE 1（秘密分割）とPHASE 3（秘密復元）のエンドツーエンドワークフローを実現します。
+本設計書は、FORMIXクライアントライブラリのUseCase層におけるWorkflow Serviceの設計を定義します。SecretSharingWorkflowServiceとSecretRecoveryWorkflowServiceは、既存のCore Services（CryptoService、ArweaveStorageService）をオーケストレーションし、PHASE 1（秘密分割）とPHASE 3（秘密復元）のエンドツーエンドワークフローを実現します。
 
 **SDKエンドポイント対応:**
 ```

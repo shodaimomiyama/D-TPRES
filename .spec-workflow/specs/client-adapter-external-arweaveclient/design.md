@@ -2,7 +2,7 @@
 
 ## 概要
 
-本設計書は、D-TPRESクライアントライブラリにおける本番用 `ArweaveClientImpl` の技術設計を定義します。`ArweaveClientImpl` は、既存の `ArweaveClient` トレイト（`client/src/adapter/repository_impl/mod.rs` で定義）を実装し、Arweaveネットワークとの実際の通信を担当します。
+本設計書は、FORMIXクライアントライブラリにおける本番用 `ArweaveClientImpl` の技術設計を定義します。`ArweaveClientImpl` は、既存の `ArweaveClient` トレイト（`client/src/adapter/repository_impl/mod.rs` で定義）を実装し、Arweaveネットワークとの実際の通信を担当します。
 
 本コンポーネントは Adapter 層の `external/` サブディレクトリに配置され、Repository 実装がArweaveへのデータ永続化・取得を行うための基盤インフラを提供します。
 
@@ -51,13 +51,13 @@
 - **arweave-rs**: 24-41MB、約667K行のコード
 - **reqwest直接使用**: 必要最小限の依存関係のみ
 
-D-TPRESの目標「WASMバイナリサイズ2MB未満」への影響を最小化。
+FORMIXの目標「WASMバイナリサイズ2MB未満」への影響を最小化。
 
 #### 3. メンテナンス独立性
 
 - `arweave-rs` は2023年9月以降更新なし
 - 外部ライブラリの更新停止リスクを回避
-- D-TPRES固有の要件に柔軟に対応可能
+- FORMIX固有の要件に柔軟に対応可能
 
 #### 4. 既存トレイトとの整合性
 

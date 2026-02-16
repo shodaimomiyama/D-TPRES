@@ -1,4 +1,4 @@
-//! Domain layer for D-TPRES
+//! Domain layer for FORMIX
 //!
 //! Contains entities, repository interfaces, value objects, and domain errors.
 //! This layer implements pure business logic without any dependencies on

@@ -2,13 +2,13 @@
 
 ## Introduction
 
-本機能は、`SecretSharingWorkflowService` のプレースホルダ実装を `ArweaveStorageService` 統合により完成させます。Issue [#47](https://github.com/shodaimomiyama/D-TPRES/issues/47) で実装されるAO Network通信基盤を前提に、PHASE 1ワークフローの以下の未実装箇所を解決します。
+本機能は、`SecretSharingWorkflowService` のプレースホルダ実装を `ArweaveStorageService` 統合により完成させます。Issue [#47](https://github.com/shodaimomiyama/FORMIX/issues/47) で実装されるAO Network通信基盤を前提に、PHASE 1ワークフローの以下の未実装箇所を解決します。
 
 **対象ファイル:** `client/src/usecase/workflow/secret_sharing_service.rs`
 
 **関連Issue:**
-- **依存先**: [#47](https://github.com/shodaimomiyama/D-TPRES/issues/47) (AO Network通信基盤)
-- **関連**: [#51](https://github.com/shodaimomiyama/D-TPRES/issues/51) (SecretRecoveryWorkflowService - StorageService統合)
+- **依存先**: [#47](https://github.com/shodaimomiyama/FORMIX/issues/47) (AO Network通信基盤)
+- **関連**: [#51](https://github.com/shodaimomiyama/FORMIX/issues/51) (SecretRecoveryWorkflowService - StorageService統合)
 
 **現在のプレースホルダ箇所:**
 

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-D-TPRESクライアントライブラリのController層は、Actions層からの入力を受け取り、UseCase層（Workflow Services）に処理を委譲するための中間層です。structure.mdに基づき、以下の2つのコンポーネントで構成されます：
+FORMIXクライアントライブラリのController層は、Actions層からの入力を受け取り、UseCase層（Workflow Services）に処理を委譲するための中間層です。structure.mdに基づき、以下の2つのコンポーネントで構成されます：
 
 - **Validator** (`validator.rs`): 入力の妥当性検証
 - **Extractor** (`extractor.rs`): UseCase層向けDTO変換

@@ -2,7 +2,7 @@
 
 ## Overview
 
-D-TPRESクライアントライブラリのActions層の実装タスク。開発者向けFacadeとして、内部の複雑さを隠蔽し、`share()`、`recover()`、`generateKeyPair()` の3つのシンプルなAPIを提供する。
+FORMIXクライアントライブラリのActions層の実装タスク。開発者向けFacadeとして、内部の複雑さを隠蔽し、`share()`、`recover()`、`generateKeyPair()` の3つのシンプルなAPIを提供する。
 
 ## Implementation Order
 

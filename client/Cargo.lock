@@ -444,36 +444,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "d-tpres"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "async-trait",
- "base64 0.22.1",
- "bincode",
- "cosmwasm-std",
- "cw-multi-test",
- "cw-storage-plus",
- "dotenvy",
- "generic-array",
- "getrandom 0.2.17",
- "rand 0.8.5",
- "reqwest",
- "rsa",
- "secrecy",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "shamirsecretsharing",
- "subtle",
- "thiserror 1.0.69",
- "tokio",
- "umbral-pre",
- "wiremock",
- "zeroize",
-]
-
-[[package]]
 name = "deadpool"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -662,6 +632,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
+]
+
+[[package]]
+name = "formix"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "async-trait",
+ "base64 0.22.1",
+ "bincode",
+ "cosmwasm-std",
+ "cw-multi-test",
+ "cw-storage-plus",
+ "dotenvy",
+ "generic-array",
+ "getrandom 0.2.17",
+ "rand 0.8.5",
+ "reqwest",
+ "rsa",
+ "secrecy",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "shamirsecretsharing",
+ "subtle",
+ "thiserror 1.0.69",
+ "tokio",
+ "umbral-pre",
+ "wiremock",
+ "zeroize",
 ]
 
 [[package]]

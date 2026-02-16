@@ -60,7 +60,7 @@ GitHub MCP を使用してIssueの内容を取得します：
 ```bash
 # gh issue viewにて検索
 owner: shodaimomiyama
-repo: D-TPRES
+repo: FORMIX
 issue_number: {issue番号}
 ```
 

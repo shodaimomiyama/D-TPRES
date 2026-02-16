@@ -1,6 +1,6 @@
-//! Domain entities for D-TPRES
+//! Domain entities for FORMIX
 //!
-//! Pure data structures representing business concepts in the D-TPRES system.
+//! Pure data structures representing business concepts in the FORMIX system.
 //! All entities follow these principles:
 //! - Private fields with constructor validation (DDD)
 //! - Getter methods for field access

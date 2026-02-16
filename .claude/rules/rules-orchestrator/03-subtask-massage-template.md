@@ -1,6 +1,6 @@
 # サブタスクメッセージテンプレート
 
-このテンプレートは、オーケストレータがD-TPRES暗号システムのサブタスクを作成する際に使用するメッセージの構造を定義します。
+このテンプレートは、オーケストレータがFORMIX暗号システムのサブタスクを作成する際に使用するメッセージの構造を定義します。
 
 ## 基本構造
 
@@ -65,7 +65,7 @@
 # Umbral鍵生成とkFrag生成機能を実装する
 
 ## 親タスクの概要
-D-TPRESシステムのプロキシ再暗号化機能を実装するため、Umbral暗号ライブラリを使用した基本操作を構築します。
+FORMIXシステムのプロキシ再暗号化機能を実装するため、Umbral暗号ライブラリを使用した基本操作を構築します。
 
 ## 関連するライフサイクル
 Secret Lifecycle (作成 → 分割 → 配布)、Process Lifecycle (アクティブ段階)
@@ -125,7 +125,7 @@ Umbral暗号ライブラリを使用して、鍵ペアの生成、kFrag（鍵フ
 # Owner-ProcessのUseCase Handlerを実装する
 
 ## 親タスクの概要
-D-TPRESシステムのOwner-Process (P^O)がAOネットワーク上でメッセージを受信し、Controller Components経由でWorkflow Servicesとの統合を実現するハンドラーを実装します。
+FORMIXシステムのOwner-Process (P^O)がAOネットワーク上でメッセージを受信し、Controller Components経由でWorkflow Servicesとの統合を実現するハンドラーを実装します。
 
 ## 関連するライフサイクル
 Process Lifecycle (初期化 → ロール設定 → アクティブ)、Secret Lifecycle (作成 → 分割 → 配布)

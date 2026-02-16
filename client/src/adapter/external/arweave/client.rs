@@ -431,7 +431,7 @@ impl ArweaveClient for ArweaveClientImpl {
             ));
         }
 
-        // Auto-inject D-TPRES application tag if not already present
+        // Auto-inject FORMIX application tag if not already present
         let mut all_tags = tags;
         let has_app_tag = all_tags
             .iter()
