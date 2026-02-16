@@ -292,12 +292,14 @@ async fn test_actions_share_unique_secret_ids() {
 // recover() Integration Tests (Requirement 2)
 // ============================================================================
 
-#[test]
-fn test_actions_recover_empty_secret_id_fails() {
+#[tokio::test]
+async fn test_actions_recover_empty_secret_id_fails() {
     let container = DefaultActionsContainer::new();
     let (requester_sk, _) = container.generate_keypair().unwrap();
 
-    let result = container.recover("", requester_sk, "requester_process".to_string(), None);
+    let result = container
+        .recover("", requester_sk, "requester_process".to_string(), None)
+        .await;
 
     assert!(result.is_err());
     match result.unwrap_err() {
@@ -308,12 +310,14 @@ fn test_actions_recover_empty_secret_id_fails() {
     }
 }
 
-#[test]
-fn test_actions_recover_empty_process_id_fails() {
+#[tokio::test]
+async fn test_actions_recover_empty_process_id_fails() {
     let container = DefaultActionsContainer::new();
     let (requester_sk, _) = container.generate_keypair().unwrap();
 
-    let result = container.recover("test_secret_id", requester_sk, String::new(), None);
+    let result = container
+        .recover("test_secret_id", requester_sk, String::new(), None)
+        .await;
 
     assert!(result.is_err());
     match result.unwrap_err() {
@@ -324,17 +328,19 @@ fn test_actions_recover_empty_process_id_fails() {
     }
 }
 
-#[test]
-fn test_actions_recover_nonexistent_secret_fails() {
+#[tokio::test]
+async fn test_actions_recover_nonexistent_secret_fails() {
     let container = DefaultActionsContainer::new();
     let (requester_sk, _) = container.generate_keypair().unwrap();
 
-    let result = container.recover(
-        "nonexistent_secret_id_12345",
-        requester_sk,
-        "requester_process".to_string(),
-        None,
-    );
+    let result = container
+        .recover(
+            "nonexistent_secret_id_12345",
+            requester_sk,
+            "requester_process".to_string(),
+            None,
+        )
+        .await;
 
     assert!(result.is_err());
     match result.unwrap_err() {
@@ -346,18 +352,20 @@ fn test_actions_recover_nonexistent_secret_fails() {
     }
 }
 
-#[test]
-fn test_actions_recover_with_options() {
+#[tokio::test]
+async fn test_actions_recover_with_options() {
     let container = DefaultActionsContainer::new();
     let (requester_sk, _) = container.generate_keypair().unwrap();
 
     let options = RecoverOptions::new();
-    let result = container.recover(
-        "test_secret_id",
-        requester_sk,
-        "requester_process".to_string(),
-        Some(options),
-    );
+    let result = container
+        .recover(
+            "test_secret_id",
+            requester_sk,
+            "requester_process".to_string(),
+            Some(options),
+        )
+        .await;
 
     assert!(result.is_err());
 }
@@ -477,12 +485,14 @@ async fn test_actions_share_produces_valid_result_for_recovery() {
 
     assert!(!share_result.secret_id.as_str().is_empty());
 
-    let recover_result = container.recover(
-        share_result.secret_id.as_str(),
-        requester_sk,
-        "requester_process".to_string(),
-        None,
-    );
+    let recover_result = container
+        .recover(
+            share_result.secret_id.as_str(),
+            requester_sk,
+            "requester_process".to_string(),
+            None,
+        )
+        .await;
 
     match recover_result {
         Ok(result) => {

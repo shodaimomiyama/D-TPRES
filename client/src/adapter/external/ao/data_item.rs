@@ -126,6 +126,7 @@ impl DataItemBuilder {
         match msg {
             QueryMsg::GetCFrag { .. } => "GetCFrag".to_string(),
             QueryMsg::ListCapsulesByKFrag { .. } => "ListCapsulesByKFrag".to_string(),
+            QueryMsg::GetCFragsBySecret { .. } => "GetCFragsBySecret".to_string(),
         }
     }
 

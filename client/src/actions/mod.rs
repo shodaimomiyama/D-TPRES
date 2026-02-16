@@ -196,7 +196,7 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
     /// // Memory is cleared when result goes out of scope
     /// ```
     #[deprecated(since = "0.2.0", note = "use DTpresClient::recover() builder instead")]
-    pub fn recover(
+    pub async fn recover(
         &self,
         secret_id: &str,
         requester_secret_key: SecretKey,
@@ -222,7 +222,8 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
         let result = self
             .workflow_services()
             .secret_recovery_service()
-            .execute_secret_recovery(request)?;
+            .execute_secret_recovery(request)
+            .await?;
 
         Ok(result)
     }
@@ -493,12 +494,14 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_recover_empty_secret_id() {
+    #[tokio::test]
+    async fn test_recover_empty_secret_id() {
         let container = DefaultActionsContainer::new();
         let (requester_sk, _) = container.generate_keypair().unwrap();
 
-        let result = container.recover("", requester_sk, "requester_process".to_string(), None);
+        let result = container
+            .recover("", requester_sk, "requester_process".to_string(), None)
+            .await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -509,12 +512,14 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_recover_empty_process_id() {
+    #[tokio::test]
+    async fn test_recover_empty_process_id() {
         let container = DefaultActionsContainer::new();
         let (requester_sk, _) = container.generate_keypair().unwrap();
 
-        let result = container.recover("test_secret_id", requester_sk, String::new(), None);
+        let result = container
+            .recover("test_secret_id", requester_sk, String::new(), None)
+            .await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -525,19 +530,20 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_recover_nonexistent_secret() {
+    #[tokio::test]
+    async fn test_recover_nonexistent_secret() {
         let container = DefaultActionsContainer::new();
         let (requester_sk, _) = container.generate_keypair().unwrap();
 
-        let result = container.recover(
-            "nonexistent_secret_id",
-            requester_sk,
-            "requester_process".to_string(),
-            None,
-        );
+        let result = container
+            .recover(
+                "nonexistent_secret_id",
+                requester_sk,
+                "requester_process".to_string(),
+                None,
+            )
+            .await;
 
-        // Should fail with ResourceNotFound since storage is not implemented
         assert!(result.is_err());
         match result.unwrap_err() {
             ActionError::ResourceNotFound { .. } | ActionError::WorkflowFailed { .. } => {
