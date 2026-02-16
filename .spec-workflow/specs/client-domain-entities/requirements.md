@@ -2,7 +2,7 @@
 
 ## Introduction
 
-D-TPRESクライアントライブラリのDomain層におけるエンティティ群とValue Objectsを実装する。これらは、閾値プロキシ再暗号化（Umbral）とシャミア秘密分散を組み合わせた分散型鍵管理システムのコアドメインモデルを形成する。
+FORMIXクライアントライブラリのDomain層におけるエンティティ群とValue Objectsを実装する。これらは、閾値プロキシ再暗号化（Umbral）とシャミア秘密分散を組み合わせた分散型鍵管理システムのコアドメインモデルを形成する。
 
 DDDの原則に従い：
 - **Entity**: 一意のIDを持ち、ライフサイクルを通じて同一性を維持。永続化対象。
@@ -244,7 +244,7 @@ PRD Phase 1-1の `f(0)=secret` に対応。SDK利用者から受け取り、シ�
 
 #### Design Note
 
-PRD Phase 1-1の `skₒ(PRE)`, `pkₒ(PRE)` に対応。SDK利用者が管理し、D-TPRESは生成・使用のみ。
+PRD Phase 1-1の `skₒ(PRE)`, `pkₒ(PRE)` に対応。SDK利用者が管理し、FORMIXは生成・使用のみ。
 
 #### Acceptance Criteria
 

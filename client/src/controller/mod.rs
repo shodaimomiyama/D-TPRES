@@ -1,4 +1,4 @@
-//! Controller layer for D-TPRES client library
+//! Controller layer for FORMIX client library
 //!
 //! Provides input validation and DTO extraction for Actions layer.
 //! The Controller layer sits between Actions and UseCase layers.

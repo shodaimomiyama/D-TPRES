@@ -4,11 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-D-TPRES (Deterministic Threshold Proxy Re-Encryption System) is a decentralized key management layer that implements threshold proxy re-encryption for Arweave storage. The system combines:
+FORMIX (Deterministic Threshold Proxy Re-Encryption System) is a decentralized key management layer that implements threshold proxy re-encryption for Arweave storage. The system combines:
 
 - **Arweave**: Immutable storage for encrypted data and capsules
 - **AO Network**: WebAssembly-based distributed execution environment
-- **EVM Smart Contracts**: Deterministic access control verification
 - **Threshold Proxy Re-Encryption (TPRE)**: k-of-n distributed key management using Umbral
 
 ## Development Commands
@@ -81,26 +80,38 @@ cargo test
 The codebase follows a clean layered architecture with clear separation of concerns:
 
 ```
-src/
-├── usecase/         # UseCase Layer - AO message handlers by role
-│   └── handlers/    # Owner, Holder, Requester, Common handlers
-├── controller/      # Controller Layer - Message processing & routing
-├── service/         # Service Layer - Business logic (Workflow + Core services)
-│   ├── workflow/    # Phase orchestration services
-│   └── core/        # Basic operation services
-├── domain/          # Domain Layer - Entities & repository interfaces
-│   ├── entities/    # Pure data structures
-│   ├── repositories/ # Repository interfaces (DIP)
-│   └── value_objects/ # Domain value objects
-├── infrastructure/ # Infrastructure Layer - Technical implementations
-│   ├── repositories/ # Repository implementations
-│   └── external/    # External system adapters
-├── crypto/         # Cryptographic utilities
-└── utils/          # Shared utilities
+client/src/
+├── actions/            # Actions Layer - Client API entry points
+│   ├── client.rs       # share, recover, generateKeyPair actions
+│   ├── builder.rs      # ActionsBuilder for DI setup
+│   ├── di.rs           # Type aliases and DI container
+│   └── options.rs      # Action options/parameters
+├── controller/         # Controller Layer - Validation & DTO extraction
+│   ├── validator.rs    # ShareValidator, RecoverValidator
+│   └── extractor.rs    # ShareExtractor, RecoverExtractor
+├── usecase/            # UseCase Layer - Business logic
+│   ├── core/           # Core services (basic operations)
+│   │   ├── crypto.rs   # CoreCryptoService (TPRE, Shamir)
+│   │   ├── storage.rs  # ArweaveStorageService
+│   │   └── contract_storage.rs  # ContractStorage (AO state)
+│   ├── service/        # Service layer (wrapping core)
+│   │   ├── crypto_service.rs    # ServiceCryptoService
+│   │   └── storage_service.rs   # ServiceStorageService
+│   └── workflow/       # Workflow services (phase orchestration)
+│       ├── secret_sharing_service.rs   # Phase 1: split & distribute
+│       └── secret_recovery_service.rs  # Phase 3: recover
+├── domain/             # Domain Layer - Entities & repository interfaces
+│   ├── entities/       # Secret, Capsule, KFrag, CFrag, ShareCollection
+│   └── value_objects/  # IDs, KeyPair, SecretData, SymmetricKey
+├── repositories/       # Repository interfaces (DIP)
+├── adapter/            # Infrastructure Layer
+│   ├── repository_impl/  # Arweave-backed repository implementations
+│   └── external/         # ArweaveClient, AOClient, MockAOClient
+└── lib.rs              # Library exports
 ```
 
 ### Multi-Role Wasm Design
-The core architecture implements a single Rust codebase (`dtpres_core`) that compiles to WebAssembly and runs on AO with different roles:
+The core architecture implements a single Rust codebase (`formix`) that compiles to WebAssembly and runs on AO with different roles:
 
 - **Owner-Process (Pᴼ)**: Manages secret key shares and re-encryption key generation
 - **Holder-Process (Hⱼ)**: Stores key fragments (kFrag) and performs re-encryption
@@ -111,16 +122,21 @@ All processes use the same Wasm binary deployed to Arweave, with role differenti
 ### Key Components
 - **Threshold Proxy Re-Encryption**: Using `umbral-pre` library for cryptographic operations
 - **Secret Sharing**: Shamir's Secret Sharing for k-of-n threshold schemes
-- **EVM Bridge**: `elciao` integration for Ethereum event verification
 - **Browser Integration**: WebCrypto API for client-side encryption/decryption
 
 ### Cryptographic Flow
-1. **Phase 0**: Process spawning and key preparation
-2. **Phase 1**: Secret splitting and public storage on Arweave
-3. **Phase 2**: Access request and EVM verification via smart contracts
-4. **Phase 3**: Re-encryption key fragmentation and holder assignment
-5. **Phase 4**: k-of-n proxy re-encryption by holders
-6. **Phase 5**: Client decryption and secret reconstruction
+1. **Phase 1**: Secret splitting and initial distribution (client-side)
+   - 1.1: Shamir secret sharing (k-of-n)
+   - 1.2: Umbral capsule creation and kFrag generation
+   - 1.3: Encrypted data storage on Arweave
+2. **Phase 2**: Key fragment distributed management (AO Network)
+   - 2.1: Owner-Process selects Holders and distributes kFrags
+   - 2.2: Holder-Process stores kFrags and performs re-encryption
+   - 2.3: cFrag generation and storage
+3. **Phase 3**: Secret recovery (client-side)
+   - 3.1: Requester-Process collects cFrags
+   - 3.2: Capsule decryption and fragment combination
+   - 3.3: Shamir interpolation for secret recovery
 
 ## Rust Configuration
 
@@ -131,7 +147,7 @@ All processes use the same Wasm binary deployed to Arweave, with role differenti
 
 ## AO Stateless Execution Constraints
 
-**Critical for D-TPRES**: The AO Network executes processes statelessly with specific constraints:
+**Critical for FORMIX**: The AO Network executes processes statelessly with specific constraints:
 
 1. **Memory Non-Persistence Between Messages**
    - Each message execution starts with clean memory
@@ -171,7 +187,7 @@ pub fn handle_message(msg: AOMessage, repo: &dyn Repository) -> Result<Response>
 
 ## Directory-Specific Async Policy
 
-D-TPRES has two Rust codebases with different async constraints:
+FORMIX has two Rust codebases with different async constraints:
 
 | Directory | async/await | tokio | Reason |
 |-----------|------------|-------|--------|
@@ -213,16 +229,16 @@ The "AO Stateless Execution Constraints" above apply exclusively to this directo
 - **Toolchain**: Rust 1.86.0 with edition 2024 configuration
 
 ### Implementation Phase
-The codebase is in **early development phase** with:
-- Placeholder implementations in main.rs and di.rs
-- Empty domain/, service/, and usecase/ directories ready for implementation
-- Extensive documentation in docs/ directory covering all architectural aspects
-- MCP server infrastructure for development tooling
+The codebase is in **active development phase** with:
+- Domain layer complete: entities (Secret, Capsule, KFrag, CFrag, ShareCollection), value objects, repository interfaces
+- Service layer implemented: CryptoService (Umbral + Shamir), StorageService (Arweave + AO Contract), Workflow services
+- Application layer: Actions (share, recover, generateKeyPair), Controller (validators, extractors)
+- Infrastructure: ArweaveClient, AOClient (Production + Mock), repository implementations
+- 60 tests passing (unit + integration)
 
 ### Development Targets
 - **Primary**: WebAssembly compilation for AO Network deployment
 - **Secondary**: Browser integration via WebCrypto API and WASM bindings
-- **Future**: Smart contract integration via elciao bridge
 
 ## Claude Rules and Modes
 
@@ -249,12 +265,17 @@ The project has specific security restrictions in `.claude/settings.json`:
 
 ## Documentation
 
-Extensive project documentation is available in the `docs/` directory:
+Project documentation is available in the `docs/` directory:
 - `docs/PRD.md` - Product Requirements Document with system specifications
-- `docs/development/architecture/` - System architecture and design philosophy
-- `docs/development/domain/` - Domain entities and repository designs
-- `docs/development/service/` - Service layer specifications
-- `docs/development/usecase/` - UseCase handlers for each role
-- `docs/development/lifecycle/` - Process and access lifecycles
-- `docs/features/` - Feature specifications for each component
-- `docs/development/codes/rust.md` - Detailed Rust coding rules and conventions
+- `docs/status.md` - Current implementation status
+- `docs/architecture/` - System architecture and design philosophy
+- `docs/operations/` - Testing and workflow documentation
+- `docs/client/` - クライアントライブラリのレイヤー別リファレンス
+  - `domain.md` - エンティティ、値オブジェクト、エラー型
+  - `repositories.md` - リポジトリインターフェース（DIP）
+  - `usecase.md` - Core / Service / Workflow サービス
+  - `controller.md` - バリデーター、エクストラクター
+  - `actions.md` - ActionsContainer、ビルダー、DTpresClient
+  - `adapter.md` - Arweaveリポジトリ、AOクライアント、外部連携
+- `docs/contracts/` - AOスマートコントラクトリファレンス
+  - `contracts_overview.md` - メッセージ、状態、ハンドラー、再暗号化フロー

@@ -1,6 +1,6 @@
-# D-TPRES アーキテクチャ・実装配置戦略（議論用）
+# FORMIX アーキテクチャ・実装配置戦略（議論用）
 
-> **目的**: D-TPRESシステム全体の設計アーキテクチャとブラウザ側実装の最適な配置戦略について議論・決定するための文書
+> **目的**: FORMIXシステム全体の設計アーキテクチャとブラウザ側実装の最適な配置戦略について議論・決定するための文書
 
 ---
 
@@ -161,7 +161,7 @@ sequenceDiagram
 
 #### 構成案
 ```
-D-TPRES/
+FORMIX/
 ├── src/              # 既存: AO WebAssembly (Rust)
 ├── browser/          # 新規: ブラウザフロントエンド
 │   ├── packages/
@@ -191,18 +191,18 @@ D-TPRES/
 
 #### 構成案
 ```
-D-TPRES/                    # AO WebAssembly
+FORMIX/                    # AO WebAssembly
 ├── src/
 └── docs/
 
-D-TPRES-browser/           # ブラウザフロントエンド
+FORMIX-browser/           # ブラウザフロントエンド
 ├── packages/
 │   ├── core/
 │   ├── o-browser/
 │   └── a-browser/
 └── docs/
 
-D-TPRES-contracts/         # EVM Smart Contracts
+FORMIX-contracts/         # EVM Smart Contracts
 ├── contracts/
 └── docs/
 ```

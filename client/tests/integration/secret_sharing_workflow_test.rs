@@ -6,23 +6,34 @@
 
 use std::sync::Arc;
 
-use d_tpres::adapter::external::mock_ao::MockAOClient;
-use d_tpres::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
-use d_tpres::usecase::core::storage::ArweaveStorageServiceImpl;
-use d_tpres::usecase::workflow::{SecretSharingWorkflowService, SecretSharingWorkflowServiceImpl};
-use d_tpres::usecase::{SecretSharingRequest, WorkflowError};
+use formix::adapter::external::mock_ao::MockAOClient;
+use formix::usecase::core::contract_storage::ContractStorageImpl;
+use formix::usecase::core::crypto::{CryptoService, CryptoServiceImpl as CoreCryptoServiceImpl};
+use formix::usecase::core::storage::ArweaveStorageServiceImpl;
+use formix::usecase::service::{
+    CryptoServiceImpl as ServiceCryptoServiceImpl, StorageServiceImpl as ServiceStorageServiceImpl,
+};
+use formix::usecase::workflow::{SecretSharingWorkflowService, SecretSharingWorkflowServiceImpl};
+use formix::usecase::{SecretSharingRequest, WorkflowError};
+
+type TestCryptoService = ServiceCryptoServiceImpl<CoreCryptoServiceImpl>;
+type TestStorageService =
+    ServiceStorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<MockAOClient>>;
 
 /// Helper to create test service with real CryptoService
 fn create_integration_service()
--> SecretSharingWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
-    let crypto = Arc::new(CryptoServiceImpl::new());
+-> SecretSharingWorkflowServiceImpl<TestCryptoService, TestStorageService> {
+    let core_crypto = Arc::new(CoreCryptoServiceImpl::new());
+    let crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
     let mock_ao = Arc::new(MockAOClient::new());
-    let storage = Arc::new(ArweaveStorageServiceImpl::default().with_ao_client(mock_ao));
+    let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
     SecretSharingWorkflowServiceImpl::new(crypto, storage)
 }
 
 /// Helper to create a valid test request
-fn create_valid_request(crypto: &CryptoServiceImpl) -> SecretSharingRequest {
+fn create_valid_request(crypto: &CoreCryptoServiceImpl) -> SecretSharingRequest {
     let (owner_sk, owner_pk) = crypto.generate_keypair().unwrap();
     let (_requester_sk, requester_pk) = crypto.generate_keypair().unwrap();
 
@@ -49,7 +60,7 @@ async fn test_phase1_integration_complete_flow() {
     println!("========================================");
 
     let service = create_integration_service();
-    let crypto = CryptoServiceImpl::new();
+    let crypto = CoreCryptoServiceImpl::new();
     let original_secret = b"This is a highly confidential secret message for integration testing!";
 
     // Limit to 63 bytes (Shamir DATA_SIZE - 1)
@@ -126,9 +137,14 @@ fn test_phase1_integration_crypto_operations_valid() {
     println!("PHASE 1 Integration Test: Crypto Validity");
     println!("========================================");
 
-    let crypto = Arc::new(CryptoServiceImpl::new());
-    let storage = Arc::new(ArweaveStorageServiceImpl::default());
-    let _service = SecretSharingWorkflowServiceImpl::new(crypto.clone(), storage);
+    let core_crypto = Arc::new(CoreCryptoServiceImpl::new());
+    let crypto = Arc::clone(&core_crypto);
+    let service_crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
+    let mock_ao = Arc::new(MockAOClient::new());
+    let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
+    let _service = SecretSharingWorkflowServiceImpl::new(service_crypto, storage);
 
     println!("\n[Step 1] Testing symmetric key generation");
     let key1 = crypto.generate_symmetric_key().unwrap();
@@ -206,7 +222,7 @@ async fn test_phase1_integration_various_threshold_combinations() {
     println!("========================================");
 
     let service = create_integration_service();
-    let crypto = CryptoServiceImpl::new();
+    let crypto = CoreCryptoServiceImpl::new();
 
     let test_cases = [
         (2, 2, "minimum k=n"),
@@ -260,7 +276,7 @@ async fn test_phase1_integration_secret_size_limits() {
     println!("========================================");
 
     let service = create_integration_service();
-    let crypto = CryptoServiceImpl::new();
+    let crypto = CoreCryptoServiceImpl::new();
 
     let test_sizes = [
         (1, "minimum 1 byte"),
@@ -298,7 +314,7 @@ async fn test_phase1_integration_unique_outputs() {
     println!("========================================");
 
     let service = create_integration_service();
-    let crypto = CryptoServiceImpl::new();
+    let crypto = CoreCryptoServiceImpl::new();
 
     println!("\n[Step 1] Executing workflow multiple times");
     let mut secret_ids = Vec::new();
@@ -346,7 +362,7 @@ async fn test_phase1_integration_validation_errors() {
     println!("========================================");
 
     let service = create_integration_service();
-    let crypto = CryptoServiceImpl::new();
+    let crypto = CoreCryptoServiceImpl::new();
 
     println!("\n[Test 1] Empty secret");
     let mut request = create_valid_request(&crypto);

@@ -3,7 +3,7 @@
 # その場合は名称を読み替えてご利用ください。
 
 [core]
-project_name = "D-TPRES"
+project_name = "FORMIX"
 working_dir = "."
 language = "ja"
 approval_mode = "on-request"     # 破壊的操作は常に確認

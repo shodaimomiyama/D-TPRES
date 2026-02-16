@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-**AO Network通信基盤**: Issue [#47](https://github.com/shodaimomiyama/D-TPRES/issues/47) で実装
+**AO Network通信基盤**: Issue [#47](https://github.com/shodaimomiyama/FORMIX/issues/47) で実装
 - AOClient (adapter/external)
 - `send_kfrag_to_owner_process()` の実体実装
 
@@ -162,4 +162,4 @@
 | 5 | 13-14 | ビルド検証 |
 
 **Total Tasks:** 14
-**Prerequisites:** Issue [#47](https://github.com/shodaimomiyama/D-TPRES/issues/47) (AO Network通信基盤) - プレースホルダ実装で先行可能
+**Prerequisites:** Issue [#47](https://github.com/shodaimomiyama/FORMIX/issues/47) (AO Network通信基盤) - プレースホルダ実装で先行可能

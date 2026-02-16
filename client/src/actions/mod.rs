@@ -1,6 +1,6 @@
 //! Actions Layer - Developer-facing API endpoints (Facade Pattern)
 //!
-//! Provides simple functions for D-TPRES operations:
+//! Provides simple functions for FORMIX operations:
 //! - `share()` - Phase 1: Secret splitting and distribution
 //! - `recover()` - Phase 3: Secret recovery
 //! - `generate_keypair()` - PRE key pair generation
@@ -23,7 +23,7 @@
 //!
 //! # Example
 //! ```rust,ignore
-//! use dtpres_client::actions::{DefaultActionsContainer, ShareOptions};
+//! use formix::actions::{DefaultActionsContainer, ShareOptions};
 //!
 //! let container = DefaultActionsContainer::new();
 //!
@@ -67,13 +67,13 @@ pub use options::{RecoverOptions, ShareOptions};
 use zeroize::Zeroizing;
 
 use crate::domain::value_objects::SecretId;
-use crate::usecase::core::crypto::{CryptoService, PublicKey, SecretKey};
-use crate::usecase::core::storage::ArweaveStorageService;
+use crate::usecase::core::crypto::{CryptoService as CoreCryptoService, PublicKey, SecretKey};
 use crate::usecase::dto::{SecretRecoveryResult, SecretSharingResult};
+use crate::usecase::service::StorageService;
 use crate::usecase::workflow::secret_recovery_service::SecretRecoveryWorkflowService;
 use crate::usecase::workflow::secret_sharing_service::SecretSharingWorkflowService;
 
-impl<C: CryptoService, S: ArweaveStorageService> ActionsContainer<C, S> {
+impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
     /// Share a secret by splitting and distributing it
     ///
     /// This is the main Phase 1 API endpoint that:
@@ -264,11 +264,13 @@ mod tests {
         use std::sync::Arc;
 
         use crate::adapter::external::mock_ao::MockAOClient;
+        use crate::usecase::core::contract_storage::ContractStorageImpl;
         use crate::usecase::core::storage::ArweaveStorageServiceImpl;
 
         let mock_ao = Arc::new(MockAOClient::new());
-        let storage = Arc::new(ArweaveStorageServiceImpl::default().with_ao_client(mock_ao));
-        DefaultActionsContainer::with_storage(storage)
+        let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+        let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+        DefaultActionsContainer::with_storage(arweave, contract)
     }
 
     #[tokio::test]

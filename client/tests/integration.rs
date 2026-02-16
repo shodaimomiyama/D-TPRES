@@ -1,4 +1,4 @@
-//! Integration Tests for D-TPRES WorkflowServices
+//! Integration Tests for FORMIX WorkflowServices
 //!
 //! This module contains integration tests that verify the complete workflow
 //! from PHASE 1 (Secret Sharing) to PHASE 3 (Secret Recovery).

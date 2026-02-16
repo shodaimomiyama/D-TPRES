@@ -5,6 +5,7 @@
 pub mod core;
 pub mod dto;
 pub mod error;
+pub mod service;
 pub mod workflow;
 pub use dto::{
     SecretMetadata, SecretRecoveryRequest, SecretRecoveryResult, SecretSharingRequest,

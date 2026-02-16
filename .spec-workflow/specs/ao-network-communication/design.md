@@ -2,7 +2,7 @@
 
 ## Overview
 
-本設計はD-TPRESクライアントライブラリにAO Network通信基盤を追加する。Issue #47のスコープとして、AOClient trait（インターフェース）とMockAOClient実装（テスト・開発用）を提供し、将来のProductionAOClient実装（別Issue）に備えた拡張性の高い設計を実現する。
+本設計はFORMIXクライアントライブラリにAO Network通信基盤を追加する。Issue #47のスコープとして、AOClient trait（インターフェース）とMockAOClient実装（テスト・開発用）を提供し、将来のProductionAOClient実装（別Issue）に備えた拡張性の高い設計を実現する。
 
 **設計目標:**
 - Clean Architecture（6層）に準拠したインターフェース設計

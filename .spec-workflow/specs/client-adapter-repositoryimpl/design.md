@@ -2,7 +2,7 @@
 
 ## Overview
 
-本ドキュメントは、D-TPRESクライアントライブラリのAdapter層におけるRepository実装の技術設計を定義します。Repository層で定義された5つのRepository Interface（SecretRepository, ShareCollectionRepository, CapsuleRepository, KFragRepository, CFragRepository）を、ArweaveClientトレイトに依存する形で実装します。
+本ドキュメントは、FORMIXクライアントライブラリのAdapter層におけるRepository実装の技術設計を定義します。Repository層で定義された5つのRepository Interface（SecretRepository, ShareCollectionRepository, CapsuleRepository, KFragRepository, CFragRepository）を、ArweaveClientトレイトに依存する形で実装します。
 
 本実装は、Clean Architecture（6層構成）の依存性逆転原則（DIP）に従い、Adapter層がRepository層のインターフェースを実装することで、ドメイン層とインフラストラクチャ層の分離を実現します。
 
@@ -299,7 +299,7 @@ pub struct Tag {
 
 // 共通タグ
 const TAG_APP: &str = "App-Name";
-const TAG_APP_VALUE: &str = "D-TPRES";
+const TAG_APP_VALUE: &str = "FORMIX";
 const TAG_ENTITY_TYPE: &str = "Entity-Type";
 const TAG_ENTITY_ID: &str = "Entity-Id";
 const TAG_SECRET_ID: &str = "Secret-Id";

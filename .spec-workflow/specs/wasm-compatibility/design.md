@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the technical design for making the D-TPRES client library compatible with both WASM (`wasm32-unknown-unknown`) and native targets.
+This document describes the technical design for making the FORMIX client library compatible with both WASM (`wasm32-unknown-unknown`) and native targets.
 
 ## Architecture
 

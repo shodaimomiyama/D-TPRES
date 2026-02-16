@@ -38,7 +38,7 @@ Arweaveでは、すべてのデータ保存は「トランザクション」と�
 │  owner:     "xyz789..."     ← 送信者の公開鍵                │
 │  data:      "SGVsbG8..."    ← Base64URL エンコードされたデータ│
 │  tags:      [               ← メタデータ（検索に使用）        │
-│    { name: "App-Name", value: "D-TPRES" },                  │
+│    { name: "App-Name", value: "FORMIX" },                  │
 │    { name: "Content-Type", value: "application/json" }      │
 │  ]                                                          │
 │  signature: "sig..."        ← RSA-PSS 署名                  │
@@ -254,11 +254,11 @@ GraphQL の場合:
 Arweave では、**タグによるトランザクション検索**に GraphQL を使用します。
 
 ```graphql
-# D-TPRES アプリのトランザクションを検索
+# FORMIX アプリのトランザクションを検索
 {
   transactions(
     tags: [
-      { name: "App-Name", values: ["D-TPRES"] }
+      { name: "App-Name", values: ["FORMIX"] }
       { name: "Type", values: ["Capsule"] }
     ]
     first: 100
@@ -380,8 +380,8 @@ fn build_graphql_query(&self, tags: &[Tag], cursor: Option<&str>) -> String {
         .iter()
         .map(|t| format!(r#"{{ name: "{}", values: ["{}"] }}"#, t.name, t.value))
         .collect();
-    // 例: [Tag::new("App-Name", "D-TPRES")]
-    //   → [r#"{ name: "App-Name", values: ["D-TPRES"] }"#]
+    // 例: [Tag::new("App-Name", "FORMIX")]
+    //   → [r#"{ name: "App-Name", values: ["FORMIX"] }"#]
 
     // 2. ページネーション用カーソル
     let after_clause = cursor
@@ -416,7 +416,7 @@ fn build_graphql_query(&self, tags: &[Tag], cursor: Option<&str>) -> String {
 ```graphql
 {
   transactions(
-    tags: [{ name: "App-Name", values: ["D-TPRES"] }, { name: "Type", values: ["Capsule"] }]
+    tags: [{ name: "App-Name", values: ["FORMIX"] }, { name: "Type", values: ["Capsule"] }]
     first: 100
   ) {
     edges {
@@ -547,7 +547,7 @@ pub(crate) fn base64url_decode(encoded: &str) -> Result<Vec<u8>, base64::DecodeE
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                           D-TPRES Client                                 │
+│                           FORMIX Client                                 │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │  ┌──────────────────────────────────────────────────────────────────┐   │
@@ -649,7 +649,7 @@ match result {
 
 ```rust
 let tags = vec![
-    Tag::new("App-Name", "D-TPRES"),
+    Tag::new("App-Name", "FORMIX"),
     Tag::new("Type", "Capsule"),
 ];
 let tx_ids = client.query(tags).await?;

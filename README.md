@@ -1,4 +1,4 @@
-# D-TPRES
+# FORMIX
 
 **Deterministic Threshold Proxy Re-Encryption System**
 
@@ -11,11 +11,10 @@ A decentralized key management system that implements threshold proxy re-encrypt
 
 ## Overview
 
-D-TPRES combines three distinct infrastructure layers to create a truly decentralized key management system:
+FORMIX combines two distinct infrastructure layers to create a truly decentralized key management system:
 
 - **Arweave**: Immutable storage for encrypted data and capsules
-- **AO Network**: WebAssembly-based distributed execution environment  
-- **EVM Smart Contracts**: Deterministic access control verification
+- **AO Network**: WebAssembly-based distributed execution environment
 
 The system enables data owners to encrypt and store data on Arweave while allowing authorized users to decrypt it through a k-of-n threshold proxy re-encryption scheme, all without requiring persistent key management servers.
 
@@ -27,9 +26,9 @@ The system enables data owners to encrypt and store data on Arweave while allowi
 - No single point of failure for key management
 
 ### Fully Decentralized
-- **Permissionless**: EVM smart contracts define access conditions deterministically
+- **Permissionless**: k-of-n threshold cryptography defines access conditions deterministically
 - **Stateless**: All processes are ephemeral and can be recreated
-- **Trustless**: Consensus unified across storage and access control layers
+- **Trustless**: Cryptographic access control without centralized key servers
 
 ### Multi-Role WebAssembly Architecture
 Single Rust codebase compiles to WebAssembly and runs on AO with different roles:
@@ -39,14 +38,8 @@ Single Rust codebase compiles to WebAssembly and runs on AO with different roles
 
 ## Concept diagram
 
-![D-TPRES Concept Diagram](images/D-TPRES_Concept.png)
+![FORMIX Concept Diagram](images/FORMIX_Concept.png)
 
-
-## Technical Documentation
-
-For detailed technical information about the AO platform integration:
-- [AO Process Model and Stateless Execution](docs/development/ao/ao_process_model.md)
-- [Domain Layer Architecture](docs/development/domain/domain_overview.md)
 
 ## Architecture
 
@@ -55,10 +48,6 @@ flowchart TD
     subgraph Browser
         OB[O-Browser]
         AB[A-Browser]
-    end
-
-    subgraph Ethereum
-        SC[verifyAccess]
     end
 
     subgraph AO_Network
@@ -78,48 +67,32 @@ flowchart TD
     OB -->|spawn| PO
     OB -->|upload| AR[Arweave]
     AB -->|spawn| RP
-    AB -->|verify| SC
-    SC -->|event| elciao[elciao]
-    elciao --> RP
-    RP --> PO
-    PO -->|split| H1 & H2 & H3
-    RP -->|wrap| H1 & H2 & H3
-    H1 & H2 & H3 -->|frag| RP
+    RP -->|request| PO
+    PO -->|distribute kFrags| H1 & H2 & H3
+    RP -->|request re-encryption| H1 & H2 & H3
+    H1 & H2 & H3 -->|cFrags| RP
     RP -->|capsule| AB
     AB -->|decrypt| s
 ```
 
 ## Cryptographic Flow
 
-The system operates through 6 distinct phases:
+The system operates through 3 main phases:
 
-### Phase 0: Process Spawning & Key Preparation
-Users spawn identical WebAssembly processes on AO with role-specific configurations.
+### Phase 1: Secret Splitting & Initial Distribution (Client-side)
+- 1.1: Owner generates Shamir secret shares (k-of-n)
+- 1.2: Creates Umbral capsules and generates kFrags (re-encryption key fragments)
+- 1.3: Stores encrypted data and capsules on Arweave
 
-### Phase 1: Secret Splitting & Public Storage  
-- Owner generates Shamir secret shares (k-of-n)
-- Creates encrypted capsules using Proxy Re-Encryption
-- Stores capsules and encrypted shares on Arweave
+### Phase 2: Key Fragment Distributed Management (AO Network)
+- 2.1: Owner-Process selects Holders and distributes kFrags
+- 2.2: Holder-Process stores kFrags and performs proxy re-encryption
+- 2.3: cFrag generation and storage
 
-### Phase 2: Access Request & EVM Verification
-- Accessor generates key pair and submits verification to EVM smart contract
-- Contract verifies conditions (e.g., token ownership) and emits verification event
-- elciao bridge captures event and creates ProofPkg for AO processes
-
-### Phase 3: Re-encryption Key Fragmentation
-- Owner-Process generates re-encryption key from secret key to accessor's public key
-- Splits re-encryption key into k-fragments using Shamir sharing
-- Distributes fragments to online Holder processes
-
-### Phase 4: k-of-n Proxy Re-encryption
-- Requester-Process coordinates with Holder processes
-- Each Holder performs proxy re-encryption on their key fragment
-- Returns cipher fragments to Requester-Process
-
-### Phase 5: Client Decryption & Secret Reconstruction
-- Accessor collects k cipher fragments and original capsules
-- Combines fragments to reconstruct the re-encrypted capsule
-- Decrypts with private key to recover the original secret
+### Phase 3: Secret Recovery (Client-side)
+- 3.1: Requester-Process collects cFrags from Holders
+- 3.2: Capsule decryption and fragment combination
+- 3.3: Shamir interpolation to recover the original secret
 
 ## Development
 
@@ -166,8 +139,7 @@ cargo test
 | Cryptography | `umbral-pre`, `sssa`, `aes-gcm` | Threshold PRE, secret sharing, encryption |
 | Runtime | AO + HyperBEAM | WebAssembly execution environment |
 | Storage | Arweave, ao-sqlite | Persistent data and state storage |
-| Blockchain Bridge | elciao | EVM event integration with Arweave |
-| Frontend | WebCrypto API, ethers.js | Browser-based key generation and cryptography |
+| Frontend | WebCrypto API | Browser-based key generation and cryptography |
 | Deployment | ao-deploy | Arweave process deployment |
 
 ## Security
@@ -187,18 +159,21 @@ cargo test
 
 ## Current Status
 
-This project is in early development phase. The current implementation includes:
+**Overall Progress**: 45% — Phase 1 (MVP) under development. Domain layer complete, service layer mostly implemented, actions/controller implemented, 60 tests passing.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Project Structure | ✅ | Basic documentation and code organization |
-| Rust Toolchain | ✅ | Version 1.86.0 configuration |
-| Core Architecture | ✅ | Multi-role WebAssembly design |
-| Cryptographic Primitives | 🟡 | Umbral-PRE integration in progress |
-| AO Process Implementation | 🟡 | Basic process spawning implemented |
-| EVM Smart Contracts | ⬜️ | Access control contracts pending |
+| Project Structure | ✅ | Documentation, code organization, CI/CD foundation |
+| Rust Toolchain | ✅ | Version 1.86.0, Edition 2024 |
+| Core Architecture | ✅ | Multi-role WebAssembly design, layered architecture |
+| Domain Layer | ✅ | 5 entities (Secret, Capsule, KFrag, CFrag, ShareCollection), value objects, repository interfaces |
+| Crypto Service | ✅ | Shamir SSS, Umbral PRE, kFrag/cFrag generation & decryption, all tests passing |
+| Storage Service | ✅ | ArweaveStorageService + ContractStorage (AO) implemented |
+| Workflow Services | ✅ | SecretSharingWorkflow + SecretRecoveryWorkflow implemented |
+| Application Layer | ✅ | Actions (share, recover, generateKeyPair), Controller (validators, extractors) |
+| Infrastructure Layer | 🟡 | ArweaveClient, AOClient (Production + Mock), repository implementations |
 | Browser Frontend | ⬜️ | WebCrypto API integration planned |
-| End-to-End Testing | ⬜️ | Test framework setup pending |
+| Tests | 🟡 | 60 tests passing (unit + integration), coverage expansion planned |
 
 Legend:
 - ✅ Completed
@@ -208,9 +183,16 @@ Legend:
 ## Documentation
 
 - [Product Requirements Document](docs/PRD.md) - Detailed system requirements and specifications
-- [Development Status](docs/development/status.md) - Current progress and milestones  
-- [Domain Model](docs/development/models/domain_model.md) - System entities and relationships
-- [Service Documentation](docs/development/services/) - Individual component specifications
+- [Development Status](docs/status.md) - Current progress and milestones
+- [Architecture](docs/architecture/) - System architecture and design philosophy
+- **Client Library** (`docs/client/`)
+  - [Domain](docs/client/domain.md) - Entities, value objects, error types
+  - [Repositories](docs/client/repositories.md) - Repository interfaces
+  - [UseCase](docs/client/usecase.md) - Core, Service, and Workflow layers
+  - [Controller](docs/client/controller.md) - Validators and extractors
+  - [Actions](docs/client/actions.md) - Public API, builders, DI container
+  - [Adapter](docs/client/adapter.md) - Arweave/AO infrastructure
+- **AO Contracts** - [Overview](docs/contracts/contracts_overview.md)
 
 ## Contributing
 
@@ -229,4 +211,3 @@ Built on top of:
 - [Umbral Proxy Re-Encryption](https://github.com/nucypher/umbral-pre)
 - [Arweave](https://www.arweave.org/) permanent storage
 - [AO Network](https://ao.arweave.net/) distributed compute
-- [elciao](https://github.com/weaveVM/elciao) EVM bridge

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-D-TPRESクライアントライブラリのDomain層にRepository Interfaceを実装する。このインターフェースは、5つのドメインエンティティ（Secret, ShareCollection, Capsule, KFrag, CFrag）に対する永続化操作を抽象化し、依存性逆転原則（DIP）に基づいてInfrastructure層から分離する。
+FORMIXクライアントライブラリのDomain層にRepository Interfaceを実装する。このインターフェースは、5つのドメインエンティティ（Secret, ShareCollection, Capsule, KFrag, CFrag）に対する永続化操作を抽象化し、依存性逆転原則（DIP）に基づいてInfrastructure層から分離する。
 
 このRepository Interfaceにより、Service層はArweaveなどの具体的なストレージ実装を意識することなく、エンティティの保存・取得・削除操作を実行できる。
 
@@ -64,7 +64,7 @@ where
 
 #### Design Note
 
-SecretはD-TPRESの集約ルートであり、他のエンティティ（ShareCollection, Capsule, KFrag）への参照を持つ。Repository操作はSecretIdをキーとし、状態遷移（Initialized → Split → Distributed → Recovered）の永続化をサポートする。全メソッドは`async fn`として定義。
+SecretはFORMIXの集約ルートであり、他のエンティティ（ShareCollection, Capsule, KFrag）への参照を持つ。Repository操作はSecretIdをキーとし、状態遷移（Initialized → Split → Distributed → Recovered）の永続化をサポートする。全メソッドは`async fn`として定義。
 
 #### Acceptance Criteria
 
@@ -253,7 +253,7 @@ CFragはZeroize + ZeroizeOnDropを実装しており、機密データを含む�
 
 1. **データフォーマット**: JSON (serde_json) + EntityMetadataラッパー
 2. **Arweaveタグ戦略**:
-   - `App-Name`: "D-TPRES"
+   - `App-Name`: "FORMIX"
    - `Entity-Type`: エンティティ型名
    - `Entity-Id`: プライマリID
    - `Secret-Id`: 関連SecretId（検索用）

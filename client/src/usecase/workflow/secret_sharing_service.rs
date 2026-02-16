@@ -9,10 +9,11 @@ use async_trait::async_trait;
 use zeroize::Zeroizing;
 
 use crate::domain::value_objects::SecretId;
-use crate::usecase::core::crypto::{CryptoService, KeyFragment, PublicKey, ShamirShare, constants};
-use crate::usecase::core::storage::{ArweaveStorageService, QueryParams, Tag};
+use crate::usecase::core::crypto::{KeyFragment, PublicKey, ShamirShare, constants};
+use crate::usecase::core::storage::{QueryParams, Tag};
 use crate::usecase::dto::{SecretSharingRequest, SecretSharingResult, SecretStatus};
 use crate::usecase::error::{WorkflowError, WorkflowResult};
+use crate::usecase::service::{CryptoService, StorageService};
 
 // ============================================================================
 // SecretSharingWorkflowService Trait
@@ -74,14 +75,14 @@ pub trait SecretSharingWorkflowService: Send + Sync {
 ///
 /// Orchestrates CryptoService and StorageService to implement
 /// the complete Phase 1 secret sharing workflow.
-pub struct SecretSharingWorkflowServiceImpl<C: CryptoService, S: ArweaveStorageService> {
+pub struct SecretSharingWorkflowServiceImpl<C: CryptoService, ST: StorageService> {
     crypto_service: Arc<C>,
-    storage_service: Arc<S>,
+    storage_service: Arc<ST>,
 }
 
-impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowServiceImpl<C, S> {
+impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowServiceImpl<C, ST> {
     /// Create a new SecretSharingWorkflowServiceImpl
-    pub fn new(crypto_service: Arc<C>, storage_service: Arc<S>) -> Self {
+    pub fn new(crypto_service: Arc<C>, storage_service: Arc<ST>) -> Self {
         Self {
             crypto_service,
             storage_service,
@@ -203,8 +204,8 @@ impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowServiceImp
 }
 
 #[async_trait]
-impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowService
-    for SecretSharingWorkflowServiceImpl<C, S>
+impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
+    for SecretSharingWorkflowServiceImpl<C, ST>
 {
     async fn execute_secret_sharing(
         &self,
@@ -232,7 +233,7 @@ impl<C: CryptoService, S: ArweaveStorageService> SecretSharingWorkflowService
 
         // Step 7: Send kFrags to Owner-Process via AO
         self.storage_service
-            .send_kfrag_to_owner_process(&kfrags, &request.owner_process_id)
+            .send_kfrags_to_contract(&kfrags, &request.owner_process_id)
             .await
             .map_err(WorkflowError::from)?;
 
@@ -353,18 +354,29 @@ mod tests {
     use super::*;
     use crate::adapter::external::mock_ao::MockAOClient;
     use crate::service::error::ServiceResult;
-    use crate::usecase::core::crypto::CryptoServiceImpl;
+    use crate::usecase::core::contract_storage::ContractStorageImpl;
+    use crate::usecase::core::crypto::{
+        CryptoService as CoreCryptoService, CryptoServiceImpl as CoreCryptoServiceImpl,
+    };
     use crate::usecase::core::storage::{
         ArweaveStorageServiceImpl, ArweaveTransaction, BatchResult, QueryParams, Tag,
         TransactionStatus,
     };
+    use crate::usecase::service::{
+        CryptoServiceImpl as ServiceCryptoServiceImpl,
+        StorageServiceImpl as ServiceStorageServiceImpl,
+    };
     use std::sync::RwLock;
+
+    type TestCryptoService = ServiceCryptoServiceImpl<CoreCryptoServiceImpl>;
+    type TestStorageService =
+        ServiceStorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<MockAOClient>>;
 
     // ========================================================================
     // MockStorageService (Task 8)
     // ========================================================================
 
-    /// Mock implementation of ArweaveStorageService for testing
+    /// Mock implementation of StorageService for testing
     struct MockStorageService {
         /// Stores all data passed to store_data()
         stored_data: Arc<RwLock<Vec<StoredItem>>>,
@@ -460,7 +472,7 @@ mod tests {
     }
 
     #[async_trait]
-    impl ArweaveStorageService for MockStorageService {
+    impl StorageService for MockStorageService {
         fn store_data(&self, data: &[u8], tags: Vec<Tag>) -> ServiceResult<String> {
             if *self.should_fail_store.read().unwrap() {
                 return Err(crate::service::error::ServiceError::storage_error(
@@ -537,10 +549,10 @@ mod tests {
             self.store_data(&data, new_tags)
         }
 
-        async fn send_kfrag_to_owner_process(
+        async fn send_kfrags_to_contract(
             &self,
             kfrags: &[KeyFragment],
-            owner_process_id: &str,
+            contract_id: &str,
         ) -> ServiceResult<()> {
             if *self.should_fail_kfrag.read().unwrap() {
                 return Err(crate::service::error::ServiceError::ao_network_error(
@@ -550,9 +562,35 @@ mod tests {
 
             self.kfrag_calls.write().unwrap().push(KFragCall {
                 kfrag_count: kfrags.len(),
-                owner_process_id: owner_process_id.to_string(),
+                owner_process_id: contract_id.to_string(),
             });
             Ok(())
+        }
+
+        async fn delegate_capsule(
+            &self,
+            _capsule_data: &[u8],
+            _contract_id: &str,
+        ) -> ServiceResult<()> {
+            Err(crate::service::error::ServiceError::System(
+                crate::service::error::SystemException::Internal("Not implemented".to_string()),
+            ))
+        }
+
+        async fn retrieve_cfrags(
+            &self,
+            _capsule_id: &str,
+            _contract_id: &str,
+        ) -> ServiceResult<Vec<Vec<u8>>> {
+            Err(crate::service::error::ServiceError::System(
+                crate::service::error::SystemException::Internal("Not implemented".to_string()),
+            ))
+        }
+
+        async fn retrieve_threshold(&self, _contract_id: &str) -> ServiceResult<u8> {
+            Err(crate::service::error::ServiceError::System(
+                crate::service::error::SystemException::Internal("Not implemented".to_string()),
+            ))
         }
     }
 
@@ -561,24 +599,28 @@ mod tests {
     // ========================================================================
 
     fn create_test_service()
-    -> SecretSharingWorkflowServiceImpl<CryptoServiceImpl, ArweaveStorageServiceImpl> {
-        let crypto = Arc::new(CryptoServiceImpl::new());
-        let mock_ao_client = Arc::new(MockAOClient::new());
-        let storage = Arc::new(ArweaveStorageServiceImpl::default().with_ao_client(mock_ao_client));
+    -> SecretSharingWorkflowServiceImpl<TestCryptoService, TestStorageService> {
+        let core_crypto = Arc::new(CoreCryptoServiceImpl::new());
+        let crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
+        let mock_ao = Arc::new(MockAOClient::new());
+        let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+        let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+        let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
         SecretSharingWorkflowServiceImpl::new(crypto, storage)
     }
 
     fn create_mock_service() -> (
-        SecretSharingWorkflowServiceImpl<CryptoServiceImpl, MockStorageService>,
+        SecretSharingWorkflowServiceImpl<TestCryptoService, MockStorageService>,
         Arc<MockStorageService>,
     ) {
-        let crypto = Arc::new(CryptoServiceImpl::new());
+        let core_crypto = Arc::new(CoreCryptoServiceImpl::new());
+        let crypto = Arc::new(ServiceCryptoServiceImpl::new(core_crypto));
         let storage = Arc::new(MockStorageService::new());
         let service = SecretSharingWorkflowServiceImpl::new(crypto, storage.clone());
         (service, storage)
     }
 
-    fn create_test_request(crypto: &CryptoServiceImpl) -> SecretSharingRequest {
+    fn create_test_request(crypto: &CoreCryptoServiceImpl) -> SecretSharingRequest {
         let (owner_sk, owner_pk) = crypto.generate_keypair().unwrap();
         let (_requester_sk, requester_pk) = crypto.generate_keypair().unwrap();
 
@@ -602,7 +644,7 @@ mod tests {
     fn test_validate_request_valid() {
         println!("\n=== test_validate_request_valid ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let request = create_test_request(&crypto);
         println!(
             "  Created request: threshold={}, total_shares={}, secret_len={}",
@@ -621,7 +663,7 @@ mod tests {
     fn test_phase1_invalid_threshold_below_min() {
         println!("\n=== test_phase1_invalid_threshold_below_min ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let mut request = create_test_request(&crypto);
         request.threshold = 1; // Below MIN_THRESHOLD
         println!("  Testing threshold=1 (below MIN_THRESHOLD=2)");
@@ -640,7 +682,7 @@ mod tests {
     fn test_phase1_invalid_threshold_exceeds_total() {
         println!("\n=== test_phase1_invalid_threshold_exceeds_total ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let mut request = create_test_request(&crypto);
         request.threshold = 6;
         request.total_shares = 5;
@@ -660,7 +702,7 @@ mod tests {
     fn test_phase1_invalid_total_shares_exceeds_max() {
         println!("\n=== test_phase1_invalid_total_shares_exceeds_max ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let mut request = create_test_request(&crypto);
         request.total_shares = 255; // Exceeds MAX_SHARES
         request.threshold = 3;
@@ -680,7 +722,7 @@ mod tests {
     fn test_phase1_empty_secret() {
         println!("\n=== test_phase1_empty_secret ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let mut request = create_test_request(&crypto);
         request.secret = vec![];
         println!("  Testing empty secret");
@@ -699,7 +741,7 @@ mod tests {
     fn test_phase1_invalid_owner_public_key() {
         println!("\n=== test_phase1_invalid_owner_public_key ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let mut request = create_test_request(&crypto);
         request.owner_public_key = PublicKey { key_data: vec![] };
         println!("  Testing empty owner public key");
@@ -718,7 +760,7 @@ mod tests {
     fn test_phase1_invalid_requester_public_key() {
         println!("\n=== test_phase1_invalid_requester_public_key ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let mut request = create_test_request(&crypto);
         request.requester_public_key = PublicKey { key_data: vec![] };
         println!("  Testing empty requester public key");
@@ -737,7 +779,7 @@ mod tests {
     fn test_phase1_empty_owner_process_id() {
         println!("\n=== test_phase1_empty_owner_process_id ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let mut request = create_test_request(&crypto);
         request.owner_process_id = String::new();
         println!("  Testing empty owner process ID");
@@ -858,7 +900,7 @@ mod tests {
     fn test_phase1_creates_capsule_for_symmetric_key() {
         println!("\n=== test_phase1_creates_capsule_for_symmetric_key ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let (_owner_sk, owner_pk) = crypto.generate_keypair().unwrap();
         let symmetric_key = service.generate_symmetric_key().unwrap();
         println!("  Generated owner keypair and symmetric key");
@@ -879,7 +921,7 @@ mod tests {
     fn test_phase1_generates_kfrags() {
         println!("\n=== test_phase1_generates_kfrags ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let request = create_test_request(&crypto);
         println!(
             "  threshold={}, total_shares={}",
@@ -906,7 +948,7 @@ mod tests {
     fn test_phase1_kfrags_count_matches_n() {
         println!("\n=== test_phase1_kfrags_count_matches_n ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
 
         // Test with different n values
         for n in [3, 5, 7, 10] {
@@ -930,7 +972,7 @@ mod tests {
     async fn test_phase1_returns_complete_result() {
         println!("\n=== test_phase1_returns_complete_result ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let request = create_test_request(&crypto);
         let owner_pk = request.owner_public_key.clone();
         println!("  Executing complete PHASE 1 workflow...");
@@ -958,7 +1000,7 @@ mod tests {
     async fn test_phase1_complete_flow() {
         println!("\n=== test_phase1_complete_flow ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let original_secret = b"This is a very important secret message!".to_vec();
         println!(
             "  Original secret: {:?}",
@@ -995,7 +1037,7 @@ mod tests {
     async fn test_phase1_minimum_threshold() {
         println!("\n=== test_phase1_minimum_threshold ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let mut request = create_test_request(&crypto);
         request.threshold = constants::MIN_THRESHOLD;
         request.total_shares = constants::MIN_THRESHOLD;
@@ -1014,7 +1056,7 @@ mod tests {
     async fn test_phase1_max_secret_size() {
         println!("\n=== test_phase1_max_secret_size ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let mut request = create_test_request(&crypto);
 
         // Test with max supported secret size (63 bytes - DATA_SIZE is 64, 1 byte for length prefix)
@@ -1035,7 +1077,7 @@ mod tests {
     async fn test_execute_secret_sharing_validation_fails() {
         println!("\n=== test_execute_secret_sharing_validation_fails ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let mut request = create_test_request(&crypto);
         request.secret = vec![]; // Invalid
         println!("  Testing with empty secret (should fail validation)");
@@ -1070,7 +1112,7 @@ mod tests {
     async fn test_execute_with_different_threshold_total_combinations() {
         println!("\n=== test_execute_with_different_threshold_total_combinations ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
 
         // Test various valid combinations
         let combinations = [(2, 3), (3, 5), (5, 10), (2, 10)];
@@ -1103,7 +1145,7 @@ mod tests {
     async fn test_result_secret_id_is_unique() {
         println!("\n=== test_result_secret_id_is_unique ===");
         let service = create_test_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
 
         let request1 = create_test_request(&crypto);
         let request2 = create_test_request(&crypto);
@@ -1128,7 +1170,7 @@ mod tests {
     async fn test_execute_secret_sharing_partial_batch_failure() {
         println!("\n=== test_execute_secret_sharing_partial_batch_failure ===");
         let (service, mock_storage) = create_mock_service();
-        let crypto = CryptoServiceImpl::new();
+        let crypto = CoreCryptoServiceImpl::new();
         let request = create_test_request(&crypto);
 
         mock_storage.set_should_fail_batch_partial(true);

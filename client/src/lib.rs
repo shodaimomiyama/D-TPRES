@@ -29,9 +29,9 @@
     clippy::cast_possible_truncation
 )]
 
-//! D-TPRES Client Library
+//! FORMIX Client Library
 //!
-//! Provides domain entities, value objects, and repository interfaces for the D-TPRES
+//! Provides domain entities, value objects, and repository interfaces for the FORMIX
 //! (Deterministic Threshold Proxy Re-Encryption System).
 //!
 //! # Architecture
@@ -44,7 +44,7 @@
 //!
 //! # Quick Start
 //! ```rust,ignore
-//! use dtpres_client::actions::{DefaultActionsContainer, ShareOptions};
+//! use formix::actions::{DefaultActionsContainer, ShareOptions};
 //!
 //! // Create container
 //! let container = DefaultActionsContainer::new();

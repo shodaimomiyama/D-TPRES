@@ -33,7 +33,7 @@
 
 #![allow(clippy::unwrap_used)]
 
-use d_tpres::adapter::external::ao::{
+use formix::adapter::external::ao::{
     AOClient, AOConfig, ArweaveJWK, Binary, ExecuteMsg, ProductionAOClient, QueryMsg,
 };
 
