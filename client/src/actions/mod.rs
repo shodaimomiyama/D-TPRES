@@ -59,7 +59,7 @@ pub mod error;
 pub mod options;
 
 pub use builder::{NotSet, RecoverBuilder, Set, ShareBuilder};
-pub use client::{DTpresClient, InitConfig};
+pub use client::{FormixClient, InitConfig};
 pub use di::{ActionsContainer, DefaultActionsContainer};
 pub use error::{ActionError, ActionResult};
 pub use options::{RecoverOptions, ShareOptions};
@@ -110,7 +110,7 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
     /// ).await?;
     /// println!("Secret ID: {}", result.secret_id);
     /// ```
-    #[deprecated(since = "0.2.0", note = "use DTpresClient::share() builder instead")]
+    #[deprecated(since = "0.2.0", note = "use FormixClient::share() builder instead")]
     #[allow(clippy::too_many_arguments)]
     pub async fn share(
         &self,
@@ -184,7 +184,7 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
     /// # Security
     /// The `recovered_secret` field in the result implements Zeroize trait
     /// and will be automatically cleared from memory when dropped.
-    #[deprecated(since = "0.2.0", note = "use DTpresClient::recover() builder instead")]
+    #[deprecated(since = "0.2.0", note = "use FormixClient::recover() builder instead")]
     pub async fn recover(
         &self,
         secret_id: &str,
