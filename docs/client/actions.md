@@ -8,7 +8,7 @@ Actions層は開発者向けAPIで、`share`、`recover`、`generate_keypair`の
 
 ```mermaid
 graph TD
-    D[DTpresClient<br/>ファサード] --> AC[ActionsContainer<br/>DI]
+    D[FormixClient<br/>ファサード] --> AC[ActionsContainer<br/>DI]
     AC --> C[Controller<br/>バリデーション + 抽出]
     AC --> W[Workflow<br/>ビジネスロジック]
 ```
@@ -82,12 +82,12 @@ pub fn generate_keypair(
 
 `KeyPairResponse { secret_key, public_key }`を返す。
 
-## DTpresClient (`client.rs`)
+## FormixClient (`client.rs`)
 
 `DefaultActionsContainer`をラップした開発者向けファサード。
 
 ```rust
-let client = DTpresClient::new();
+let client = FormixClient::new();
 let result = client.share().secret(data).threshold(3).total_shares(5)
     .owner_key(sk, pk).requester_key(rpk).execute().await?;
 ```

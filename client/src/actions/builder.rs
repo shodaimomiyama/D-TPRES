@@ -201,7 +201,7 @@ impl<C: CoreCryptoService, Ss: StorageService> ShareBuilder<C, Ss, Set, Set, Set
 /// Required fields: secret_id, requester_key, owner_key.
 /// `execute()` is only callable when all type parameters are `Set`.
 ///
-/// Uses a single `process_id` (set at construction) because `DTpresClient`
+/// Uses a single `process_id` (set at construction) because `FormixClient`
 /// is designed for self-service usage where one user owns both the owner
 /// and requester roles within the same AO process context.
 pub struct RecoverBuilder<
