@@ -90,6 +90,8 @@ pub struct SecretRecoveryRequest {
     pub secret_id: SecretId,
     /// Requester's secret key for PRE decryption
     pub requester_secret_key: SecretKey,
+    /// Owner's public key (delegating_pk) for PRE decapsulation
+    pub owner_public_key: PublicKey,
     /// Requester-Process ID for AO communication (cFrag retrieval source)
     pub requester_process_id: String,
 }

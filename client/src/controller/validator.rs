@@ -199,6 +199,7 @@ impl RecoverValidator {
         &self,
         secret_id: &str,
         requester_secret_key: &SecretKey,
+        owner_public_key: &PublicKey,
         requester_process_id: &str,
     ) -> Result<(), ValidationError> {
         // 1. Secret ID empty check
@@ -219,7 +220,16 @@ impl RecoverValidator {
             ));
         }
 
-        // 3. Requester process ID empty check
+        // 3. Owner public key empty check
+        if owner_public_key.key_data.is_empty() {
+            return Err(ValidationError::with_field(
+                error_codes::INVALID_OWNER_PUBLIC_KEY,
+                "Owner public key cannot be empty",
+                "owner_public_key",
+            ));
+        }
+
+        // 4. Requester process ID empty check
         if requester_process_id.is_empty() {
             return Err(ValidationError::with_field(
                 error_codes::INVALID_PROCESS_ID,
@@ -463,8 +473,9 @@ mod tests {
     fn test_recover_validator_empty_secret_id() {
         let validator = RecoverValidator::new();
         let (requester_sk, _) = create_test_keys();
+        let (_, owner_pk) = create_test_keys();
 
-        let result = validator.validate("", &requester_sk, "process_123");
+        let result = validator.validate("", &requester_sk, &owner_pk, "process_123");
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -476,8 +487,14 @@ mod tests {
     fn test_recover_validator_empty_requester_key() {
         let validator = RecoverValidator::new();
         let empty_requester_sk = create_empty_secret_key();
+        let (_, owner_pk) = create_test_keys();
 
-        let result = validator.validate("secret_abc123", &empty_requester_sk, "process_123");
+        let result = validator.validate(
+            "secret_abc123",
+            &empty_requester_sk,
+            &owner_pk,
+            "process_123",
+        );
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -486,11 +503,31 @@ mod tests {
     }
 
     #[test]
+    fn test_recover_validator_empty_owner_public_key() {
+        let validator = RecoverValidator::new();
+        let (requester_sk, _) = create_test_keys();
+        let empty_owner_pk = create_empty_public_key();
+
+        let result = validator.validate(
+            "secret_abc123",
+            &requester_sk,
+            &empty_owner_pk,
+            "process_123",
+        );
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert_eq!(err.code(), error_codes::INVALID_OWNER_PUBLIC_KEY);
+        assert_eq!(err.field(), Some("owner_public_key"));
+    }
+
+    #[test]
     fn test_recover_validator_empty_process_id() {
         let validator = RecoverValidator::new();
         let (requester_sk, _) = create_test_keys();
+        let (_, owner_pk) = create_test_keys();
 
-        let result = validator.validate("secret_abc123", &requester_sk, "");
+        let result = validator.validate("secret_abc123", &requester_sk, &owner_pk, "");
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -502,8 +539,9 @@ mod tests {
     fn test_recover_validator_valid_params() {
         let validator = RecoverValidator::new();
         let (requester_sk, _) = create_test_keys();
+        let (_, owner_pk) = create_test_keys();
 
-        let result = validator.validate("secret_abc123", &requester_sk, "process_123");
+        let result = validator.validate("secret_abc123", &requester_sk, &owner_pk, "process_123");
 
         assert!(result.is_ok());
     }
@@ -516,8 +554,9 @@ mod tests {
     fn test_recover_validator_default() {
         let validator: RecoverValidator = Default::default();
         let (requester_sk, _) = create_test_keys();
+        let (_, owner_pk) = create_test_keys();
 
-        let result = validator.validate("secret_id", &requester_sk, "process_id");
+        let result = validator.validate("secret_id", &requester_sk, &owner_pk, "process_id");
         assert!(result.is_ok());
     }
 }

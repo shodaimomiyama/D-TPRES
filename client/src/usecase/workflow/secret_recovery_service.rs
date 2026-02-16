@@ -8,7 +8,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use crate::domain::value_objects::SecretId;
-use crate::usecase::core::crypto::{CFragData, Capsule, SecretKey, ShamirShare};
+use crate::usecase::core::crypto::{
+    CFragData, Capsule, CapsulePayload, PublicKey, SecretKey, ShamirShare,
+};
 use crate::usecase::core::storage::{QueryParams, Tag};
 use crate::usecase::dto::{SecretRecoveryRequest, SecretRecoveryResult};
 use crate::usecase::error::{WorkflowError, WorkflowResult};
@@ -100,11 +102,13 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
             .map_err(WorkflowError::from)
     }
 
-    /// Retrieve Capsule and threshold from Arweave in a single query
+    /// Retrieve Capsule, ciphertext, verifying_pk, and threshold from Arweave
     async fn retrieve_capsule_with_metadata(
         &self,
         secret_id: &SecretId,
-    ) -> WorkflowResult<(Capsule, u8)> {
+    ) -> WorkflowResult<(Capsule, Vec<u8>, Vec<u8>, u8)> {
+        // Phase 1 stores exactly one capsule per secret_id (UUID v4), so limit=1
+        // with no sort is safe. See CapsuleRepository.find_by_secret_id -> Option<Capsule>.
         let params = QueryParams {
             tags: vec![
                 Tag {
@@ -140,11 +144,19 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
             .parse::<u8>()
             .map_err(|e| WorkflowError::validation(format!("Invalid threshold_k value: {e}")))?;
 
+        let payload: CapsulePayload = bincode::deserialize(&tx.data)
+            .map_err(|_| WorkflowError::crypto("Failed to deserialize CapsulePayload"))?;
+
         let capsule = Capsule {
-            capsule_bytes: tx.data,
+            capsule_bytes: payload.capsule_bytes,
         };
 
-        Ok((capsule, threshold_k))
+        Ok((
+            capsule,
+            payload.ciphertext,
+            payload.verifying_pk,
+            threshold_k,
+        ))
     }
 
     /// Retrieve encrypted shares from Arweave via StorageService
@@ -172,9 +184,19 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
         capsule: &Capsule,
         cfrags: &[CFragData],
         requester_secret_key: &SecretKey,
+        owner_public_key: &PublicKey,
+        ciphertext: &[u8],
+        verifying_pk: &[u8],
     ) -> WorkflowResult<Vec<u8>> {
         self.crypto_service
-            .decrypt_pre_capsule(capsule, cfrags, requester_secret_key)
+            .decrypt_pre_capsule(
+                capsule,
+                cfrags,
+                requester_secret_key,
+                owner_public_key,
+                ciphertext,
+                verifying_pk,
+            )
             .map_err(|e| WorkflowError::DecryptionError {
                 phase: format!("PRE decapsulation: {e}"),
             })
@@ -250,8 +272,8 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
             .retrieve_cfrags(&request.secret_id, &request.requester_process_id)
             .await?;
 
-        // Step 2: Retrieve Capsule with metadata (includes threshold) from Arweave
-        let (capsule, threshold) = self
+        // Step 2: Retrieve CapsulePayload (capsule + ciphertext + verifying_pk) from Arweave
+        let (capsule, ciphertext, verifying_pk, threshold) = self
             .retrieve_capsule_with_metadata(&request.secret_id)
             .await?;
 
@@ -259,9 +281,15 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
         let encrypted_shares = self.retrieve_encrypted_shares(&request.secret_id)?;
         self.verify_threshold(&cfrags, threshold)?;
 
-        // Step 4-5: Decrypt Capsule and recover symmetric key
-        let symmetric_key =
-            self.decrypt_capsule(&capsule, &cfrags, &request.requester_secret_key)?;
+        // Step 4-5: Decrypt Capsule using PRE and recover symmetric key
+        let symmetric_key = self.decrypt_capsule(
+            &capsule,
+            &cfrags,
+            &request.requester_secret_key,
+            &request.owner_public_key,
+            &ciphertext,
+            &verifying_pk,
+        )?;
 
         // Step 6: Decrypt each share with AES-GCM
         let decrypted_shares = self.decrypt_shares(&encrypted_shares, &symmetric_key)?;
@@ -284,8 +312,7 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
         secret_id: &SecretId,
         requester_process_id: &str,
     ) -> WorkflowResult<bool> {
-        // Retrieve capsule with threshold
-        let (_, threshold) = self.retrieve_capsule_with_metadata(secret_id).await?;
+        let (_, _, _, threshold) = self.retrieve_capsule_with_metadata(secret_id).await?;
 
         // Retrieve available cFrags
         let cfrags = self
@@ -338,10 +365,12 @@ mod tests {
 
     fn create_test_request(crypto: &CoreCryptoServiceImpl) -> SecretRecoveryRequest {
         let (requester_sk, _requester_pk) = crypto.generate_keypair().unwrap();
+        let (_, owner_pk) = crypto.generate_keypair().unwrap();
 
         SecretRecoveryRequest {
             secret_id: SecretId::generate(),
             requester_secret_key: requester_sk,
+            owner_public_key: owner_pk,
             requester_process_id: "requester-process-123".to_string(),
         }
     }
@@ -921,11 +950,20 @@ mod tests {
         let (service, components) = create_test_service_with_components();
         let secret_id = SecretId::new("test-secret-abc");
         let capsule_data = vec![10, 20, 30, 40, 50];
+        let ciphertext_data = vec![60, 70, 80];
+        let verifying_pk_data = vec![90, 100, 110];
+
+        let payload = CapsulePayload {
+            capsule_bytes: capsule_data.clone(),
+            ciphertext: ciphertext_data.clone(),
+            verifying_pk: verifying_pk_data.clone(),
+        };
+        let payload_bytes = bincode::serialize(&payload).unwrap();
 
         components
             .arweave
             .store_data(
-                &capsule_data,
+                &payload_bytes,
                 vec![
                     Tag {
                         name: "type".to_string(),
@@ -950,8 +988,10 @@ mod tests {
         let result = service.retrieve_capsule_with_metadata(&secret_id).await;
         assert!(result.is_ok());
 
-        let (capsule, threshold_k) = result.unwrap();
+        let (capsule, ciphertext, verifying_pk, threshold_k) = result.unwrap();
         assert_eq!(capsule.capsule_bytes, capsule_data);
+        assert_eq!(ciphertext, ciphertext_data);
+        assert_eq!(verifying_pk, verifying_pk_data);
         assert_eq!(threshold_k, 3);
     }
 

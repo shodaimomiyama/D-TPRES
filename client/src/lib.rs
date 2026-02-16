@@ -62,7 +62,7 @@
 //!     requester_pk,
 //!     "owner_process".to_string(),
 //!     None,
-//! )?;
+//! ).await?;
 //!
 //! // Recover the secret (requires storage implementation)
 //! let recovered = container.recover(
@@ -70,7 +70,7 @@
 //!     requester_sk,
 //!     "requester_process".to_string(),
 //!     None,
-//! )?;
+//! ).await?;
 //! ```
 
 pub mod actions;

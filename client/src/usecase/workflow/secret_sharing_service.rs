@@ -9,7 +9,9 @@ use async_trait::async_trait;
 use zeroize::Zeroizing;
 
 use crate::domain::value_objects::SecretId;
-use crate::usecase::core::crypto::{KeyFragment, PublicKey, ShamirShare, constants};
+use crate::usecase::core::crypto::{
+    CapsulePayload, KeyFragment, PublicKey, ShamirShare, constants,
+};
 use crate::usecase::core::storage::{QueryParams, Tag};
 use crate::usecase::dto::{SecretSharingRequest, SecretSharingResult, SecretStatus};
 use crate::usecase::error::{WorkflowError, WorkflowResult};
@@ -224,8 +226,14 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
         let encrypted_shares = self.encrypt_shares(&shares, &symmetric_key)?;
 
         // Step 4: Create PRE Capsule for kₒ
-        let (capsule, _ciphertext) =
+        let (capsule, ciphertext) =
             self.create_capsule(&request.owner_public_key, &symmetric_key)?;
+
+        // Step 4b: Get verifying_pk for CapsulePayload
+        let verifying_pk_bytes = self
+            .crypto_service
+            .verifying_key_bytes()
+            .map_err(WorkflowError::from)?;
 
         // Step 5-6: Generate re-encryption key and create kFrags
         let kfrags = self.generate_kfrags(&request)?;
@@ -237,13 +245,21 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
             .await
             .map_err(WorkflowError::from)?;
 
-        // Step 8: Store Capsule and encrypted shares on Arweave
+        // Step 8: Store CapsulePayload (capsule + ciphertext + verifying_pk) on Arweave
         let secret_id = SecretId::generate();
+
+        let payload = CapsulePayload {
+            capsule_bytes: capsule.capsule_bytes.clone(),
+            ciphertext,
+            verifying_pk: verifying_pk_bytes,
+        };
+        let payload_bytes = bincode::serialize(&payload)
+            .map_err(|_| WorkflowError::crypto("Failed to serialize CapsulePayload"))?;
 
         let capsule_tx_id = self
             .storage_service
             .store_data(
-                &capsule.capsule_bytes,
+                &payload_bytes,
                 vec![
                     Tag {
                         name: "type".to_string(),

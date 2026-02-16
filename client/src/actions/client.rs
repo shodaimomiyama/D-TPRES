@@ -134,7 +134,7 @@ impl DTpresClient {
     /// Create a RecoverBuilder for the recover operation
     pub fn recover(
         &self,
-    ) -> RecoverBuilder<CoreCryptoServiceImpl, DefaultStorageService, NotSet, NotSet> {
+    ) -> RecoverBuilder<CoreCryptoServiceImpl, DefaultStorageService, NotSet, NotSet, NotSet> {
         RecoverBuilder::new(Arc::clone(&self.actions), self.process_id.clone())
     }
 

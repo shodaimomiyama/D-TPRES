@@ -296,9 +296,16 @@ async fn test_actions_share_unique_secret_ids() {
 async fn test_actions_recover_empty_secret_id_fails() {
     let container = DefaultActionsContainer::new();
     let (requester_sk, _) = container.generate_keypair().unwrap();
+    let (_, owner_pk) = container.generate_keypair().unwrap();
 
     let result = container
-        .recover("", requester_sk, "requester_process".to_string(), None)
+        .recover(
+            "",
+            requester_sk,
+            owner_pk,
+            "requester_process".to_string(),
+            None,
+        )
         .await;
 
     assert!(result.is_err());
@@ -314,9 +321,16 @@ async fn test_actions_recover_empty_secret_id_fails() {
 async fn test_actions_recover_empty_process_id_fails() {
     let container = DefaultActionsContainer::new();
     let (requester_sk, _) = container.generate_keypair().unwrap();
+    let (_, owner_pk) = container.generate_keypair().unwrap();
 
     let result = container
-        .recover("test_secret_id", requester_sk, String::new(), None)
+        .recover(
+            "test_secret_id",
+            requester_sk,
+            owner_pk,
+            String::new(),
+            None,
+        )
         .await;
 
     assert!(result.is_err());
@@ -332,11 +346,13 @@ async fn test_actions_recover_empty_process_id_fails() {
 async fn test_actions_recover_nonexistent_secret_fails() {
     let container = DefaultActionsContainer::new();
     let (requester_sk, _) = container.generate_keypair().unwrap();
+    let (_, owner_pk) = container.generate_keypair().unwrap();
 
     let result = container
         .recover(
             "nonexistent_secret_id_12345",
             requester_sk,
+            owner_pk,
             "requester_process".to_string(),
             None,
         )
@@ -356,12 +372,14 @@ async fn test_actions_recover_nonexistent_secret_fails() {
 async fn test_actions_recover_with_options() {
     let container = DefaultActionsContainer::new();
     let (requester_sk, _) = container.generate_keypair().unwrap();
+    let (_, owner_pk) = container.generate_keypair().unwrap();
 
     let options = RecoverOptions::new();
     let result = container
         .recover(
             "test_secret_id",
             requester_sk,
+            owner_pk,
             "requester_process".to_string(),
             Some(options),
         )
@@ -475,7 +493,7 @@ async fn test_actions_share_produces_valid_result_for_recovery() {
             3,
             5,
             owner_sk,
-            owner_pk,
+            owner_pk.clone(),
             requester_pk,
             "owner_process".to_string(),
             None,
@@ -489,6 +507,7 @@ async fn test_actions_share_produces_valid_result_for_recovery() {
         .recover(
             share_result.secret_id.as_str(),
             requester_sk,
+            owner_pk,
             "requester_process".to_string(),
             None,
         )
