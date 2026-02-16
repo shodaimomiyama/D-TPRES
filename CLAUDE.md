@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-D-TPRES (Deterministic Threshold Proxy Re-Encryption System) is a decentralized key management layer that implements threshold proxy re-encryption for Arweave storage. The system combines:
+FORMIX (Deterministic Threshold Proxy Re-Encryption System) is a decentralized key management layer that implements threshold proxy re-encryption for Arweave storage. The system combines:
 
 - **Arweave**: Immutable storage for encrypted data and capsules
 - **AO Network**: WebAssembly-based distributed execution environment
@@ -131,7 +131,7 @@ All processes use the same Wasm binary deployed to Arweave, with role differenti
 
 ## AO Stateless Execution Constraints
 
-**Critical for D-TPRES**: The AO Network executes processes statelessly with specific constraints:
+**Critical for FORMIX**: The AO Network executes processes statelessly with specific constraints:
 
 1. **Memory Non-Persistence Between Messages**
    - Each message execution starts with clean memory
@@ -171,7 +171,7 @@ pub fn handle_message(msg: AOMessage, repo: &dyn Repository) -> Result<Response>
 
 ## Directory-Specific Async Policy
 
-D-TPRES has two Rust codebases with different async constraints:
+FORMIX has two Rust codebases with different async constraints:
 
 | Directory | async/await | tokio | Reason |
 |-----------|------------|-------|--------|

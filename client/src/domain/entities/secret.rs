@@ -33,7 +33,7 @@ impl std::fmt::Display for SecretState {
 
 /// Secret entity (aggregate root)
 ///
-/// Manages the lifecycle and metadata of a secret in the D-TPRES system.
+/// Manages the lifecycle and metadata of a secret in the FORMIX system.
 /// Does not hold the actual secret data - that's handled by SecretData value object.
 #[derive(Debug, Clone)]
 pub struct Secret {

@@ -1,8 +1,8 @@
-# D-TPRES KVストレージ仕様書
+# FORMIX KVストレージ仕様書
 
 ## 概要
 
-本仕様書は、D-TPRES（Deterministic Threshold Proxy Re-Encryption System）のCosmWasm AOプロセスにおけるKVストレージの設計・実装について定義します。
+本仕様書は、FORMIX（Deterministic Threshold Proxy Re-Encryption System）のCosmWasm AOプロセスにおけるKVストレージの設計・実装について定義します。
 
 ## アーキテクチャ設計
 
@@ -530,4 +530,4 @@ pub enum ContractError {
 
 ---
 
-この仕様書に基づいて、D-TPRESのKVストレージ実装を行います。各モジュールは独立してテスト可能で、CosmWasm AOのステートレス実行モデルに完全に対応した設計となっています。
+この仕様書に基づいて、FORMIXのKVストレージ実装を行います。各モジュールは独立してテスト可能で、CosmWasm AOのステートレス実行モデルに完全に対応した設計となっています。

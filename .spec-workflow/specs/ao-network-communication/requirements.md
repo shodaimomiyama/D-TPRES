@@ -2,7 +2,7 @@
 
 ## Introduction
 
-AO Network通信基盤は、D-TPRESクライアントライブラリ（`client/`）がAOネットワーク上のプロセス（Owner-Process、Holder-Process、Requester-Process）とデータ交換を行うための**インターフェース定義とMock実装**を提供する。この機能により、Phase 1（`dtpres.share()`）での鍵フラグメント（kFrag）のOwner-Processへの送信と、Phase 3（`dtpres.recover()`）での暗号化フラグメント（cFrag）のRequester-Processからの取得が可能になる。
+AO Network通信基盤は、FORMIXクライアントライブラリ（`client/`）がAOネットワーク上のプロセス（Owner-Process、Holder-Process、Requester-Process）とデータ交換を行うための**インターフェース定義とMock実装**を提供する。この機能により、Phase 1（`dtpres.share()`）での鍵フラグメント（kFrag）のOwner-Processへの送信と、Phase 3（`dtpres.recover()`）での暗号化フラグメント（cFrag）のRequester-Processからの取得が可能になる。
 
 **価値**:
 - クライアントライブラリとAOプロセス間の通信を抽象化したインターフェース
@@ -117,7 +117,7 @@ let storage_service = StorageService::new(kfrag_repo, cfrag_repo);
 
 ## クライアント-AOプロセス間通信アーキテクチャ
 
-本機能はD-TPRESクライアントライブラリ（`client/`）からAOネットワーク上のプロセスを呼び出すための**通信インターフェース**を定義する。
+本機能はFORMIXクライアントライブラリ（`client/`）からAOネットワーク上のプロセスを呼び出すための**通信インターフェース**を定義する。
 
 ### アーキテクチャ方針
 
@@ -161,7 +161,7 @@ let storage_service = StorageService::new(kfrag_repo, cfrag_repo);
 │   ├─ MU (Messenger Unit): POST /message                          │
 │   ├─ SU (Scheduler Unit): メッセージ順序管理                      │
 │   └─ CU (Compute Unit): POST /dryrun, GET /result/:id            │
-│        └─ D-TPRES AO Process (Owner/Holder/Requester)            │
+│        └─ FORMIX AO Process (Owner/Holder/Requester)            │
 └──────────────────────────────────────────────────────────────────┘
             │ Arweaveトランザクション
             ▼

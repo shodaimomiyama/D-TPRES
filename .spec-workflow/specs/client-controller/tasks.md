@@ -2,7 +2,7 @@
 
 ## Overview
 
-D-TPRESクライアントライブラリのController層の実装タスク。Actions層からの入力を受け取り、検証（Validator）とDTO変換（Extractor）を行った後、UseCase層（Workflow Services）に処理を委譲する。
+FORMIXクライアントライブラリのController層の実装タスク。Actions層からの入力を受け取り、検証（Validator）とDTO変換（Extractor）を行った後、UseCase層（Workflow Services）に処理を委譲する。
 
 ## Implementation Order
 

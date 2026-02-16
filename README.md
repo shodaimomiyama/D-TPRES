@@ -1,4 +1,4 @@
-# D-TPRES
+# FORMIX
 
 **Deterministic Threshold Proxy Re-Encryption System**
 
@@ -11,7 +11,7 @@ A decentralized key management system that implements threshold proxy re-encrypt
 
 ## Overview
 
-D-TPRES combines three distinct infrastructure layers to create a truly decentralized key management system:
+FORMIX combines three distinct infrastructure layers to create a truly decentralized key management system:
 
 - **Arweave**: Immutable storage for encrypted data and capsules
 - **AO Network**: WebAssembly-based distributed execution environment  
@@ -39,7 +39,7 @@ Single Rust codebase compiles to WebAssembly and runs on AO with different roles
 
 ## Concept diagram
 
-![D-TPRES Concept Diagram](images/D-TPRES_Concept.png)
+![FORMIX Concept Diagram](images/FORMIX_Concept.png)
 
 
 ## Technical Documentation

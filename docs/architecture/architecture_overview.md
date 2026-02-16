@@ -1,4 +1,4 @@
-# D-TPRES クライアントライブラリ アーキテクチャ概要
+# FORMIX クライアントライブラリ アーキテクチャ概要
 
 > **目的**: client/ ライブラリのClean Architecture（6層構成）設計
 
@@ -6,7 +6,7 @@
 
 ## 1. システム概要
 
-client/ は D-TPRES システムにおけるローカル暗号処理ライブラリです。Rust で実装され、WebAssembly としてブラウザで動作します。
+client/ は FORMIX システムにおけるローカル暗号処理ライブラリです。Rust で実装され、WebAssembly としてブラウザで動作します。
 
 ### 1.1 責務
 

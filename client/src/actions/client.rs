@@ -1,4 +1,4 @@
-//! DTpresClient - Main entry point for the D-TPRES client library
+//! DTpresClient - Main entry point for the FORMIX client library
 //!
 //! Wraps the internal ActionsContainer and provides a clean public API
 //! with builder-pattern share/recover operations.
@@ -22,7 +22,7 @@ pub struct InitConfig {
     pub arweave_gateway_url: Option<String>,
 }
 
-/// Main D-TPRES client providing builder-based share/recover API.
+/// Main FORMIX client providing builder-based share/recover API.
 ///
 /// Designed for single-user (self-service) workflows where the caller
 /// acts as both data owner and requester within one AO process.
@@ -45,7 +45,7 @@ impl DTpresClient {
     /// # Errors
     /// Currently returns `ActionError::WorkflowFailed` because JWK wallet
     /// loading and AO process detection are not yet implemented.
-    /// See: <https://github.com/shodaimomiyama/D-TPRES/issues/60>
+    /// See: <https://github.com/shodaimomiyama/FORMIX/issues/60>
     pub fn init(_config: InitConfig) -> ActionResult<Self> {
         Err(ActionError::workflow_failed(
             "DTpresClient::init is not yet implemented: \

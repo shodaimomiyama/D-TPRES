@@ -435,7 +435,7 @@ pub fn parse_nested_structure<T: DeserializeOwned>(
 
 ### 5.3 カスタム型変換
 
-D-TPRES特有の型変換：
+FORMIX特有の型変換：
 
 ```rust
 /// Umbral公開鍵の変換

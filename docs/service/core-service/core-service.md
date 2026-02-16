@@ -1,8 +1,8 @@
-# D-TPRES Core Service層設計
+# FORMIX Core Service層設計
 
 ## 1. 概要
 
-Core Service層は、D-TPRESの基本機能を提供するサービス群です。これらのサービスは、ビジネスロジックの実装と計算処理に特化し、データ永続化はRepository層に委譲します。Workflow Service層から利用され、複雑な処理フローの基盤となります。
+Core Service層は、FORMIXの基本機能を提供するサービス群です。これらのサービスは、ビジネスロジックの実装と計算処理に特化し、データ永続化はRepository層に委譲します。Workflow Service層から利用され、複雑な処理フローの基盤となります。
 
 ## 2. Core Serviceの設計原則
 
@@ -23,7 +23,7 @@ Core Service層は、D-TPRESの基本機能を提供するサービス群です�
 
 ### 3.1 概要
 
-CryptoServiceは、D-TPRESの暗号化操作すべてを担当する中核サービスです。Threshold Proxy Re-Encryption (TPRE) とShamir Secret Sharingの実装を提供します。
+CryptoServiceは、FORMIXの暗号化操作すべてを担当する中核サービスです。Threshold Proxy Re-Encryption (TPRE) とShamir Secret Sharingの実装を提供します。
 
 ### 3.2 インターフェース定義
 
@@ -475,7 +475,7 @@ async fn test_process_management_with_repository() {
 
 ## 8. まとめ
 
-Core Service層は、D-TPRESの基盤機能を提供する重要な層です。各サービスは明確な責務を持ち：
+Core Service層は、FORMIXの基盤機能を提供する重要な層です。各サービスは明確な責務を持ち：
 
 1. **CryptoService**: 暗号化計算処理に特化
 2. **MessageRoutingService**: AOプロセス間の非同期通信
@@ -494,4 +494,4 @@ Core Service層は、D-TPRESの基盤機能を提供する重要な層です。�
    - データ永続化の責任を明確化
    - 関心の分離と保守性の向上
 
-この設計により、AOプラットフォームの制約に適合し、高性能で信頼性の高いD-TPRES暗号システムを実現します。
+この設計により、AOプラットフォームの制約に適合し、高性能で信頼性の高いFORMIX暗号システムを実現します。

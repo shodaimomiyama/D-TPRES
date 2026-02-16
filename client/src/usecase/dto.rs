@@ -111,7 +111,7 @@ pub struct SecretRecoveryResult {
 // SecretStatus Enum
 // ============================================================================
 
-/// Status of a secret in the D-TPRES system
+/// Status of a secret in the FORMIX system
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum SecretStatus {

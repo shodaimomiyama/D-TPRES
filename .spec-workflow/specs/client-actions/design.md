@@ -2,7 +2,7 @@
 
 ## Overview
 
-本設計書は、D-TPRESクライアントライブラリのActions層の設計を定義します。Actions層はFacadeパターンを適用し、開発者向けのシンプルなエンドポイント関数（`share()`, `recover()`, `generateKeyPair()`）を提供します。内部の複雑さ（Controller層、UseCase層）を隠蔽し、最小限のパラメータでD-TPRES機能を利用可能にします。
+本設計書は、FORMIXクライアントライブラリのActions層の設計を定義します。Actions層はFacadeパターンを適用し、開発者向けのシンプルなエンドポイント関数（`share()`, `recover()`, `generateKeyPair()`）を提供します。内部の複雑さ（Controller層、UseCase層）を隠蔽し、最小限のパラメータでFORMIX機能を利用可能にします。
 
 **アーキテクチャフロー:**
 ```

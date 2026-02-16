@@ -1,7 +1,7 @@
 # Owner Process 動作詳細仕様書
 
 ## 概要
-本ドキュメントは、D-TPRES (Deterministic Threshold Proxy Re-Encryption System) におけるOwner ProcessのAO Network上での動作を、実装コードの参照と共にステップバイステップで解説します。
+本ドキュメントは、FORMIX (Deterministic Threshold Proxy Re-Encryption System) におけるOwner ProcessのAO Network上での動作を、実装コードの参照と共にステップバイステップで解説します。
 
 ## Owner Process 動作フロー図
 
@@ -704,7 +704,7 @@ pub fn handle_message(msg: AOMessage, repo: &dyn Repository) -> Result<Response>
 
 ## まとめ
 
-Owner Processは、D-TPRESシステムの中核として、以下の責務を持ちます：
+Owner Processは、FORMIXシステムの中核として、以下の責務を持ちます：
 
 1. **kFragの受信と検証**: O-Browserから受信したkFragと署名を検証
 2. **Holder選出**: RandAOを使用してn個のHolderをランダムに選出（プレースホルダー実装対応）

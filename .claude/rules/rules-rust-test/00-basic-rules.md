@@ -83,7 +83,7 @@ Change the source code. **Editing anything other than the target file is absolut
 ## Directory Structure
 
 ```
-D-TPRES/
+FORMIX/
 ├── src/                           # AO WebAssembly (Rust) - レイヤードアーキテクチャ
 │   ├── main.rs                    # AOエントリーポイント & ハンドラー登録
 │   ├── di.rs                      # 依存性注入コンテナ

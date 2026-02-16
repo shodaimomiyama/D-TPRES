@@ -26,7 +26,7 @@
   - Purpose: Provide persistence abstraction for Secret entity (aggregate root)
   - _Leverage: client/src/repositories/mod.rs (Repository trait), client/src/domain/entities/secret.rs, client/src/domain/value_objects/ids.rs_
   - _Requirements: 1_
-  - _Prompt: Role: Rust Developer with DDD experience | Task: Create SecretRepository trait in client/src/repositories/secret_interface.rs extending the base Repository trait for Secret entity, which is the aggregate root in D-TPRES | Restrictions: Must extend Repository<Secret, SecretId>, use async_trait, no additional methods needed beyond base trait | Success: Trait compiles, properly extends base Repository, uses correct entity and ID types_
+  - _Prompt: Role: Rust Developer with DDD experience | Task: Create SecretRepository trait in client/src/repositories/secret_interface.rs extending the base Repository trait for Secret entity, which is the aggregate root in FORMIX | Restrictions: Must extend Repository<Secret, SecretId>, use async_trait, no additional methods needed beyond base trait | Success: Trait compiles, properly extends base Repository, uses correct entity and ID types_
 
 - [x] 4. Create ShareCollectionRepository trait
   - File: client/src/repositories/share_interface.rs

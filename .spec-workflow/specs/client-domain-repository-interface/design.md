@@ -2,7 +2,7 @@
 
 ## Overview
 
-D-TPRESクライアントライブラリにRepository層を新設し、Repository Interfaceを実装する。このインターフェースは5つのドメインエンティティ（Secret, ShareCollection, Capsule, KFrag, CFrag）に対する永続化操作を抽象化し、依存性逆転原則（DIP）に基づいてAdapter層から分離する。
+FORMIXクライアントライブラリにRepository層を新設し、Repository Interfaceを実装する。このインターフェースは5つのドメインエンティティ（Secret, ShareCollection, Capsule, KFrag, CFrag）に対する永続化操作を抽象化し、依存性逆転原則（DIP）に基づいてAdapter層から分離する。
 
 Repository層は`domain/`と同じレベル（`src/repositories/`）に配置され、Domain層のエンティティを参照する。Adapter層がこれらのRepository Interfaceを実装することで、ビジネスロジックが具体的なストレージ実装に依存しない設計を実現する。
 

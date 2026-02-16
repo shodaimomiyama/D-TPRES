@@ -1,8 +1,8 @@
-# D-TPRES Controller層設計概要
+# FORMIX Controller層設計概要
 
 ## 1. はじめに
 
-本ドキュメントは、D-TPRES（Deterministic Threshold Proxy Re-Encryption System）のController層の設計と実装指針を定義します。Controller層は、TERASOLUNAガイドラインに基づき、AO Process環境においてメッセージ処理とService層への委譲を担当します。
+本ドキュメントは、FORMIX（Deterministic Threshold Proxy Re-Encryption System）のController層の設計と実装指針を定義します。Controller層は、TERASOLUNAガイドラインに基づき、AO Process環境においてメッセージ処理とService層への委譲を担当します。
 
 ### 1.1 Controller層の位置づけ
 
@@ -791,7 +791,7 @@ mod integration_tests {
 
 ## 12. まとめ
 
-D-TPRES Controller層は、TERASOLUNAガイドラインの4つの責務を確実に実装し、AO Process環境に最適化された設計となっています。
+FORMIX Controller層は、TERASOLUNAガイドラインの4つの責務を確実に実装し、AO Process環境に最適化された設計となっています。
 
 ### 主要な設計原則
 

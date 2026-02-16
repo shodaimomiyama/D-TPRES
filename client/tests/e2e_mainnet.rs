@@ -13,10 +13,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use d_tpres::adapter::external::ao::{
+use formix::adapter::external::ao::{
     AOClient, AOConfig, ArweaveJWK, Binary, ExecuteMsg, ProductionAOClient, QueryMsg,
 };
-use d_tpres::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
+use formix::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
 
 fn mainnet_config() -> AOConfig {
     let _ = dotenvy::dotenv();

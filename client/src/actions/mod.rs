@@ -1,6 +1,6 @@
 //! Actions Layer - Developer-facing API endpoints (Facade Pattern)
 //!
-//! Provides simple functions for D-TPRES operations:
+//! Provides simple functions for FORMIX operations:
 //! - `share()` - Phase 1: Secret splitting and distribution
 //! - `recover()` - Phase 3: Secret recovery
 //! - `generate_keypair()` - PRE key pair generation
@@ -23,7 +23,7 @@
 //!
 //! # Example
 //! ```rust,ignore
-//! use dtpres_client::actions::{DefaultActionsContainer, ShareOptions};
+//! use formix::actions::{DefaultActionsContainer, ShareOptions};
 //!
 //! let container = DefaultActionsContainer::new();
 //!

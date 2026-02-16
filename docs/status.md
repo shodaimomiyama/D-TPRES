@@ -1,16 +1,16 @@
 ---
-title: "D-TPRES Development Status"
+title: "FORMIX Development Status"
 version: "1.5.0"
 last_updated: "2025-01-02"
-author: "D-TPRES Development Team"
+author: "FORMIX Development Team"
 status: "active"
 ---
 
-# D-TPRES Development Status
+# FORMIX Development Status
 
 ## プロジェクト概要
 
-**D-TPRES (Deterministic Threshold Proxy Re-Encryption System)** は、Arweave、AO Network、EVM Smart Contractsを統合した分散暗号システムです。現在Phase1（MVP版）の開発中です。
+**FORMIX (Deterministic Threshold Proxy Re-Encryption System)** は、Arweave、AO Network、EVM Smart Contractsを統合した分散暗号システムです。現在Phase1（MVP版）の開発中です。
 
 **全体進捗率**: 35% (設計フェーズ完了、ドメイン層実装90%完了、サービス層一部実装)
 
@@ -379,7 +379,7 @@ status: "active"
 ## 10. 次回更新予定
 
 **次回更新日**: 2025年1月10日
-**更新責任者**: D-TPRES Development Team
+**更新責任者**: FORMIX Development Team
 **更新内容**: サービス層の残り実装状況・UseCase Handlers実装進捗
 
 ---
@@ -388,12 +388,12 @@ status: "active"
 
 | バージョン | 日付 | 変更内容 | 担当者 |
 |-----------|------|----------|--------|
-| 1.5.0 | 2025-01-02 | CryptoService完全実装完了、8個のテスト全pass、セキュリティ監査実施、サービス層進捗率更新（25%→40%）、全体進捗率更新（30%→35%）、umbral-pre API制限ドキュメント追加 | D-TPRES Development Team |
-| 1.4.0 | 2025-07-22 | ドメイン層Repository Interface実装完了、進捗率更新（80%→90%）、全体進捗率更新（25%→30%）、thiserror依存関係追加 | D-TPRES Development Team |
-| 1.3.0 | 2025-07-17 | ドメイン層値オブジェクト実装完了、進捗率更新（60%→80%）、全体進捗率更新（20%→25%）| D-TPRES Development Team |
-| 1.2.0 | 2025-07-16 | ドメイン層エンティティ実装完了、進捗率更新（20%→60%）| D-TPRES Development Team |
-| 1.1.0 | 2025-07-09 | PoC実装計画を段階的アプローチに変更（AO環境→EVM統合→Client統合）、マイルストーン調整 | D-TPRES Development Team |
-| 1.0.0 | 2025-06-01 | 初版作成、全セクション定義・現状分析 | D-TPRES Development Team |
+| 1.5.0 | 2025-01-02 | CryptoService完全実装完了、8個のテスト全pass、セキュリティ監査実施、サービス層進捗率更新（25%→40%）、全体進捗率更新（30%→35%）、umbral-pre API制限ドキュメント追加 | FORMIX Development Team |
+| 1.4.0 | 2025-07-22 | ドメイン層Repository Interface実装完了、進捗率更新（80%→90%）、全体進捗率更新（25%→30%）、thiserror依存関係追加 | FORMIX Development Team |
+| 1.3.0 | 2025-07-17 | ドメイン層値オブジェクト実装完了、進捗率更新（60%→80%）、全体進捗率更新（20%→25%）| FORMIX Development Team |
+| 1.2.0 | 2025-07-16 | ドメイン層エンティティ実装完了、進捗率更新（20%→60%）| FORMIX Development Team |
+| 1.1.0 | 2025-07-09 | PoC実装計画を段階的アプローチに変更（AO環境→EVM統合→Client統合）、マイルストーン調整 | FORMIX Development Team |
+| 1.0.0 | 2025-06-01 | 初版作成、全セクション定義・現状分析 | FORMIX Development Team |
 
 ---
 
@@ -406,4 +406,4 @@ status: "active"
 
 ---
 
-*Last updated: 2025-01-02 by D-TPRES Development Team*
+*Last updated: 2025-01-02 by FORMIX Development Team*

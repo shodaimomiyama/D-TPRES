@@ -2,7 +2,7 @@
 
 ## 目的
 
-このドキュメントは、D-TPRES暗号システムのWebAssembly（WASM）ビルドとAOネットワークへのデプロイに関する自律的な開発動作を定義します。
+このドキュメントは、FORMIX暗号システムのWebAssembly（WASM）ビルドとAOネットワークへのデプロイに関する自律的な開発動作を定義します。
 no_std環境での制約を考慮し、AOコンピュートユニットで実行可能な最適化されたWASMバイナリの構築を目的とします。
 
 **ビルド前に必ず `CLAUDE.md` のWASMビルドコマンドと `docs/development/architecture_overview.md` のAOデプロイ仕様を参照してください。**

@@ -1,8 +1,8 @@
-# D-TPRES Service層設計概要
+# FORMIX Service層設計概要
 
 ## 1. はじめに
 
-本ドキュメントは、D-TPRES（Deterministic Threshold Proxy Re-Encryption System）のService層設計について説明します。Service層は、TERASOLUNAガイドラインに基づき、ビジネスロジックの実装と管理を担当する層として設計されています。
+本ドキュメントは、FORMIX（Deterministic Threshold Proxy Re-Encryption System）のService層設計について説明します。Service層は、TERASOLUNAガイドラインに基づき、ビジネスロジックの実装と管理を担当する層として設計されています。
 
 ## 2. Service層の設計思想
 
@@ -22,7 +22,7 @@ Service層は以下の原則に従って設計されています：
    - BusinessExceptionとSystemExceptionの明確な区別
    - 各層での適切な例外処理
 
-### 2.2 D-TPRES特有の考慮事項
+### 2.2 FORMIX特有の考慮事項
 
 #### 2.2.1 AO環境への適応
 
@@ -49,7 +49,7 @@ Service層は以下の原則に従って設計されています：
 
 ### 3.1 アーキテクチャ概要
 
-D-TPRESのService層は、Core ServiceとWorkflow Serviceの2層構造を採用しています：
+FORMIXのService層は、Core ServiceとWorkflow Serviceの2層構造を採用しています：
 
 ```mermaid
 graph TB
@@ -163,7 +163,7 @@ graph TB
 
 ### 4.3 プロセス管理のアプローチ
 
-D-TPRESでは、従来のProcessManagementServiceは実装せず、以下のアプローチでプロセス管理を行います：
+FORMIXでは、従来のProcessManagementServiceは実装せず、以下のアプローチでプロセス管理を行います：
 
 1. **Domain層でのビジネスロジック**
    - ProcessEntityがプロセス状態管理のメソッドを提供
@@ -253,7 +253,7 @@ pub enum SystemException {
 ### 7.2 外部システム連携
 
 - 外部アクセス制御システムとの責任分界
-- D-TPRES内部は純粋な暗号学的処理のみ
+- FORMIX内部は純粋な暗号学的処理のみ
 - 外部検証済み前提でのセキュアな実装
 
 ## 8. 今後の拡張性
@@ -272,7 +272,7 @@ pub enum SystemException {
 
 ## 9. まとめ
 
-D-TPRESのService層は、TERASOLUNAガイドラインに基づきながら、AO環境の特性を考慮した独自の設計を採用しています。
+FORMIXのService層は、TERASOLUNAガイドラインに基づきながら、AO環境の特性を考慮した独自の設計を採用しています。
 
 ### 主要な設計特徴
 
@@ -288,4 +288,4 @@ D-TPRESのService層は、TERASOLUNAガイドラインに基づきながら、AO
    - PRDフェーズ別の処理をWorkflow Serviceで実装
    - Core ServiceとDomain層を直接組み合わせて柔軟性を確保
 
-この設計により、高い再利用性と保守性を実現し、AOプラットフォームの制約下でも効率的なD-TPRES暗号システムを構築できます。
+この設計により、高い再利用性と保守性を実現し、AOプラットフォームの制約下でも効率的なFORMIX暗号システムを構築できます。

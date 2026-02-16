@@ -1,7 +1,7 @@
-# D-TPRES Service層設計案（議論用）
+# FORMIX Service層設計案（議論用）
 
-> **目的**: D-TPRES Service層のアーキテクチャと設計方針を議論・決定するための文書
-> **ベース**: `.claude/ref/clean-arch.md` の設計思想を D-TPRES の特性に適用
+> **目的**: FORMIX Service層のアーキテクチャと設計方針を議論・決定するための文書
+> **ベース**: `.claude/ref/clean-arch.md` の設計思想を FORMIX の特性に適用
 
 ---
 
@@ -21,7 +21,7 @@
 - **Controller**: 入力検証、型変換、レスポンス生成
 - **Service**: ビジネスルール、データ操作、トランザクション管理
 
-### 1.2 D-TPRES特有の考慮事項
+### 1.2 FORMIX特有の考慮事項
 
 #### AOプロセス環境の特性
 - **ステートレス実行**: 各メッセージ処理が独立
@@ -950,7 +950,7 @@ pub fn get_service_container() -> &'static ServiceContainer {
 ### 5.1 例外階層の設計
 
 ```rust
-/// D-TPRES固有の例外階層
+/// FORMIX固有の例外階層
 /// clean-arch.mdのBusinessException/SystemExceptionパターンを適用
 
 /// ビジネス例外 - 業務ルール違反
@@ -1617,7 +1617,7 @@ impl ServiceLogger {
 
 ## まとめ
 
-D-TPRES Service層は、TERASOLUNAガイドラインの設計思想を基に、AOプロセスの特性とTPREワークフローに最適化した設計が必要です。
+FORMIX Service層は、TERASOLUNAガイドラインの設計思想を基に、AOプロセスの特性とTPREワークフローに最適化した設計が必要です。
 
 **推奨アプローチ**:
 - **ハイブリッドService構成**: Core Service + Workflow Service

@@ -1,17 +1,17 @@
 ---
-title: "D-TPRES Domain層アーキテクチャ概要"
+title: "FORMIX Domain層アーキテクチャ概要"
 description: "Entity/Repository interface/Infrastructure層の責務分離と設計指針"
 tags: ["domain-driven-design", "clean-architecture", "ao-native", "prd-compliant"]
 status: "specification"
 created: "2025-06-25"
-author: "D-TPRES Development Team"
+author: "FORMIX Development Team"
 ---
 
-# D-TPRES Domain層アーキテクチャ概要
+# FORMIX Domain層アーキテクチャ概要
 
 ## 1. はじめに
 
-本ドキュメントは、D-TPRES（Deterministic Threshold Proxy Re-Encryption System）のdomain層アーキテクチャ全体像を説明します。Entity/Repository interface/Infrastructure層の明確な責務分離により、保守性と拡張性を両立した設計を実現しています。
+本ドキュメントは、FORMIX（Deterministic Threshold Proxy Re-Encryption System）のdomain層アーキテクチャ全体像を説明します。Entity/Repository interface/Infrastructure層の明確な責務分離により、保守性と拡張性を両立した設計を実現しています。
 
 ## 2. アーキテクチャ概要
 
@@ -775,7 +775,7 @@ async fn load_required_entities(
 
 ## 9. まとめ
 
-D-TPRES domain層は以下の特徴を持つ設計となっています：
+FORMIX domain層は以下の特徴を持つ設計となっています：
 
 1. **明確な責務分離**: Entity/Repository Interface/Implementationの3層構造
 2. **PRD準拠**: Phase 0-5のワークフローを正確に実装

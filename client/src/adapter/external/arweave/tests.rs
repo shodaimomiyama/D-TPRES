@@ -609,11 +609,11 @@ mod integration_tests {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let payload = format!("D-TPRES integration test @ {timestamp}");
+        let payload = format!("FORMIX integration test @ {timestamp}");
         let payload_bytes = payload.as_bytes();
 
         let tags = vec![
-            Tag::new("App-Name", "D-TPRES-Test"),
+            Tag::new("App-Name", "FORMIX-Test"),
             Tag::new("Content-Type", "text/plain"),
             Tag::new("Test-Timestamp", timestamp.to_string()),
         ];

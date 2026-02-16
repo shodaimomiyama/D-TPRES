@@ -2,7 +2,7 @@
 
 ## Overview
 
-D-TPRESクライアントライブラリのAPI DX改善設計。DTpresClientを中心とした新しいアーキテクチャで、AO Process管理、ネットワーク設定、ビルダーパターンによるshare/recover操作を統合する。本ライブラリはRust Crate（`dtpres-client`）として配布する。
+FORMIXクライアントライブラリのAPI DX改善設計。DTpresClientを中心とした新しいアーキテクチャで、AO Process管理、ネットワーク設定、ビルダーパターンによるshare/recover操作を統合する。本ライブラリはRust Crate（`dtpres-client`）として配布する。
 
 ## Steering Document Alignment
 
@@ -89,7 +89,7 @@ graph TD
 
 ### DTpresClient
 
-- **Purpose:** D-TPRESクライアントのメインエントリポイント。AO Process管理とビルダーファクトリを提供
+- **Purpose:** FORMIXクライアントのメインエントリポイント。AO Process管理とビルダーファクトリを提供
 - **Interfaces:**
   ```rust
   impl DTpresClient {
@@ -333,7 +333,7 @@ pub use errors::{ClientError, ShareError, RecoverError};
 name = "dtpres-client"
 version = "0.2.0"
 edition = "2024"
-description = "D-TPRES threshold proxy re-encryption client library"
+description = "FORMIX threshold proxy re-encryption client library"
 license = "MIT OR Apache-2.0"
 
 [dependencies]

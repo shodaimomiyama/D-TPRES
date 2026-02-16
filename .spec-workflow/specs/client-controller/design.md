@@ -2,7 +2,7 @@
 
 ## Overview
 
-本設計書は、D-TPRESクライアントライブラリのController層の設計を定義します。Controller層は Actions層（`share()`, `recover()`）からの生の入力パラメータを受け取り、検証（Validator）とDTO変換（Extractor）を行った後、UseCase層（Workflow Services）に処理を委譲します。
+本設計書は、FORMIXクライアントライブラリのController層の設計を定義します。Controller層は Actions層（`share()`, `recover()`）からの生の入力パラメータを受け取り、検証（Validator）とDTO変換（Extractor）を行った後、UseCase層（Workflow Services）に処理を委譲します。
 
 **アーキテクチャフロー:**
 ```

@@ -1,13 +1,13 @@
 ---
-title: "D-TPRES Repository Implementation詳細設計"
+title: "FORMIX Repository Implementation詳細設計"
 description: "Arweave永続化層の包括的実装設計"
 tags: ["repository-implementation", "arweave", "infrastructure", "persistence-layer"]
 status: "specification"
 created: "2025-06-25"
-author: "D-TPRES Development Team"
+author: "FORMIX Development Team"
 ---
 
-# D-TPRES Repository Implementation詳細設計
+# FORMIX Repository Implementation詳細設計
 
 ## 1. 概要
 
@@ -151,7 +151,7 @@ impl AOMessageContext {
 
 ```rust
 let tags = HashMap::from([
-    ("App-Name", "D-TPRES"),
+    ("App-Name", "FORMIX"),
     ("Entity-Type", "ShareEntity"),
     ("Entity-Id", "share_001"),
     ("Timestamp", "1703001600"),
@@ -692,7 +692,7 @@ where
     ) -> HashMap<String, String> {
         let mut tags = HashMap::new();
         
-        tags.insert("App-Name".to_string(), "D-TPRES".to_string());
+        tags.insert("App-Name".to_string(), "FORMIX".to_string());
         tags.insert("Entity-Type".to_string(), self.entity_type.to_string());
         tags.insert("Entity-Id".to_string(), id.to_string());
         tags.insert("Operation".to_string(), operation.to_string());
@@ -969,7 +969,7 @@ impl IndexManager {
             .map_err(RepositoryError::Serialization)?;
         
         let tags = HashMap::from([
-            ("App-Name".to_string(), "D-TPRES".to_string()),
+            ("App-Name".to_string(), "FORMIX".to_string()),
             ("Type".to_string(), "INDEX_MANIFEST".to_string()),
             ("Timestamp".to_string(), current_timestamp().to_string()),
         ]);
@@ -987,7 +987,7 @@ impl IndexManager {
         entity_id: &str,
     ) -> Result<Option<String>, RepositoryError> {
         let tags = HashMap::from([
-            ("App-Name".to_string(), "D-TPRES".to_string()),
+            ("App-Name".to_string(), "FORMIX".to_string()),
             ("Entity-Id".to_string(), entity_id.to_string()),
         ]);
         
@@ -1319,7 +1319,7 @@ impl Repository<SecretDetailsEntity, String> for SecretDetailsEntityRepositoryIm
 impl SecretDetailsEntityRepository for SecretDetailsEntityRepositoryImpl {
     async fn find_by_secret_id(&self, secret_id: &str) -> Result<Option<SecretDetailsEntity>, Self::Error> {
         let tags = HashMap::from([
-            ("App-Name".to_string(), "D-TPRES".to_string()),
+            ("App-Name".to_string(), "FORMIX".to_string()),
             ("Entity-Type".to_string(), "SecretDetailsEntity".to_string()),
             ("Secret-Id".to_string(), secret_id.to_string()),
         ]);
@@ -1588,7 +1588,7 @@ impl Repository<ProcessEntity, String> for ProcessEntityRepositoryImpl {
 impl ProcessEntityRepository for ProcessEntityRepositoryImpl {
     async fn find_by_name(&self, name: &str) -> Result<Option<ProcessEntity>, Self::Error> {
         let tags = HashMap::from([
-            ("App-Name".to_string(), "D-TPRES".to_string()),
+            ("App-Name".to_string(), "FORMIX".to_string()),
             ("Entity-Type".to_string(), "ProcessEntity".to_string()),
             ("Process-Name".to_string(), name.to_string()),
         ]);
@@ -2384,7 +2384,7 @@ pub struct OperationMetrics {
 // 推奨タグ構造
 let tags = HashMap::from([
     // 必須タグ
-    ("App-Name", "D-TPRES"),
+    ("App-Name", "FORMIX"),
     ("Entity-Type", "ShareEntity"),
     ("Entity-Id", "share_001"),
     ("Operation", "CREATE"),
@@ -2487,7 +2487,7 @@ log::info!("Average response time: {:?}", metrics.avg_duration);
 
 ## 16. まとめ
 
-D-TPRES Repository Implementation層は以下の特徴を持ちます：
+FORMIX Repository Implementation層は以下の特徴を持ちます：
 
 1. **Arweave最適化**: 不変ストレージの特性を活かした設計
 2. **高性能**: 多層キャッシュとクエリ最適化
@@ -2501,7 +2501,7 @@ D-TPRES Repository Implementation層は以下の特徴を持ちます：
    - 効率的なEntityバンドル戦略
    - AOメッセージハンドラーでの最適化されたRepository利用
 
-この実装により、Arweaveの永続性とAOのステートレス実行環境の両方に対応し、D-TPRESの要求する高速かつスケーラブルなデータアクセスを実現します。
+この実装により、Arweaveの永続性とAOのステートレス実行環境の両方に対応し、FORMIXの要求する高速かつスケーラブルなデータアクセスを実現します。
 
 ### 次のステップ
 

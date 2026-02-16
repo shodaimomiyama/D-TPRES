@@ -2,7 +2,7 @@
 
 ## Introduction
 
-本機能は、D-TPRESクライアントライブラリのUseCase層におけるWorkflow Serviceを実装します。Workflow Serviceは、PHASE 1（秘密の分割と初期配布）とPHASE 3（秘密の復元）のビジネスロジックをオーケストレーションし、既存のCore Services（CryptoService、ArweaveStorageService）を組み合わせてエンドツーエンドのワークフローを実現します。
+本機能は、FORMIXクライアントライブラリのUseCase層におけるWorkflow Serviceを実装します。Workflow Serviceは、PHASE 1（秘密の分割と初期配布）とPHASE 3（秘密の復元）のビジネスロジックをオーケストレーションし、既存のCore Services（CryptoService、ArweaveStorageService）を組み合わせてエンドツーエンドのワークフローを実現します。
 
 **対象コンポーネント:**
 - `SecretSharingWorkflowService` - PHASE 1: O-Browser側の秘密分割・暗号化・kFrag生成・保存・送信
@@ -71,7 +71,7 @@ WorkflowService
 - Core Services（`usecase/core/crypto.rs`, `usecase/core/storage.rs`）は実装済み
 - WorkflowServiceはCore Services経由でのみ操作を行い、Repositoryを直接使用しない
 - CryptoServiceにAES-GCM暗号化/復号化メソッド、対称鍵生成メソッドの追加が必要
-- StorageServiceにAO通信メソッドの追加が必要（Issue [#47](https://github.com/shodaimomiyama/D-TPRES/issues/47)）
+- StorageServiceにAO通信メソッドの追加が必要（Issue [#47](https://github.com/shodaimomiyama/FORMIX/issues/47)）
   - `send_kfrag_to_owner_process()` - kFrag送信
   - `retrieve_cfrags_from_requester_process()` - cFrag取得
   - `retrieve_capsule()` - Capsule取得
