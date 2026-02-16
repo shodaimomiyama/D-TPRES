@@ -1,6 +1,6 @@
 //! Domain layer error definitions
 //!
-//! Comprehensive error types for D-TPRES domain operations.
+//! Comprehensive error types for FORMIX domain operations.
 //! All errors follow the principle of explicit error handling without panic.
 
 use std::fmt;

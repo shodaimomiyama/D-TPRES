@@ -10,17 +10,17 @@
 
 use std::sync::Arc;
 
-use d_tpres::adapter::external::mock_ao::MockAOClient;
-use d_tpres::usecase::SecretSharingRequest;
-use d_tpres::usecase::core::contract_storage::ContractStorageImpl;
-use d_tpres::usecase::core::crypto::{
+use formix::adapter::external::mock_ao::MockAOClient;
+use formix::usecase::SecretSharingRequest;
+use formix::usecase::core::contract_storage::ContractStorageImpl;
+use formix::usecase::core::crypto::{
     CryptoService, CryptoServiceImpl as CoreCryptoServiceImpl, ShamirShare,
 };
-use d_tpres::usecase::core::storage::ArweaveStorageServiceImpl;
-use d_tpres::usecase::service::{
+use formix::usecase::core::storage::ArweaveStorageServiceImpl;
+use formix::usecase::service::{
     CryptoServiceImpl as ServiceCryptoServiceImpl, StorageServiceImpl as ServiceStorageServiceImpl,
 };
-use d_tpres::usecase::workflow::{SecretSharingWorkflowService, SecretSharingWorkflowServiceImpl};
+use formix::usecase::workflow::{SecretSharingWorkflowService, SecretSharingWorkflowServiceImpl};
 
 // ============================================================================
 // PHASE 1 → PHASE 3 Roundtrip Tests (Task 22)

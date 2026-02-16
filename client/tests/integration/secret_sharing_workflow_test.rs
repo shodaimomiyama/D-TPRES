@@ -6,15 +6,15 @@
 
 use std::sync::Arc;
 
-use d_tpres::adapter::external::mock_ao::MockAOClient;
-use d_tpres::usecase::core::contract_storage::ContractStorageImpl;
-use d_tpres::usecase::core::crypto::{CryptoService, CryptoServiceImpl as CoreCryptoServiceImpl};
-use d_tpres::usecase::core::storage::ArweaveStorageServiceImpl;
-use d_tpres::usecase::service::{
+use formix::adapter::external::mock_ao::MockAOClient;
+use formix::usecase::core::contract_storage::ContractStorageImpl;
+use formix::usecase::core::crypto::{CryptoService, CryptoServiceImpl as CoreCryptoServiceImpl};
+use formix::usecase::core::storage::ArweaveStorageServiceImpl;
+use formix::usecase::service::{
     CryptoServiceImpl as ServiceCryptoServiceImpl, StorageServiceImpl as ServiceStorageServiceImpl,
 };
-use d_tpres::usecase::workflow::{SecretSharingWorkflowService, SecretSharingWorkflowServiceImpl};
-use d_tpres::usecase::{SecretSharingRequest, WorkflowError};
+use formix::usecase::workflow::{SecretSharingWorkflowService, SecretSharingWorkflowServiceImpl};
+use formix::usecase::{SecretSharingRequest, WorkflowError};
 
 type TestCryptoService = ServiceCryptoServiceImpl<CoreCryptoServiceImpl>;
 type TestStorageService =

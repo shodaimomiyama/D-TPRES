@@ -822,7 +822,7 @@ pub const IDEM_FLAGS: Map<(String, String, String), IdemFlag> =
 
 ## 14.1 概要
 
-D-TPRESにおけるOwner→Holder間のプロセス間通信は、CosmWasm標準の`SubMsg`を使用して実現します。これにより、単一プロセス内でのローカル処理ではなく、真のプロセス間分離が実現されます。
+FORMIXにおけるOwner→Holder間のプロセス間通信は、CosmWasm標準の`SubMsg`を使用して実現します。これにより、単一プロセス内でのローカル処理ではなく、真のプロセス間分離が実現されます。
 
 ## 14.2 必要なインポート
 

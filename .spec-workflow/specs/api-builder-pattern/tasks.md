@@ -30,7 +30,7 @@
   - Implement `share()` returning `ShareBuilder<NotSet, NotSet, NotSet, NotSet, NotSet>`
   - Implement `recover()` returning `RecoverBuilder<NotSet, NotSet>`
   - Implement `generate_keypair()` delegating to CryptoService
-  - Purpose: Main entry point for the D-TPRES client library
+  - Purpose: Main entry point for the FORMIX client library
   - _Leverage: `client/src/actions/mod.rs` (DefaultActionsContainer), `client/src/actions/di.rs` (DI setup), `client/src/adapter/external/ao_client.rs` (AOClient)_
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7_
   - _Prompt: Implement the task for spec api-builder-pattern, first run spec-workflow-guide to get the workflow guide then implement the task: Role: Rust Developer specializing in API design and client libraries | Task: Create DTpresClient in client/src/actions/client.rs. InitConfig has wallet_path (String), ao_gateway_url (Option<String>), arweave_gateway_url (Option<String>). DTpresClient wraps DefaultActionsContainer and stores process_id, wallet_address, gateway URLs. init() loads JWK wallet, auto-detects existing process or spawns new one, returns DTpresClient. share() returns ShareBuilder, recover() returns RecoverBuilder. Reference client/src/actions/di.rs for container creation and client/src/adapter/external/ao_client.rs for AO interactions | Restrictions: Do not break existing DefaultActionsContainer usage. No async/await. JWK wallet loading must be secure. Do not expose internal types | Success: DTpresClient::init() works with valid wallet. share() and recover() return correct builder types. Accessor methods work. `make check` and `make lint` pass | After completing: mark task [-] to [x] in tasks.md, log implementation with log-implementation tool_

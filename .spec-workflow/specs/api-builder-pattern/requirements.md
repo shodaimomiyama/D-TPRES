@@ -2,7 +2,7 @@
 
 ## Introduction
 
-D-TPRESクライアントライブラリのActions層API（init, share, recover）のDeveloper Experience改善。現状の8引数関数をビルダーパターンに置き換え、init関数でAO Process初期化とネットワーク設定を行うことで、開発者がより直感的かつ型安全にAPIを利用できるようにする。本ライブラリはRust Crate（`dtpres-client`）として配布し、`cargo add`で導入可能にする。
+FORMIXクライアントライブラリのActions層API（init, share, recover）のDeveloper Experience改善。現状の8引数関数をビルダーパターンに置き換え、init関数でAO Process初期化とネットワーク設定を行うことで、開発者がより直感的かつ型安全にAPIを利用できるようにする。本ライブラリはRust Crate（`dtpres-client`）として配布し、`cargo add`で導入可能にする。
 
 ## Alignment with Product Vision
 
@@ -15,7 +15,7 @@ D-TPRESクライアントライブラリのActions層API（init, share, recover�
 
 ### Requirement 1: init関数によるクライアント初期化
 
-**User Story:** システム開発者として、D-TPRESクライアントを初期化したい。AO Processの管理とネットワーク設定を簡単に行うために。
+**User Story:** システム開発者として、FORMIXクライアントを初期化したい。AO Processの管理とネットワーク設定を簡単に行うために。
 
 #### Acceptance Criteria
 
@@ -93,7 +93,7 @@ D-TPRESクライアントライブラリのActions層API（init, share, recover�
 
 ### Requirement 7: Rust Crate配布
 
-**User Story:** Rustの開発者として、`cargo add dtpres-client`でD-TPRESクライアントを導入したい。既存のRustプロジェクトに最小限の手順で統合するために。
+**User Story:** Rustの開発者として、`cargo add dtpres-client`でFORMIXクライアントを導入したい。既存のRustプロジェクトに最小限の手順で統合するために。
 
 #### Acceptance Criteria
 

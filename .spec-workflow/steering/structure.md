@@ -2,7 +2,7 @@
 
 ## 概要
 
-D-TPRESは3つの主要コンポーネントで構成される：
+FORMIXは3つの主要コンポーネントで構成される：
 - **client/**: ローカル暗号処理ライブラリ（Rust → WASM）
 - **ao/**: AO Network上のコントラクト（Rust → WASM）
 - **dtpres-sdk/**: 統合SDK（TypeScript、設計中）
@@ -10,7 +10,7 @@ D-TPRESは3つの主要コンポーネントで構成される：
 ## ディレクトリ構造
 
 ```
-D-TPRES/
+FORMIX/
 ├── client/                         # クライアントライブラリ（Rust）
 │   ├── src/
 │   │   ├── lib.rs                  # ライブラリエントリーポイント

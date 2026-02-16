@@ -2,7 +2,7 @@
 
 ## Overview
 
-本設計はD-TPRESクライアントライブラリの`ProductionAOClient`を実装する。既存のAOClient trait（ao-network-communication specで定義済み）を実装し、MU（Messenger Unit）とCU（Compute Unit）のHTTP APIを通じて実際のAO Networkと通信する。
+本設計はFORMIXクライアントライブラリの`ProductionAOClient`を実装する。既存のAOClient trait（ao-network-communication specで定義済み）を実装し、MU（Messenger Unit）とCU（Compute Unit）のHTTP APIを通じて実際のAO Networkと通信する。
 
 **設計目標:**
 - 既存AOClient traitをそのまま実装（MockAOClientとの差し替え互換性）
@@ -605,7 +605,7 @@ async fn test_repository_with_production_client() {
 
 **理由:**
 - bundles-rsのWASM互換性が未確認
-- D-TPRESで必要なDataItem操作は限定的（メッセージ送信のみ）
+- FORMIXで必要なDataItem操作は限定的（メッセージ送信のみ）
 - ANS-104仕様のうちDataItem部分は比較的シンプル
 
 ### Decision 4: CU response parser as private methods

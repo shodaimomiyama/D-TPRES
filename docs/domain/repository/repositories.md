@@ -1,17 +1,17 @@
 ---
-title: "D-TPRES Repository Interface詳細設計"
+title: "FORMIX Repository Interface詳細設計"
 description: "全Repository Interfaceの包括的定義とCRUD操作仕様"
 tags: ["repository-pattern", "interface-design", "crud-operations", "domain-driven-design"]
 status: "specification"
 created: "2025-06-25"
-author: "D-TPRES Development Team"
+author: "FORMIX Development Team"
 ---
 
-# D-TPRES Repository Interface詳細設計
+# FORMIX Repository Interface詳細設計
 
 ## 1. 概要
 
-本ドキュメントは、D-TPRESシステムにおける全てのRepository Interfaceの詳細設計を定義します。Repository InterfaceはEntityのCRUD操作とドメイン特化クエリを抽象化し、永続化詳細から独立したデータアクセス層を提供します。
+本ドキュメントは、FORMIXシステムにおける全てのRepository Interfaceの詳細設計を定義します。Repository InterfaceはEntityのCRUD操作とドメイン特化クエリを抽象化し、永続化詳細から独立したデータアクセス層を提供します。
 
 ## 2. 設計原則
 
@@ -1423,7 +1423,7 @@ async fn test_find_process_by_name() {
 
 ## 14. まとめ
 
-D-TPRES Repository Interface設計は以下の特徴を持ちます：
+FORMIX Repository Interface設計は以下の特徴を持ちます：
 
 1. **CRUD操作特化**: ビジネスロジックを含まない純粋なデータアクセス
 2. **型安全性**: ジェネリクスとtraitによる型安全な設計

@@ -1,4 +1,4 @@
-# D-TPRES Workflow Service層設計
+# FORMIX Workflow Service層設計
 
 ## 1. 概要
 
@@ -48,7 +48,7 @@ graph TB
 
 ### 2.3 プロセス管理のアプローチ
 
-D-TPRESでは、AOのステートレス実行環境に適応するため、ProcessManagementServiceを実装せず、以下のアプローチでプロセス管理を行います：
+FORMIXでは、AOのステートレス実行環境に適応するため、ProcessManagementServiceを実装せず、以下のアプローチでプロセス管理を行います：
 
 1. **Domain層でのビジネスロジック**
    - ProcessEntityがプロセス状態管理のメソッドを提供
@@ -1213,7 +1213,7 @@ async fn test_insufficient_shares_recovery() {
 
 ## 10. まとめ
 
-Workflow Service層は、D-TPRESのビジネスロジックの中核を担う重要な層です。各WorkflowServiceは、PRDで定義されたフェーズに対応し、Core Serviceを適切に組み合わせることで、複雑なビジネスフローを実現します。
+Workflow Service層は、FORMIXのビジネスロジックの中核を担う重要な層です。各WorkflowServiceは、PRDで定義されたフェーズに対応し、Core Serviceを適切に組み合わせることで、複雑なビジネスフローを実現します。
 
 ### 主要な設計ポイント
 

@@ -1,19 +1,19 @@
 ---
-title: "D-TPRESアーキテクチャ分析: DDD、クリーンアーキテクチャ、およびKVS戦略とアクターモデル"
+title: "FORMIXアーキテクチャ分析: DDD、クリーンアーキテクチャ、およびKVS戦略とアクターモデル"
 description: "Arweave/AOアクターベース分散システムの文脈におけるDDD/クリーンアーキテクチャとKVS戦略のアーキテクチャ互換性の包括的分析"
 tags: ["architecture", "ddd", "clean-architecture", "kvs", "actor-model", "distributed-systems"]
 status: "draft"
 created: "2025-06-20"
-author: "D-TPRES Development Team"
+author: "FORMIX Development Team"
 ---
 
-# D-TPRESアーキテクチャ分析: DDD、クリーンアーキテクチャ、およびKVS戦略とアクターモデル
+# FORMIXアーキテクチャ分析: DDD、クリーンアーキテクチャ、およびKVS戦略とアクターモデル
 
 ## 1. エグゼクティブサマリー
 
 ### 1.1 核心的な問い
 
-D-TPRESプロジェクトは現在、**Domain-Driven Design (DDD)** と **Clean Architecture** を設計の基盤としています。同時に、技術的制約とパフォーマンス要件から **Key-Value Store (KVS)** 戦略の採用を決定しました。
+FORMIXプロジェクトは現在、**Domain-Driven Design (DDD)** と **Clean Architecture** を設計の基盤としています。同時に、技術的制約とパフォーマンス要件から **Key-Value Store (KVS)** 戦略の採用を決定しました。
 
 本分析の核心的な問いは：
 - **DDD/Clean Architecture** は **KVS/Actor Model** と相性が良いのか？
@@ -32,7 +32,7 @@ D-TPRESプロジェクトは現在、**Domain-Driven Design (DDD)** と **Clean 
    - Shared State → Process-Local State
    - Synchronous → Asynchronous Communication
 
-3. **D-TPRES特有の優位性**: 暗号プロトコルの性質がActor Modelと完璧に合致
+3. **FORMIX特有の優位性**: 暗号プロトコルの性質がActor Modelと完璧に合致
    - 各プロセスが独立した暗号学的役割
    - メッセージパッシングによる協調
    - 不変性による監査証跡
@@ -49,7 +49,7 @@ D-TPRESプロジェクトは現在、**Domain-Driven Design (DDD)** と **Clean 
 
 ## 2. 基盤分析
 
-### 2.1 D-TPRES現在のアーキテクチャ概要
+### 2.1 FORMIX現在のアーキテクチャ概要
 
 #### Domain-Driven Design要素
 ```rust
@@ -395,11 +395,11 @@ pub struct ShareCountAggregator {
 
 ---
 
-## 4. D-TPRES特有の互換性
+## 4. FORMIX特有の互換性
 
 ### 4.1 暗号プロトコル整合性
 
-D-TPRESの閾値プロキシ再暗号化プロトコルは自然にアクターモデルに適合：
+FORMIXの閾値プロキシ再暗号化プロトコルは自然にアクターモデルに適合：
 
 #### 自然なアクター境界
 ```rust
@@ -728,7 +728,7 @@ pub fn migrate_to_actor(service: OwnerService) -> OwnerProcessActor {
 #### フェーズ3: 完全アクターモデル（週5-6）
 ```rust
 // アクターモデルへの完全移行
-pub struct D-TPRESRuntime {
+pub struct FORMIXRuntime {
     actors: HashMap<ProcessId, Box<dyn DomainActor>>,
     
     pub async fn spawn_actor(&mut self, role: ProcessRole) -> ProcessId {
@@ -830,7 +830,7 @@ pub struct EventDebugger {
 
 **DDD + Clean Architecture + KVS + Actor Model = ✅ 優秀な適合**
 
-この組み合わせはD-TPRESに特に優れている：
+この組み合わせはFORMIXに特に優れている：
 
 1. **自然な整合**: 境界付けられたコンテキストがアクタープロセスにマップ
 2. **クリーンな境界**: アクター分離により強化されたクリーンアーキテクチャ原則
@@ -855,14 +855,14 @@ pub struct EventDebugger {
 
 ### 7.4 最終判断
 
-D-TPRESのDDD/Clean ArchitectureとKVS/Actor Modelの採用は、互換性があるだけでなく、以下を実現する**優れたアーキテクチャ選択**：
+FORMIXのDDD/Clean ArchitectureとKVS/Actor Modelの採用は、互換性があるだけでなく、以下を実現する**優れたアーキテクチャ選択**：
 
 - Arweave/AOプラットフォームの強みを活用
 - アーキテクチャ原則を維持
 - 実装を簡素化
 - スケーラビリティとレジリエンスを向上
 
-Actor-Oriented DDDパターンは、D-TPRESのようなブロックチェーンベースアーキテクチャに完璧に適合する分散システム用の従来DDDの進化を表す。
+Actor-Oriented DDDパターンは、FORMIXのようなブロックチェーンベースアーキテクチャに完璧に適合する分散システム用の従来DDDの進化を表す。
 
 ---
 

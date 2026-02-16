@@ -3,10 +3,10 @@
 ## 1. Overview
 
 **Product Name**
-Deterministic Threshold Proxy Re-Encryption System (D-TPRES)
+Deterministic Threshold Proxy Re-Encryption System (FORMIX)
 
 **Purpose**
-D-TPRES は、Threshold Proxy Re-Encryption（TPRE）とシャミア秘密分散を組み合わせた分散型秘密管理ライブラリです。暗号学的な秘密の分散・再暗号化・復元機能をローカルとオンチェーン環境のみで実行するDecentralized Key ManagementライブラリをOSSとして提供します。
+FORMIX は、Threshold Proxy Re-Encryption（TPRE）とシャミア秘密分散を組み合わせた分散型秘密管理ライブラリです。暗号学的な秘密の分散・再暗号化・復元機能をローカルとオンチェーン環境のみで実行するDecentralized Key ManagementライブラリをOSSとして提供します。
 
 ***分散型閾値暗号の実現***
 k-of-n 閾値スキームを採用し、n個の独立したプロセスのうちk個が協調することで秘密復元を可能にします。単一障害点を完全に排除し、k未満のプロセスでは暗号学的に情報が一切漏洩しない堅牢なセキュリティを提供します。
@@ -76,7 +76,7 @@ Proxy Re-Encryption により、データ所有者の秘密鍵を一切露出す
 
 ### Goal
 
- - Arweave 上に保存された暗号データを、**外部で検証済みのアクセス制御条件**に基づき、再暗号化（Proxy Re-Encryption）を経て復号可能とする D-TPRES（Deterministic Threshold Proxy Re-Encryption System）を構築する。
+ - Arweave 上に保存された暗号データを、**外部で検証済みのアクセス制御条件**に基づき、再暗号化（Proxy Re-Encryption）を経て復号可能とする FORMIX（Deterministic Threshold Proxy Re-Encryption System）を構築する。
 
  - Threshold Proxy Re-Encryption（TPRE） により、復号権限を1アクターに集中させずに、k-of-n の分散アクターによって委譲・復号権限を構成する。
 
@@ -245,7 +245,7 @@ docs/development/services/*に各サービスの詳細設計は記述
 
 ### 8.1 ビルドターゲット分離アプローチ
 
-D-TPRESは単一リポジトリで管理されますが、実行環境に応じて異なるビルドターゲットを持つアーキテクチャを採用します：
+FORMIXは単一リポジトリで管理されますが、実行環境に応じて異なるビルドターゲットを持つアーキテクチャを採用します：
 
 | ディレクトリ | ビルドターゲット | 実行環境 | 役割 |
 |------------|---------------|---------|------|
@@ -255,7 +255,7 @@ D-TPRESは単一リポジトリで管理されますが、実行環境に応じ�
 
 ### 8.2 JavaScript統合SDK (dtpres-sdk/)
 
-dtpres-sdk/ディレクトリは、D-TPRES全体の統合SDKとしての役割を担います：
+dtpres-sdk/ディレクトリは、FORMIX全体の統合SDKとしての役割を担います：
 
 **主要機能:**
 1. **ローカル処理の実行**: local/配下のWASMモジュールを呼び出し、暗号化処理を実行
@@ -280,8 +280,8 @@ const cFrags = await dtpres.ao.message.collectCFrags();
 const secret = await dtpres.local.requester.recoverSecret(cFrags);
 ```
 
-この統合アプローチにより、ブラウザでの暗号処理とAOでの分散処理をシームレスに連携させ、開発者は実装の複雑性を意識することなくD-TPRESを利用できます。
+この統合アプローチにより、ブラウザでの暗号処理とAOでの分散処理をシームレスに連携させ、開発者は実装の複雑性を意識することなくFORMIXを利用できます。
 
 ---
 
-このPRDは、D-TPRESを純粋な暗号学的秘密管理OSSライブラリとして定義し、アクセス制御を外部システムに委譲することで、システムの複雑性を大幅に削減し、実装とテストを簡素化します。開発者はこのライブラリを使用してプロセスのspawnと暗号化処理を統合できます。
+このPRDは、FORMIXを純粋な暗号学的秘密管理OSSライブラリとして定義し、アクセス制御を外部システムに委譲することで、システムの複雑性を大幅に削減し、実装とテストを簡素化します。開発者はこのライブラリを使用してプロセスのspawnと暗号化処理を統合できます。

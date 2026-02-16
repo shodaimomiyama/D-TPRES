@@ -1,15 +1,15 @@
-# D-TPRES Controller層設計案（議論用）
+# FORMIX Controller層設計案（議論用）
 
-> **目的**: D-TPRES Controller層のアーキテクチャと設計方針を議論・決定するための文書
+> **目的**: FORMIX Controller層のアーキテクチャと設計方針を議論・決定するための文書
 > **前提**: Service層設計（`dtpres_service_layer_design.md`）との整合性を保つ
 
 ---
 
 ## 1. Controller層の概要
 
-### 1.1 D-TPRES特有のController層構成
+### 1.1 FORMIX特有のController層構成
 
-D-TPRESにおけるController層は、従来のWebアプリケーションとは異なり、以下の2つの異なる環境で動作します：
+FORMIXにおけるController層は、従来のWebアプリケーションとは異なり、以下の2つの異なる環境で動作します：
 
 1. **AOプロセス環境**: WebAssemblyメッセージハンドラー
 2. **Browser環境**: TypeScript/JavaScript Webアプリケーション
@@ -53,7 +53,7 @@ graph TB
 3. **Service呼び出し**: ビジネスロジックの実行委譲
 4. **レスポンス生成**: 実行結果の適切なフォーマット変換
 
-#### D-TPRES固有の責務
+#### FORMIX固有の責務
 1. **メッセージルーティング**: AOメッセージタグによる処理振り分け
 2. **コンテキスト抽出**: メッセージからの必要情報抽出
 3. **非同期処理調整**: プロセス間メッセージングの管理
@@ -676,7 +676,7 @@ export class OBrowserController {
                     capsule: capsules[i],
                 }),
                 tags: {
-                    'App-Name': 'D-TPRES',
+                    'App-Name': 'FORMIX',
                     'Type': 'Share-Capsule-Pair',
                     'Secret-Id': request.secretId,
                     'Share-Index': (i + 1).toString(),
@@ -2321,7 +2321,7 @@ pub struct UnifiedMessageHandler {
 
 ### 8.2 設計まとめ
 
-D-TPRES Controller層は、従来のWebアプリケーションとは異なり、AOプロセス環境とBrowser環境の2つで動作する特殊な要件を持ちます。
+FORMIX Controller層は、従来のWebアプリケーションとは異なり、AOプロセス環境とBrowser環境の2つで動作する特殊な要件を持ちます。
 
 **核心設計原則**:
 1. **明確な責務分離**: 入力検証、型変換、Service呼び出し、レスポンス生成
@@ -2335,7 +2335,7 @@ D-TPRES Controller層は、従来のWebアプリケーションとは異なり�
 - **戦略パターン**: エラーハンドリングとルーティング
 - **段階的実装**: 基盤→機能→最適化の順序
 
-この設計により、Service層との適切な責務分離を保ちながら、D-TPRES特有の要件に対応したController層を実現できます。
+この設計により、Service層との適切な責務分離を保ちながら、FORMIX特有の要件に対応したController層を実現できます。
 
 ---
 

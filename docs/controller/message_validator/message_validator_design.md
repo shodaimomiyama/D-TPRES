@@ -305,7 +305,7 @@ pub trait ValidatorPlugin {
 
 ### 7.2 ドメイン特化バリデーター
 
-D-TPRES特有の検証：
+FORMIX特有の検証：
 
 ```rust
 pub struct ThresholdCryptoValidator {
@@ -490,7 +490,7 @@ proptest! {
 
 ## 11. まとめ
 
-MessageValidatorは、D-TPRESシステムの安全性と信頼性を支える重要なコンポーネントです：
+MessageValidatorは、FORMIXシステムの安全性と信頼性を支える重要なコンポーネントです：
 
 1. **多層防御**: 構造、ビジネスルール、セキュリティの各層で検証
 2. **高い拡張性**: プラグイン可能なアーキテクチャ

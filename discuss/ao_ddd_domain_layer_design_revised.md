@@ -4,7 +4,7 @@ description: "TERASOLUNAガイドラインに準拠したActor-Oriented Domain-D
 tags: ["ao-ddd", "domain-layer", "terasoluna", "standard-ddd", "arweave-kvs"]
 status: "design-review-revised"
 created: "2025-06-23"
-author: "D-TPRES Development Team"
+author: "FORMIX Development Team"
 reference: "https://terasolunaorg.github.io/guideline/current/ja/ImplementationAtEachLayer/DomainLayer.html"
 ---
 
@@ -1274,7 +1274,7 @@ src/
 
 ---
 
-*本改訂版は、TERASOLUNAガイドラインの標準的DDDアプローチを基盤とし、D-TPRESプロジェクトのActor-Oriented特性を適切に統合した設計です。*
+*本改訂版は、TERASOLUNAガイドラインの標準的DDDアプローチを基盤とし、FORMIXプロジェクトのActor-Oriented特性を適切に統合した設計です。*
 
 **Document Status**: Design Review Ready (Revised Edition)  
 **Compliance**: TERASOLUNA DDD Guidelines  

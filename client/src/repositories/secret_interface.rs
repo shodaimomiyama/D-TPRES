@@ -11,7 +11,7 @@ use super::Repository;
 
 /// Repository interface for Secret entity
 ///
-/// Secret is the aggregate root in D-TPRES, managing references to related entities
+/// Secret is the aggregate root in FORMIX, managing references to related entities
 /// (ShareCollection, Capsule, KFrag). This repository handles Secret persistence
 /// with state transition support (Initialized → Split → Distributed → Recovered).
 #[cfg(not(target_arch = "wasm32"))]

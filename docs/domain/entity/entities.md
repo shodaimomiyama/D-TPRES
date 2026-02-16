@@ -1,17 +1,17 @@
 ---
-title: "D-TPRES Entity詳細設計"
+title: "FORMIX Entity詳細設計"
 description: "全Entityクラスとデータ構造の包括的定義"
 tags: ["entity-design", "data-structures", "prd-compliant", "ao-native"]
 status: "specification"
 created: "2025-06-25"
-author: "D-TPRES Development Team"
+author: "FORMIX Development Team"
 ---
 
-# D-TPRES Entity詳細設計
+# FORMIX Entity詳細設計
 
 ## 1. 概要
 
-本ドキュメントは、D-TPRESシステムにおける全てのEntityクラスの詳細設計を定義します。Entityはデータ保持に特化し、メソッドを持たない純粋なデータ構造として設計されています。
+本ドキュメントは、FORMIXシステムにおける全てのEntityクラスの詳細設計を定義します。Entityはデータ保持に特化し、メソッドを持たない純粋なデータ構造として設計されています。
 
 ## 2. 設計原則
 
@@ -1221,7 +1221,7 @@ fn get_secret_index(process: &ProcessEntity, secret_id: &str) -> Option<&SecretI
 
 ## 12. まとめ
 
-D-TPRESのEntity設計は以下の特徴を持ちます：
+FORMIXのEntity設計は以下の特徴を持ちます：
 
 1. **純粋なデータ構造**: メソッドを持たない
 2. **PRD準拠**: 各PhaseのワークフローをEntityで正確に表現

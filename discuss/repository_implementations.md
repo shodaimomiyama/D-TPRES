@@ -1,19 +1,19 @@
 ---
-title: "D-TPRES Repository Implementation詳細設計"
+title: "FORMIX Repository Implementation詳細設計"
 description: "Arweave永続化層の包括的実装設計"
 tags: ["repository-implementation", "arweave", "infrastructure", "persistence-layer"]
 status: "specification"
 created: "2025-06-25"
-author: "D-TPRES Development Team"
+author: "FORMIX Development Team"
 ---
 
-# D-TPRES Repository Implementation詳細設計
+# FORMIX Repository Implementation詳細設計
 
 ## 1. はじめに：なぜRepository実装層が重要なのか
 
 ### 1.1 背景と課題
 
-D-TPRESシステムは、分散環境（AO Network）上で暗号化された秘密情報を管理します。この環境では：
+FORMIXシステムは、分散環境（AO Network）上で暗号化された秘密情報を管理します。この環境では：
 
 - **状態の永続性問題**：AOプロセスはメッセージ処理ごとに異なるCompute Unit（CU）で実行され、メモリ上の状態は保持されません
 - **データの不変性**：Arweaveは一度書き込んだデータを変更できない「追記専用」のストレージです
@@ -536,7 +536,7 @@ impl AOMessageContext {
 // タグは検索の「インデックス」として機能
 let tags = HashMap::from([
     // アプリ識別（必須）
-    ("App-Name", "D-TPRES"),
+    ("App-Name", "FORMIX"),
     
     // エンティティ識別（検索の基本）
     ("Entity-Type", "ShareEntity"),
@@ -1276,7 +1276,7 @@ let client = ArweaveClientImpl::new(
 // ============================================
 // タグを使って検索可能にする
 let tags = HashMap::from([
-    ("App-Name", "D-TPRES"),
+    ("App-Name", "FORMIX"),
     ("Entity-Type", "ProcessEntity"),
     ("Process-Id", "process_001"),
     ("Created-At", "2024-01-01"),
@@ -1299,7 +1299,7 @@ let entity: ProcessEntity = serde_json::from_slice(&retrieved_data)?;
 // ============================================
 // 特定のプロセスIDを持つ全てのトランザクションを検索
 let search_tags = HashMap::from([
-    ("App-Name", "D-TPRES"),
+    ("App-Name", "FORMIX"),
     ("Process-Id", "process_001"),
 ]);
 let tx_ids = client.query_by_tags(search_tags).await?;
@@ -1676,7 +1676,7 @@ where
         let mut tags = HashMap::new();
         
         // 必須タグ
-        tags.insert("App-Name".to_string(), "D-TPRES".to_string());
+        tags.insert("App-Name".to_string(), "FORMIX".to_string());
         tags.insert("Entity-Type".to_string(), self.entity_type.to_string());
         tags.insert("Entity-Id".to_string(), id.to_string());
         tags.insert("Operation".to_string(), operation.to_string());
@@ -1933,7 +1933,7 @@ impl ProcessEntityRepository for ProcessEntityRepositoryImpl {
     async fn find_by_name(&self, name: &str) -> Result<Option<ProcessEntity>, RepositoryError> {
         // タグを使った効率的な検索
         let tags = HashMap::from([
-            ("App-Name", "D-TPRES"),
+            ("App-Name", "FORMIX"),
             ("Entity-Type", "ProcessEntity"),
             ("Process-Name", name),  // プロセス名タグ
         ]);
@@ -1964,7 +1964,7 @@ impl ProcessEntityRepository for ProcessEntityRepositoryImpl {
         role: &str
     ) -> Result<Vec<ProcessEntity>, RepositoryError> {
         let tags = HashMap::from([
-            ("App-Name", "D-TPRES"),
+            ("App-Name", "FORMIX"),
             ("Entity-Type", "ProcessEntity"),
             ("Active-Role", role),  // ロールタグ
         ]);
@@ -2262,7 +2262,7 @@ impl IndexManager {
             .map_err(RepositoryError::Serialization)?;
         
         let tags = HashMap::from([
-            ("App-Name".to_string(), "D-TPRES".to_string()),
+            ("App-Name".to_string(), "FORMIX".to_string()),
             ("Type".to_string(), "INDEX_MANIFEST".to_string()),
             ("Timestamp".to_string(), current_timestamp().to_string()),
         ]);
@@ -2281,7 +2281,7 @@ impl IndexManager {
         entity_id: &str,
     ) -> Result<Option<String>, RepositoryError> {
         let tags = HashMap::from([
-            ("App-Name".to_string(), "D-TPRES".to_string()),
+            ("App-Name".to_string(), "FORMIX".to_string()),
             ("Entity-Id".to_string(), entity_id.to_string()),
         ]);
         
@@ -2684,7 +2684,7 @@ impl Repository<SecretDetailsEntity, String> for SecretDetailsEntityRepositoryIm
 impl SecretDetailsEntityRepository for SecretDetailsEntityRepositoryImpl {
     async fn find_by_secret_id(&self, secret_id: &str) -> Result<Option<SecretDetailsEntity>, Self::Error> {
         let tags = HashMap::from([
-            ("App-Name".to_string(), "D-TPRES".to_string()),
+            ("App-Name".to_string(), "FORMIX".to_string()),
             ("Entity-Type".to_string(), "SecretDetailsEntity".to_string()),
             ("Secret-Id".to_string(), secret_id.to_string()),
         ]);
@@ -2960,7 +2960,7 @@ impl Repository<ProcessEntity, String> for ProcessEntityRepositoryImpl {
 impl ProcessEntityRepository for ProcessEntityRepositoryImpl {
     async fn find_by_name(&self, name: &str) -> Result<Option<ProcessEntity>, Self::Error> {
         let tags = HashMap::from([
-            ("App-Name".to_string(), "D-TPRES".to_string()),
+            ("App-Name".to_string(), "FORMIX".to_string()),
             ("Entity-Type".to_string(), "ProcessEntity".to_string()),
             ("Process-Name".to_string(), name.to_string()),
         ]);
@@ -3838,7 +3838,7 @@ pub struct OperationMetrics {
 // 推奨タグ構造
 let tags = HashMap::from([
     // 必須タグ
-    ("App-Name", "D-TPRES"),
+    ("App-Name", "FORMIX"),
     ("Entity-Type", "ShareEntity"),
     ("Entity-Id", "share_001"),
     ("Operation", "CREATE"),
@@ -4001,7 +4001,7 @@ impl AuditLogEntityRepositoryImpl {
     /// タグの最適化（検索効率化のため）
     fn create_optimized_tags(entity: &AuditLogEntity) -> HashMap<String, String> {
         HashMap::from([
-            ("App-Name", "D-TPRES"),
+            ("App-Name", "FORMIX"),
             ("Entity-Type", "AuditLogEntity"),
             ("Log-Id", &entity.log_id),
             ("Actor-Id", &entity.actor_id),
@@ -4242,7 +4242,7 @@ impl RepositoryMetrics {
 
 ## 17. まとめ
 
-D-TPRES Repository実装層は、Arweaveの不変ストレージ特性とAOのステートレス実行環境に最適化された永続化層を提供します。
+FORMIX Repository実装層は、Arweaveの不変ストレージ特性とAOのステートレス実行環境に最適化された永続化層を提供します。
 
 ### 主な特徴
 
@@ -4258,7 +4258,7 @@ D-TPRES Repository実装層は、Arweaveの不変ストレージ特性とAOの�
    - 効率的なEntityバンドル戦略
    - AOメッセージハンドラーでの最適化されたRepository利用
 
-この実装により、Arweaveの永続性とAOのステートレス実行環境の両方に対応し、D-TPRESの要求する高速かつスケーラブルなデータアクセスを実現します。
+この実装により、Arweaveの永続性とAOのステートレス実行環境の両方に対応し、FORMIXの要求する高速かつスケーラブルなデータアクセスを実現します。
 
 ### 次のステップ
 

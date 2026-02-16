@@ -2,7 +2,7 @@
 
 ## Introduction
 
-このドキュメントは、D-TPRESクライアントライブラリ（`client/`）のAdapter層におけるRepository実装の要件を定義します。Repository層で定義されたRepository Interface（`SecretRepository`, `ShareCollectionRepository`, `CapsuleRepository`, `KFragRepository`, `CFragRepository`）を実装します。
+このドキュメントは、FORMIXクライアントライブラリ（`client/`）のAdapter層におけるRepository実装の要件を定義します。Repository層で定義されたRepository Interface（`SecretRepository`, `ShareCollectionRepository`, `CapsuleRepository`, `KFragRepository`, `CFragRepository`）を実装します。
 
 この実装により、クライアントライブラリのドメインエンティティ（Secret, ShareCollection, Capsule, KFrag, CFrag）の永続化が可能になり、Phase 1（秘密分割）とPhase 3（秘密復元）の処理においてデータの保存・取得ができるようになります。
 

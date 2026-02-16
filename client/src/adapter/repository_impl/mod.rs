@@ -38,7 +38,7 @@ impl Tag {
     }
 }
 
-/// Common tag names for D-TPRES entities
+/// Common tag names for FORMIX entities
 pub mod tag_names {
     /// Application name tag
     pub const APP_NAME: &str = "App-Name";
@@ -62,10 +62,10 @@ pub mod tag_names {
     pub const HOLDER_INDEX: &str = "Holder-Index";
 }
 
-/// Common tag values for D-TPRES
+/// Common tag values for FORMIX
 pub mod tag_values {
     /// Application name value
-    pub const APP_NAME: &str = "D-TPRES";
+    pub const APP_NAME: &str = "FORMIX";
 
     /// Entity type: Secret
     pub const ENTITY_SECRET: &str = "Secret";

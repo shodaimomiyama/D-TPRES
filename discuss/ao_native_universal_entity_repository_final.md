@@ -4,7 +4,7 @@ description: "PRD準拠の普遍的Entity/Repository設計 - データ保持とC
 tags: ["ao-native", "entity-design", "repository-pattern", "universal-design", "prd-compliant"]
 status: "design-specification-final"
 created: "2025-06-24"
-author: "D-TPRES Development Team"
+author: "FORMIX Development Team"
 reference: "PRD.md Phase 0-5 Workflow Compliant"
 ---
 
@@ -969,7 +969,7 @@ where
     /// ストレージ用タグ作成
     fn create_storage_tags(&self, id: &ID) -> HashMap<String, String> {
         let mut tags = HashMap::new();
-        tags.insert("App-Name".to_string(), "D-TPRES".to_string());
+        tags.insert("App-Name".to_string(), "FORMIX".to_string());
         tags.insert("Entity-Type".to_string(), self.entity_type.to_string());
         tags.insert("Entity-Id".to_string(), id.to_string());
         tags.insert("Timestamp".to_string(), 
@@ -984,7 +984,7 @@ where
     /// クエリ用タグ作成
     fn create_query_tags(&self, id: &ID) -> HashMap<String, String> {
         let mut tags = HashMap::new();
-        tags.insert("App-Name".to_string(), "D-TPRES".to_string());
+        tags.insert("App-Name".to_string(), "FORMIX".to_string());
         tags.insert("Entity-Type".to_string(), self.entity_type.to_string());
         tags.insert("Entity-Id".to_string(), id.to_string());
         tags

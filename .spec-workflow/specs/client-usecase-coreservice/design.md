@@ -2,7 +2,7 @@
 
 ## Overview
 
-D-TPRESクライアントライブラリのUseCase層にCoreService群を実装する。CoreServiceは複数のUseCaseService（SecretSharingService、SecretRecoveryService等）から呼び出される共通業務ロジックを提供し、tech.mdで定義された2つのサービスで構成される：
+FORMIXクライアントライブラリのUseCase層にCoreService群を実装する。CoreServiceは複数のUseCaseService（SecretSharingService、SecretRecoveryService等）から呼び出される共通業務ロジックを提供し、tech.mdで定義された2つのサービスで構成される：
 
 1. **CryptoService**: TPRE・Shamir・AES-GCM操作（純粋な暗号ロジック）
 2. **StorageService**: Arweave操作（永続化ビジネスロジック）

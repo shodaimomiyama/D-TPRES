@@ -1,13 +1,13 @@
 ---
-title: "D-TPRES 普遍的Entity/Repository設計概観"
+title: "FORMIX 普遍的Entity/Repository設計概観"
 description: "各プロセスが共通で持つEntityクラスとRepository設計（データ操作に特化）"
 tags: ["entity", "repository", "universal-design", "data-layer"]
 status: "design-specification"
 created: "2025-06-23"
-author: "D-TPRES Development Team"
+author: "FORMIX Development Team"
 ---
 
-# D-TPRES 普遍的Entity/Repository設計概観
+# FORMIX 普遍的Entity/Repository設計概観
 
 ## 1. 設計方針
 

@@ -1,10 +1,10 @@
-# D-TPRES KVストレージ ER図
+# FORMIX KVストレージ ER図
 
-D-TPRESシステムにおける各プロセス（Owner/Holder/Requester）が管理するKVストレージ構造のEntity-Relationship図です。
+FORMIXシステムにおける各プロセス（Owner/Holder/Requester）が管理するKVストレージ構造のEntity-Relationship図です。
 
 ## 概要
 
-D-TPRESシステムは3つの独立したAO Networkプロセスで構成され、それぞれが独自のKVストレージを持ちます：
+FORMIXシステムは3つの独立したAO Networkプロセスで構成され、それぞれが独自のKVストレージを持ちます：
 
 - **Owner-Process**: kFragの生成・配布管理
 - **Holder-Process**: kFragの保管・cFrag生成
@@ -16,7 +16,7 @@ D-TPRESシステムは3つの独立したAO Networkプロセスで構成され�
 
 ### イベントソーシング状態管理
 
-D-TPRESシステムは**AO Computer**上で動作するため、従来のデータベースとは根本的に異なる状態管理を採用しています：
+FORMIXシステムは**AO Computer**上で動作するため、従来のデータベースとは根本的に異なる状態管理を採用しています：
 
 **🔄 Holographic State：メッセージログからの状態暗示**
 
@@ -25,7 +25,7 @@ D-TPRESシステムは**AO Computer**上で動作するため、従来のデー�
 2. **状態はメッセージログから暗黙的に導出される**（Holographic State）
 3. CUが必要時に競争的に状態を解決・計算する
 
-### D-TPRES実装 vs AO Computer一般概念の区別
+### FORMIX実装 vs AO Computer一般概念の区別
 
 **📋 AO Computer一般アーキテクチャ（プラットフォーム基盤）**
 - **Holographic State**: すべてのAO Computerプロセスに共通の状態管理概念
@@ -33,11 +33,11 @@ D-TPRESシステムは**AO Computer**上で動作するため、従来のデー�
 - **MU/SU/CU**: AO Computerインフラストラクチャの共通コンポーネント
 - **Deterministic Execution**: WebAssemblyによる再現可能な実行環境
 
-**🎯 D-TPRES固有実装（アプリケーション層）**
-- **CosmWasm Framework**: D-TPRESが使用する具体的なスマートコントラクトフレームワーク
+**🎯 FORMIX固有実装（アプリケーション層）**
+- **CosmWasm Framework**: FORMIXが使用する具体的なスマートコントラクトフレームワーク
 - **Threshold Cryptography**: umbral-preライブラリによる閾値暗号実装
-- **kFrag/cFrag**: D-TPRES固有の暗号学的データ構造
-- **Owner/Holder/Requester**: D-TPRES固有のプロセス役割分担
+- **kFrag/cFrag**: FORMIX固有の暗号学的データ構造
+- **Owner/Holder/Requester**: FORMIX固有のプロセス役割分担
 
 ```mermaid
 graph TB
@@ -48,7 +48,7 @@ graph TB
         IN[Infrastructure: MU/SU/CU]
     end
 
-    subgraph "D-TPRES Application（固有実装）"
+    subgraph "FORMIX Application（固有実装）"
         CW[CosmWasm Framework]
         TC[Threshold Cryptography]
         PR[Process Roles: O/H/R]
@@ -68,8 +68,8 @@ graph TB
 
 **💡 重要な理解ポイント**：
 - **AO Computer = プラットフォーム**: Holographic Stateなどの汎用概念を提供
-- **D-TPRES = アプリケーション**: AO Computer上で動作する特定の暗号学的システム
-- **CosmWasm = 実装ツール**: D-TPRESがAO Computerの概念を具体化する手段
+- **FORMIX = アプリケーション**: AO Computer上で動作する特定の暗号学的システム
+- **CosmWasm = 実装ツール**: FORMIXがAO Computerの概念を具体化する手段
 - **deps.storage = 抽象インターフェース**: Holographic Stateへのアクセスを簡素化
 
 **📋 AO Computerのアーキテクチャ要素**
@@ -163,7 +163,7 @@ graph TB
 
 ### 具体例：空メモリからの段階的KV再現
 
-D-TPRESプロセスでのOwner-ProcessのkFrag管理を例に説明します：
+FORMIXプロセスでのOwner-ProcessのkFrag管理を例に説明します：
 
 **シナリオ**: Owner-ProcessがkFragを生成・配布する過程
 
@@ -271,12 +271,12 @@ sequenceDiagram
     Note over CU1,CU2: CUは結果を「保存」せず、次回も再計算
 ```
 
-**🔧 D-TPRES具体実装：CosmWasmによるHolographic State利用**
+**🔧 FORMIX具体実装：CosmWasmによるHolographic State利用**
 
-D-TPRESでは、AO ComputerのHolographic State概念をCosmWasmフレームワークで具体的に実装しています。CUが計算したプロセス状態は、CosmWasmの`deps.storage`抽象インターフェースを通じて透過的にアクセス可能です：
+FORMIXでは、AO ComputerのHolographic State概念をCosmWasmフレームワークで具体的に実装しています。CUが計算したプロセス状態は、CosmWasmの`deps.storage`抽象インターフェースを通じて透過的にアクセス可能です：
 
 ```rust
-// D-TPRES Owner-Processでの実際の利用例
+// FORMIX Owner-Processでの実際の利用例
 pub fn execute_check_distribution_status(
     deps: DepsMut,
     env: Env,
@@ -326,7 +326,7 @@ fn get_distributed_count(deps: &DepsMut) -> StdResult<u32> {
 - `deps.storage.load()`: CUが計算したHolographic Stateから値を取得（CosmWasm抽象化）
 - `deps.storage.save()`: 次回のHolographic State計算で利用される新状態を記録（CosmWasm抽象化）
 - **AO層**: 状態は「保存」されるのではなく「メッセージログから再計算される」
-- **アプリ層**: D-TPRESロジックは普通のRustコードのように書ける（AO再現の複雑さはCosmWasmが隠蔽）
+- **アプリ層**: FORMIXロジックは普通のRustコードのように書ける（AO再現の複雑さはCosmWasmが隠蔽）
 
 ### ステートレス実行制約
 
@@ -378,7 +378,7 @@ graph LR
     end
 ```
 
-**📝 D-TPRES実装での重要ポイント**
+**📝 FORMIX実装での重要ポイント**
 - **AO抽象化**: `deps.storage`はCUが計算したHolographic Stateへの透過的アクセス（CosmWasmによる抽象化）
 - **メモリ非永続化**: 静的変数やグローバル変数は使用不可（AO Computer制約）
 - **原子的処理**: 各メッセージ処理は完結した状態変更を含む（Actor Model準拠）
@@ -397,7 +397,7 @@ AO環境では、プロセスから**直接Arweaveにアクセスできません
 
 ```mermaid
 graph TB
-    subgraph "D-TPRES Process"
+    subgraph "FORMIX Process"
         KV[KVストレージ]
         REF[参照データ]
         META[メタデータ]
@@ -969,4 +969,4 @@ pub const REQUESTER_METADATA: Item<RequesterMetadata> = Item::new("requester_met
 
 ---
 
-このER図により、D-TPRESシステムの複雑なデータ構造と、AO Network上での分散プロセス間の関係性が明確に可視化されます。
+このER図により、FORMIXシステムの複雑なデータ構造と、AO Network上での分散プロセス間の関係性が明確に可視化されます。

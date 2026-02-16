@@ -2,7 +2,7 @@
 
 ## Introduction
 
-ProductionAOClientは、D-TPRESクライアントライブラリ（`client/`）がAO Network上のOwner-ProcessおよびRequester-Processと**実際のHTTP通信**を行うための本番用AOClient実装を提供する。既存のMockAOClient（Issue #47、ao-network-communication spec）で定義されたAOClient traitを実装し、MU（Messenger Unit）およびCU（Compute Unit）のHTTP APIを通じて実際のAOプロセスとメッセージを送受信する。
+ProductionAOClientは、FORMIXクライアントライブラリ（`client/`）がAO Network上のOwner-ProcessおよびRequester-Processと**実際のHTTP通信**を行うための本番用AOClient実装を提供する。既存のMockAOClient（Issue #47、ao-network-communication spec）で定義されたAOClient traitを実装し、MU（Messenger Unit）およびCU（Compute Unit）のHTTP APIを通じて実際のAOプロセスとメッセージを送受信する。
 
 **通信対象プロセス:**
 - **Owner-Process**: clientからkFrag委譲メッセージ（DelegateKFrag）とCapsule委譲メッセージ（DelegateCapsule）を送信

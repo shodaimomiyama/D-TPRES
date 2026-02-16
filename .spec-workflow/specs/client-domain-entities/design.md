@@ -2,7 +2,7 @@
 
 ## Overview
 
-D-TPRESクライアントライブラリのDomain層を、steering docsで定義された5エンティティ + Value Objects構造で再設計・実装する。現状の実装（process.rs, access_request.rs等）は無視し、PRDのフェーズ構造とsteering/structure.mdに準拠した新しい設計を適用する。
+FORMIXクライアントライブラリのDomain層を、steering docsで定義された5エンティティ + Value Objects構造で再設計・実装する。現状の実装（process.rs, access_request.rs等）は無視し、PRDのフェーズ構造とsteering/structure.mdに準拠した新しい設計を適用する。
 
 **対象ディレクトリ:** `client/src/domain/entities/`
 

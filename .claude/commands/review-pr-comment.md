@@ -74,7 +74,7 @@ Read and check against these project rule sources:
 - `.claude/rules/rules-rust-test/` (all files)
 - `docs/` directory (relevant spec documents)
 
-### 4.4 D-TPRES Specific Checks (if applicable)
+### 4.4 FORMIX Specific Checks (if applicable)
 Only apply when the comment relates to these areas:
 - **Memory safety for secrets** (CLAUDE.md §7.1): Zeroize/ZeroizeOnDrop usage, no Clone for secrets
 - **Constant-time operations** (CLAUDE.md §7.2): subtle crate usage, no secret-dependent branching

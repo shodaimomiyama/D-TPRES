@@ -21,7 +21,7 @@ From steering documents:
 
 ### US-1: WASM Build Success
 
-**As a** developer building the D-TPRES client library
+**As a** developer building the FORMIX client library
 **I want** `cargo check --target wasm32-unknown-unknown` to succeed
 **So that** the client can be compiled and used in browser environments
 
@@ -98,5 +98,5 @@ Conditional compilation should be clear and well-documented to aid future mainte
 
 ## References
 
-- PR #48: https://github.com/shodaimomiyama/D-TPRES/pull/48
+- PR #48: https://github.com/shodaimomiyama/FORMIX/pull/48
 - reqwest WASM support: https://docs.rs/reqwest/

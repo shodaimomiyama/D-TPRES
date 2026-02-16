@@ -1,4 +1,4 @@
-# D-TPRES コントラクト アーキテクチャドキュメント
+# FORMIX コントラクト アーキテクチャドキュメント
 
 ## プロジェクト構造
 
@@ -435,7 +435,7 @@ impl OwnerProcessFacade {
 
 ### 1. AO Network プロセス間メッセージング
 
-D-TPRESシステムでは、Owner、Holder、RequesterがそれぞれAO Network上の独立したプロセスとして動作し、メッセージパッシングによって連携します。
+FORMIXシステムでは、Owner、Holder、RequesterがそれぞれAO Network上の独立したプロセスとして動作し、メッセージパッシングによって連携します。
 
 #### 1.1 プロセス初期化とレジストリ構築
 
@@ -644,4 +644,4 @@ pub fn get_current_timestamp(env: &cosmwasm_std::Env) -> String {
 
 ---
 
-この統一アーキテクチャにより、D-TPRESシステムは**シンプル**、**効率的**、**セキュア**、**保守可能**な閾値代理再暗号化システムとして、AO Network上で最適化された性能を発揮します。
+この統一アーキテクチャにより、FORMIXシステムは**シンプル**、**効率的**、**セキュア**、**保守可能**な閾値代理再暗号化システムとして、AO Network上で最適化された性能を発揮します。
