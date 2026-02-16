@@ -26,17 +26,16 @@ Basic rules should be applied to the entire project.
 ### Example (Import Path Resolution)
 
 ```rust:src/usecase/*.rs
-// OK Example 
+// OK Example
 use anyhow::Result;
-use ethers_core::types::U256;
 use std::collections::HashMap;
 use std::sync::Arc;
+use umbral_pre::{SecretKey, PublicKey};
 
 use crate::domain::{
-    adapter::queue::QueueAdapter,
-    entity::order::{Order, OrderBatch, OrderDTO},
-    repository::order::OrderRepository,
-    value::token_pair::TokenPair,
+    entities::{ProcessEntity, ShareEntity},
+    repositories::ProcessEntityRepository,
+    value_objects::{ProcessId, ProcessRole},
 };
 ```
 
