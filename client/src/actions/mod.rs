@@ -47,6 +47,7 @@
 //! let recovered = container.recover(
 //!     &result.secret_id.as_str(),
 //!     requester_sk,
+//!     owner_pk,
 //!     "requester_process_456".to_string(),
 //!     None,
 //! ).await?;
