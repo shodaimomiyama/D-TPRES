@@ -270,3 +270,12 @@ Project documentation is available in the `docs/` directory:
 - `docs/status.md` - Current implementation status
 - `docs/architecture/` - System architecture and design philosophy
 - `docs/operations/` - Testing and workflow documentation
+- `docs/client/` - クライアントライブラリのレイヤー別リファレンス
+  - `domain.md` - エンティティ、値オブジェクト、エラー型
+  - `repositories.md` - リポジトリインターフェース（DIP）
+  - `usecase.md` - Core / Service / Workflow サービス
+  - `controller.md` - バリデーター、エクストラクター
+  - `actions.md` - ActionsContainer、ビルダー、DTpresClient
+  - `adapter.md` - Arweaveリポジトリ、AOクライアント、外部連携
+- `docs/contracts/` - AOスマートコントラクトリファレンス
+  - `contracts_overview.md` - メッセージ、状態、ハンドラー、再暗号化フロー
