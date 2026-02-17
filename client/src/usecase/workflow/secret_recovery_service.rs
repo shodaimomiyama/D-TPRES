@@ -88,9 +88,7 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
         }
 
         if request.owner_public_key.key_data.is_empty() {
-            return Err(WorkflowError::validation(
-                "Owner public key is required",
-            ));
+            return Err(WorkflowError::validation("Owner public key is required"));
         }
 
         Ok(())
