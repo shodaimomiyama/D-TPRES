@@ -23,7 +23,7 @@ const MESSAGE_TYPE: &str = "Message";
 const SDK: &str = "ao";
 
 /// Tag attached to a DataItem (name-value pair)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataItemTag {
     pub name: String,
     pub value: String,
