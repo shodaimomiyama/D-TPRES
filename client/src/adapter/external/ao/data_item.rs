@@ -23,7 +23,7 @@ const MESSAGE_TYPE: &str = "Message";
 const SDK: &str = "ao";
 
 /// Tag attached to a DataItem (name-value pair)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataItemTag {
     pub name: String,
     pub value: String,
@@ -126,6 +126,7 @@ impl DataItemBuilder {
         match msg {
             QueryMsg::GetCFrag { .. } => "GetCFrag".to_string(),
             QueryMsg::ListCapsulesByKFrag { .. } => "ListCapsulesByKFrag".to_string(),
+            QueryMsg::GetCFragsBySecret { .. } => "GetCFragsBySecret".to_string(),
         }
     }
 
@@ -479,12 +480,15 @@ impl DataItemSigner {
         }
 
         let mut buf = Vec::new();
+        #[allow(clippy::cast_possible_wrap)]
         Self::avro_encode_long(&mut buf, tags.len() as i64);
         for tag in tags {
             let name_bytes = tag.name.as_bytes();
             let value_bytes = tag.value.as_bytes();
+            #[allow(clippy::cast_possible_wrap)]
             Self::avro_encode_long(&mut buf, name_bytes.len() as i64);
             buf.extend_from_slice(name_bytes);
+            #[allow(clippy::cast_possible_wrap)]
             Self::avro_encode_long(&mut buf, value_bytes.len() as i64);
             buf.extend_from_slice(value_bytes);
         }
@@ -493,6 +497,7 @@ impl DataItemSigner {
     }
 
     fn avro_encode_long(buf: &mut Vec<u8>, val: i64) {
+        #[allow(clippy::cast_sign_loss)]
         let mut v = ((val << 1) ^ (val >> 63)) as u64;
         loop {
             if v & !0x7F == 0 {
@@ -610,6 +615,7 @@ mod tests {
         assert!(body["Data"].is_string());
     }
 
+    #[allow(clippy::many_single_char_names)]
     fn test_jwk() -> ArweaveJWK {
         use rand::rngs::OsRng;
         use rsa::RsaPrivateKey;

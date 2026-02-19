@@ -5,8 +5,13 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
+
 use crate::domain::value_objects::SecretId;
-use crate::usecase::core::crypto::{CFragData, Capsule, SecretKey, ShamirShare};
+use crate::usecase::core::crypto::{
+    CFragData, Capsule, CapsulePayload, PublicKey, SecretKey, ShamirShare,
+};
+use crate::usecase::core::storage::{QueryParams, Tag};
 use crate::usecase::dto::{SecretRecoveryRequest, SecretRecoveryResult};
 use crate::usecase::error::{WorkflowError, WorkflowResult};
 use crate::usecase::service::{CryptoService, StorageService};
@@ -19,6 +24,7 @@ use crate::usecase::service::{CryptoService, StorageService};
 ///
 /// Defines the contract for secret recovery operations that orchestrate
 /// CryptoService and StorageService to retrieve, decrypt, and reconstruct secrets.
+#[async_trait]
 pub trait SecretRecoveryWorkflowService: Send + Sync {
     /// Execute the complete Phase 3 secret recovery workflow
     ///
@@ -31,40 +37,17 @@ pub trait SecretRecoveryWorkflowService: Send + Sync {
     /// 6. Decrypt each share with AES-GCM using kₒ
     /// 7. Reconstruct secret using Shamir Secret Sharing
     /// 8. Record audit trail on Arweave
-    ///
-    /// # Arguments
-    /// * `request` - SecretRecoveryRequest containing secret_id and requester credentials
-    ///
-    /// # Returns
-    /// * `WorkflowResult<SecretRecoveryResult>` - Result containing recovered secret
-    ///
-    /// # Errors
-    /// * `WorkflowError::ValidationError` - Invalid input parameters
-    /// * `WorkflowError::ResourceNotFound` - Secret or cFrags not found
-    /// * `WorkflowError::InsufficientCFrags` - Not enough cFrags for threshold
-    /// * `WorkflowError::CryptoError` - Cryptographic operation failed
-    /// * `WorkflowError::DecryptionError` - Decryption failed at specific phase
-    /// * `WorkflowError::StorageError` - Arweave retrieval failed
-    /// * `WorkflowError::AOCommunicationError` - AO Network communication failed
-    fn execute_secret_recovery(
+    async fn execute_secret_recovery(
         &self,
         request: SecretRecoveryRequest,
     ) -> WorkflowResult<SecretRecoveryResult>;
 
-    /// Check if a secret can be recovered
-    ///
-    /// # Arguments
-    /// * `secret_id` - The ID of the secret to check
-    /// * `requester_process_id` - The requester's process ID
-    ///
-    /// # Returns
-    /// * `WorkflowResult<bool>` - True if enough cFrags are available
-    ///
-    /// # Errors
-    /// * `WorkflowError::ResourceNotFound` - Secret not found
-    /// * `WorkflowError::AOCommunicationError` - AO Network communication failed
-    fn can_recover(&self, secret_id: &SecretId, requester_process_id: &str)
-    -> WorkflowResult<bool>;
+    /// Check if a secret can be recovered (enough cFrags available)
+    async fn can_recover(
+        &self,
+        secret_id: &SecretId,
+        requester_process_id: &str,
+    ) -> WorkflowResult<bool>;
 }
 
 // ============================================================================
@@ -77,7 +60,6 @@ pub trait SecretRecoveryWorkflowService: Send + Sync {
 /// the complete Phase 3 secret recovery workflow.
 pub struct SecretRecoveryWorkflowServiceImpl<C: CryptoService, ST: StorageService> {
     crypto_service: Arc<C>,
-    #[allow(dead_code)]
     storage_service: Arc<ST>,
 }
 
@@ -93,62 +75,99 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
 
     /// Validate input parameters for secret recovery
     fn validate_request(&self, request: &SecretRecoveryRequest) -> WorkflowResult<()> {
-        // Validate requester secret key
         if request.requester_secret_key.is_empty() {
             return Err(WorkflowError::validation(
                 "Requester secret key is required",
             ));
         }
 
-        // Validate requester process ID
         if request.requester_process_id.is_empty() {
             return Err(WorkflowError::validation(
                 "Requester process ID is required",
             ));
         }
 
+        if request.owner_public_key.key_data.is_empty() {
+            return Err(WorkflowError::validation("Owner public key is required"));
+        }
+
         Ok(())
     }
 
-    /// Retrieve cFrags from AO Network
-    /// TODO: Implement when StorageService AO methods are available (Issue #47)
-    fn retrieve_cfrags(
+    /// Retrieve cFrags from AO Network via StorageService
+    async fn retrieve_cfrags(
         &self,
-        _secret_id: &SecretId,
-        _requester_process_id: &str,
+        secret_id: &SecretId,
+        requester_process_id: &str,
     ) -> WorkflowResult<Vec<CFragData>> {
-        // Placeholder: Will fetch cFrags from Requester-Process via AO
-        // For now, return ResourceNotFound as storage is not implemented
-        Err(WorkflowError::not_found(
-            "cFrag retrieval not yet implemented (Issue #47)",
+        self.storage_service
+            .retrieve_cfrags(secret_id.as_str(), requester_process_id)
+            .await
+            .map_err(WorkflowError::from)
+    }
+
+    /// Retrieve Capsule, ciphertext, verifying_pk, and threshold from Arweave
+    fn retrieve_capsule_with_metadata(
+        &self,
+        secret_id: &SecretId,
+    ) -> WorkflowResult<(Capsule, Vec<u8>, Vec<u8>, u8)> {
+        // Phase 1 stores exactly one capsule per secret_id (UUID v4), so limit=1
+        // with no sort is safe. See CapsuleRepository.find_by_secret_id -> Option<Capsule>.
+        let params = QueryParams {
+            tags: vec![
+                Tag {
+                    name: "type".to_string(),
+                    value: "capsule".to_string(),
+                },
+                Tag {
+                    name: "secret_id".to_string(),
+                    value: secret_id.as_str().to_string(),
+                },
+            ],
+            limit: Some(1),
+            sort_by: None,
+        };
+
+        let transactions = self
+            .storage_service
+            .query_by_tags(params)
+            .map_err(WorkflowError::from)?;
+
+        let tx = transactions.into_iter().next().ok_or_else(|| {
+            WorkflowError::not_found(format!("Capsule not found for secret {secret_id}"))
+        })?;
+
+        let threshold_k = tx
+            .tags
+            .iter()
+            .find(|t| t.name == "threshold_k")
+            .ok_or_else(|| {
+                WorkflowError::not_found("threshold_k tag missing from capsule transaction")
+            })?
+            .value
+            .parse::<u8>()
+            .map_err(|e| WorkflowError::validation(format!("Invalid threshold_k value: {e}")))?;
+
+        let payload: CapsulePayload = bincode::deserialize(&tx.data)
+            .map_err(|_| WorkflowError::crypto("Failed to deserialize CapsulePayload"))?;
+
+        let capsule = Capsule {
+            capsule_bytes: payload.capsule_bytes,
+        };
+
+        Ok((
+            capsule,
+            payload.ciphertext,
+            payload.verifying_pk,
+            threshold_k,
         ))
     }
 
-    /// Retrieve Capsule from Arweave
-    /// TODO: Implement when StorageService is available (Issue #47)
-    fn retrieve_capsule(&self, _secret_id: &SecretId) -> WorkflowResult<Capsule> {
-        // Placeholder: Will fetch Capsule from Arweave using capsule_tx_id
-        Err(WorkflowError::not_found(
-            "Capsule retrieval not yet implemented (Issue #47)",
-        ))
-    }
-
-    /// Retrieve encrypted shares from Arweave
-    /// TODO: Implement when StorageService is available (Issue #47)
-    fn retrieve_encrypted_shares(&self, _secret_id: &SecretId) -> WorkflowResult<Vec<Vec<u8>>> {
-        // Placeholder: Will fetch encrypted shares from Arweave
-        Err(WorkflowError::not_found(
-            "Encrypted shares retrieval not yet implemented (Issue #47)",
-        ))
-    }
-
-    /// Retrieve threshold parameters for the secret
-    /// TODO: Implement when StorageService is available (Issue #47)
-    fn retrieve_threshold(&self, _secret_id: &SecretId) -> WorkflowResult<u8> {
-        // Placeholder: Will fetch threshold from secret metadata
-        Err(WorkflowError::not_found(
-            "Threshold retrieval not yet implemented (Issue #47)",
-        ))
+    /// Retrieve encrypted shares from Arweave via StorageService
+    fn retrieve_encrypted_shares(&self, secret_id: &SecretId) -> WorkflowResult<Vec<Vec<u8>>> {
+        self.storage_service
+            .retrieve_encrypted_shares(secret_id.as_str())
+            .map_err(WorkflowError::from)
     }
 
     /// Verify threshold requirement is met
@@ -169,9 +188,19 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
         capsule: &Capsule,
         cfrags: &[CFragData],
         requester_secret_key: &SecretKey,
+        owner_public_key: &PublicKey,
+        ciphertext: &[u8],
+        verifying_pk: &[u8],
     ) -> WorkflowResult<Vec<u8>> {
         self.crypto_service
-            .decrypt_pre_capsule(capsule, cfrags, requester_secret_key)
+            .decrypt_pre_capsule(
+                capsule,
+                cfrags,
+                requester_secret_key,
+                owner_public_key,
+                ciphertext,
+                verifying_pk,
+            )
             .map_err(|e| WorkflowError::DecryptionError {
                 phase: format!("PRE decapsulation: {e}"),
             })
@@ -220,24 +249,22 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
             })
     }
 
-    /// Record audit trail on Arweave
-    /// TODO: Implement when StorageService is available (Issue #47)
+    /// Record audit trail on Arweave (placeholder)
     fn record_audit_trail(
         &self,
         _secret_id: &SecretId,
         _requester_process_id: &str,
     ) -> WorkflowResult<String> {
-        // Placeholder: Will record recovery event on Arweave
-        // For now, return a placeholder transaction ID
         Ok("audit_not_implemented".to_string())
     }
 }
 
 #[allow(clippy::cast_possible_truncation)]
+#[async_trait]
 impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
     for SecretRecoveryWorkflowServiceImpl<C, ST>
 {
-    fn execute_secret_recovery(
+    async fn execute_secret_recovery(
         &self,
         request: SecretRecoveryRequest,
     ) -> WorkflowResult<SecretRecoveryResult> {
@@ -245,19 +272,27 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
         self.validate_request(&request)?;
 
         // Step 1: Retrieve cFrags from Requester-Process via AO
-        let cfrags = self.retrieve_cfrags(&request.secret_id, &request.requester_process_id)?;
+        let cfrags = self
+            .retrieve_cfrags(&request.secret_id, &request.requester_process_id)
+            .await?;
 
-        // Step 2: Retrieve Capsule and encrypted shares from Arweave
-        let capsule = self.retrieve_capsule(&request.secret_id)?;
+        // Step 2: Retrieve CapsulePayload (capsule + ciphertext + verifying_pk) from Arweave
+        let (capsule, ciphertext, verifying_pk, threshold) =
+            self.retrieve_capsule_with_metadata(&request.secret_id)?;
+
+        // Step 3: Retrieve encrypted shares and verify threshold
         let encrypted_shares = self.retrieve_encrypted_shares(&request.secret_id)?;
-
-        // Step 3: Retrieve threshold and verify
-        let threshold = self.retrieve_threshold(&request.secret_id)?;
         self.verify_threshold(&cfrags, threshold)?;
 
-        // Step 4-5: Decrypt Capsule and recover symmetric key
-        let symmetric_key =
-            self.decrypt_capsule(&capsule, &cfrags, &request.requester_secret_key)?;
+        // Step 4-5: Decrypt Capsule using PRE and recover symmetric key
+        let symmetric_key = self.decrypt_capsule(
+            &capsule,
+            &cfrags,
+            &request.requester_secret_key,
+            &request.owner_public_key,
+            &ciphertext,
+            &verifying_pk,
+        )?;
 
         // Step 6: Decrypt each share with AES-GCM
         let decrypted_shares = self.decrypt_shares(&encrypted_shares, &symmetric_key)?;
@@ -275,16 +310,17 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
         })
     }
 
-    fn can_recover(
+    async fn can_recover(
         &self,
         secret_id: &SecretId,
         requester_process_id: &str,
     ) -> WorkflowResult<bool> {
-        // Retrieve threshold required
-        let threshold = self.retrieve_threshold(secret_id)?;
+        let (_, _, _, threshold) = self.retrieve_capsule_with_metadata(secret_id)?;
 
         // Retrieve available cFrags
-        let cfrags = self.retrieve_cfrags(secret_id, requester_process_id)?;
+        let cfrags = self
+            .retrieve_cfrags(secret_id, requester_process_id)
+            .await?;
 
         // Check if we have enough
         Ok(cfrags.len() as u8 >= threshold)
@@ -301,12 +337,13 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
 )]
 mod tests {
     use super::*;
+    use crate::adapter::external::ao::{Binary, CFragEntry};
     use crate::adapter::external::mock_ao::MockAOClient;
     use crate::usecase::core::contract_storage::ContractStorageImpl;
     use crate::usecase::core::crypto::{
         CryptoService as CoreCryptoService, CryptoServiceImpl as CoreCryptoServiceImpl,
     };
-    use crate::usecase::core::storage::ArweaveStorageServiceImpl;
+    use crate::usecase::core::storage::{ArweaveStorageService, ArweaveStorageServiceImpl};
     use crate::usecase::service::{
         CryptoServiceImpl as ServiceCryptoServiceImpl,
         StorageServiceImpl as ServiceStorageServiceImpl,
@@ -331,10 +368,12 @@ mod tests {
 
     fn create_test_request(crypto: &CoreCryptoServiceImpl) -> SecretRecoveryRequest {
         let (requester_sk, _requester_pk) = crypto.generate_keypair().unwrap();
+        let (_, owner_pk) = crypto.generate_keypair().unwrap();
 
         SecretRecoveryRequest {
             secret_id: SecretId::generate(),
             requester_secret_key: requester_sk,
+            owner_public_key: owner_pk,
             requester_process_id: "requester-process-123".to_string(),
         }
     }
@@ -346,6 +385,28 @@ mod tests {
                 holder_id: format!("holder-{}", i),
             })
             .collect()
+    }
+
+    struct TestComponents {
+        arweave: Arc<ArweaveStorageServiceImpl>,
+        mock_ao: Arc<MockAOClient>,
+    }
+
+    fn create_test_service_with_components() -> (
+        SecretRecoveryWorkflowServiceImpl<TestCryptoService, TestStorageService>,
+        TestComponents,
+    ) {
+        let core_crypto = Arc::new(CoreCryptoServiceImpl::new());
+        let crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
+        let mock_ao = Arc::new(MockAOClient::new());
+        let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+        let contract = Arc::new(ContractStorageImpl::new(Arc::clone(&mock_ao)));
+        let storage = Arc::new(ServiceStorageServiceImpl::new(
+            Arc::clone(&arweave),
+            contract,
+        ));
+        let service = SecretRecoveryWorkflowServiceImpl::new(crypto, storage);
+        (service, TestComponents { arweave, mock_ao })
     }
 
     // ========================================================================
@@ -439,76 +500,78 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_phase3_resource_not_found_cfrags() {
-        println!("\n=== test_phase3_resource_not_found_cfrags ===");
+    #[tokio::test]
+    async fn test_phase3_retrieve_cfrags_empty_when_no_data() {
+        println!("\n=== test_phase3_retrieve_cfrags_empty_when_no_data ===");
         let service = create_test_service();
         let secret_id = SecretId::generate();
         println!("  Retrieving cFrags for secret_id: {}", secret_id);
 
-        let result = service.retrieve_cfrags(&secret_id, "requester-123");
+        let result = service.retrieve_cfrags(&secret_id, "requester-123").await;
         println!("  Result: {:?}", result);
-        assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
-        println!("  [PASS] ResourceNotFound returned (storage not implemented)");
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+        println!("  [PASS] Empty cFrags returned when no data set");
     }
 
-    #[test]
-    fn test_phase3_resource_not_found_capsule() {
+    #[tokio::test]
+    async fn test_phase3_resource_not_found_capsule() {
         println!("\n=== test_phase3_resource_not_found_capsule ===");
         let service = create_test_service();
         let secret_id = SecretId::generate();
         println!("  Retrieving capsule for secret_id: {}", secret_id);
 
-        let result = service.retrieve_capsule(&secret_id);
+        let result = service.retrieve_capsule_with_metadata(&secret_id);
         println!("  Result: {:?}", result);
         assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
-        println!("  [PASS] ResourceNotFound returned (storage not implemented)");
+        println!("  [PASS] ResourceNotFound returned (no capsule in Arweave)");
     }
 
     #[test]
-    fn test_phase3_resource_not_found_encrypted_shares() {
-        println!("\n=== test_phase3_resource_not_found_encrypted_shares ===");
+    fn test_phase3_retrieve_encrypted_shares_empty_when_no_data() {
+        println!("\n=== test_phase3_retrieve_encrypted_shares_empty_when_no_data ===");
         let service = create_test_service();
         let secret_id = SecretId::generate();
         println!("  Retrieving encrypted shares for secret_id: {}", secret_id);
 
         let result = service.retrieve_encrypted_shares(&secret_id);
         println!("  Result: {:?}", result);
-        assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
-        println!("  [PASS] ResourceNotFound returned (storage not implemented)");
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+        println!("  [PASS] Empty shares returned when no data stored");
     }
 
     // ========================================================================
     // Workflow Tests (Task 18)
     // ========================================================================
 
-    #[test]
-    fn test_execute_recovery_storage_not_implemented() {
-        println!("\n=== test_execute_recovery_storage_not_implemented ===");
+    #[tokio::test]
+    async fn test_execute_recovery_fails_at_capsule_retrieval() {
+        println!("\n=== test_execute_recovery_fails_at_capsule_retrieval ===");
         let service = create_test_service();
         let crypto = CoreCryptoServiceImpl::new();
         let request = create_test_request(&crypto);
-        println!("  Executing PHASE 3 recovery (should fail - storage not implemented)...");
+        println!("  Executing PHASE 3 recovery (should fail at capsule retrieval)...");
 
-        // Should fail at cFrag retrieval since storage is not implemented
-        let result = service.execute_secret_recovery(request);
+        let result = service.execute_secret_recovery(request).await;
         println!("  Result: {:?}", result);
         assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
-        println!("  [PASS] Correctly failed at storage retrieval");
+        println!("  [PASS] Correctly failed at capsule retrieval");
     }
 
-    #[test]
-    fn test_can_recover_storage_not_implemented() {
-        println!("\n=== test_can_recover_storage_not_implemented ===");
+    #[tokio::test]
+    async fn test_can_recover_fails_at_capsule_retrieval() {
+        println!("\n=== test_can_recover_fails_at_capsule_retrieval ===");
         let service = create_test_service();
         let secret_id = SecretId::generate();
         println!("  Checking can_recover for secret_id: {}", secret_id);
 
-        // Should fail because storage is not implemented
-        let result = service.can_recover(&secret_id, "requester-process-123");
+        let result = service
+            .can_recover(&secret_id, "requester-process-123")
+            .await;
         println!("  Result: {:?}", result);
         assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
-        println!("  [PASS] Correctly failed at storage retrieval");
+        println!("  [PASS] Correctly failed at capsule retrieval");
     }
 
     #[test]
@@ -780,81 +843,67 @@ mod tests {
         println!("  [PASS] Decryption error message format correct");
     }
 
-    #[test]
-    fn test_phase3_ao_retrieval_error() {
-        println!("\n=== test_phase3_ao_retrieval_error ===");
+    #[tokio::test]
+    async fn test_phase3_ao_retrieval_returns_empty_when_no_data() {
+        println!("\n=== test_phase3_ao_retrieval_returns_empty_when_no_data ===");
         let service = create_test_service();
         let secret_id = SecretId::generate();
-        println!("  Testing AO retrieval error for secret_id: {}", secret_id);
+        println!("  Testing AO retrieval for secret_id: {}", secret_id);
 
-        // This tests that cFrag retrieval returns proper error
-        let result = service.retrieve_cfrags(&secret_id, "requester-123");
+        let result = service.retrieve_cfrags(&secret_id, "requester-123").await;
         println!("  Result: {:?}", result);
-        assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
-
-        if let Err(WorkflowError::ResourceNotFound(msg)) = result {
-            assert!(msg.contains("not yet implemented") || msg.contains("Issue #47"));
-            println!("  [PASS] AO retrieval returns proper error: {}", msg);
-        }
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+        println!("  [PASS] AO retrieval returns empty Vec when no data set");
     }
 
-    #[test]
-    fn test_phase3_storage_retrieval_error() {
-        println!("\n=== test_phase3_storage_retrieval_error ===");
+    #[tokio::test]
+    async fn test_phase3_storage_retrieval_behavior() {
+        println!("\n=== test_phase3_storage_retrieval_behavior ===");
         let service = create_test_service();
         let secret_id = SecretId::generate();
-        println!(
-            "  Testing storage retrieval errors for secret_id: {}",
-            secret_id
-        );
+        println!("  Testing storage retrieval for secret_id: {}", secret_id);
 
-        // Test capsule retrieval error
+        // Capsule retrieval returns ResourceNotFound (no matching transaction)
         println!("  Testing capsule retrieval...");
-        let result = service.retrieve_capsule(&secret_id);
+        let result = service.retrieve_capsule_with_metadata(&secret_id);
         println!("  Result: {:?}", result);
         assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
 
-        // Test encrypted shares retrieval error
+        // Encrypted shares retrieval returns empty vec (no matching transactions)
         println!("  Testing encrypted shares retrieval...");
         let result = service.retrieve_encrypted_shares(&secret_id);
         println!("  Result: {:?}", result);
-        assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
-
-        // Test threshold retrieval error
-        println!("  Testing threshold retrieval...");
-        let result = service.retrieve_threshold(&secret_id);
-        println!("  Result: {:?}", result);
-        assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
-        println!("  [PASS] All storage retrieval errors handled correctly");
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
+        println!("  [PASS] Storage retrieval behavior correct");
     }
 
-    #[test]
-    fn test_workflow_fails_at_first_storage_operation() {
-        println!("\n=== test_workflow_fails_at_first_storage_operation ===");
+    #[tokio::test]
+    async fn test_workflow_fails_at_capsule_retrieval() {
+        println!("\n=== test_workflow_fails_at_capsule_retrieval ===");
         let service = create_test_service();
         let crypto = CoreCryptoServiceImpl::new();
         let request = create_test_request(&crypto);
-        println!("  Executing workflow (should fail at first storage operation)...");
+        println!("  Executing workflow (should fail at capsule retrieval)...");
 
-        // execute_secret_recovery should fail at the first storage operation (cFrag retrieval)
-        let result = service.execute_secret_recovery(request);
+        let result = service.execute_secret_recovery(request).await;
         println!("  Result: {:?}", result);
         assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
-        println!("  [PASS] Workflow correctly fails at first storage operation");
+        println!("  [PASS] Workflow correctly fails at capsule retrieval");
     }
 
-    #[test]
-    fn test_can_recover_fails_at_threshold_retrieval() {
-        println!("\n=== test_can_recover_fails_at_threshold_retrieval ===");
+    #[tokio::test]
+    async fn test_can_recover_fails_when_no_capsule() {
+        println!("\n=== test_can_recover_fails_when_no_capsule ===");
         let service = create_test_service();
         let secret_id = SecretId::generate();
         println!("  Calling can_recover for secret_id: {}", secret_id);
 
-        // can_recover first tries to get threshold, which fails
-        let result = service.can_recover(&secret_id, "requester-123");
+        let result = service.can_recover(&secret_id, "requester-123").await;
         println!("  Result: {:?}", result);
         assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
-        println!("  [PASS] can_recover fails at threshold retrieval");
+        println!("  [PASS] can_recover fails when no capsule in Arweave");
     }
 
     // ========================================================================
@@ -893,5 +942,153 @@ mod tests {
         assert_eq!(cloned.cfrag_data, cfrag.cfrag_data);
         assert_eq!(cloned.holder_id, cfrag.holder_id);
         println!("  [PASS] CFragData clone works correctly");
+    }
+
+    // ========================================================================
+    // Integration Tests (Step 7.3)
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_retrieve_capsule_with_metadata_success() {
+        let (service, components) = create_test_service_with_components();
+        let secret_id = SecretId::new("test-secret-abc");
+        let capsule_data = vec![10, 20, 30, 40, 50];
+        let ciphertext_data = vec![60, 70, 80];
+        let verifying_pk_data = vec![90, 100, 110];
+
+        let payload = CapsulePayload {
+            capsule_bytes: capsule_data.clone(),
+            ciphertext: ciphertext_data.clone(),
+            verifying_pk: verifying_pk_data.clone(),
+        };
+        let payload_bytes = bincode::serialize(&payload).unwrap();
+
+        components
+            .arweave
+            .store_data(
+                &payload_bytes,
+                vec![
+                    Tag {
+                        name: "type".to_string(),
+                        value: "capsule".to_string(),
+                    },
+                    Tag {
+                        name: "secret_id".to_string(),
+                        value: secret_id.as_str().to_string(),
+                    },
+                    Tag {
+                        name: "threshold_k".to_string(),
+                        value: "3".to_string(),
+                    },
+                    Tag {
+                        name: "threshold_n".to_string(),
+                        value: "5".to_string(),
+                    },
+                ],
+            )
+            .unwrap();
+
+        let result = service.retrieve_capsule_with_metadata(&secret_id);
+        assert!(result.is_ok());
+
+        let (capsule, ciphertext, verifying_pk, threshold_k) = result.unwrap();
+        assert_eq!(capsule.capsule_bytes, capsule_data);
+        assert_eq!(ciphertext, ciphertext_data);
+        assert_eq!(verifying_pk, verifying_pk_data);
+        assert_eq!(threshold_k, 3);
+    }
+
+    #[tokio::test]
+    async fn test_retrieve_capsule_missing_threshold_tag() {
+        let (service, components) = create_test_service_with_components();
+        let secret_id = SecretId::new("test-secret-def");
+        let capsule_data = vec![10, 20, 30];
+
+        components
+            .arweave
+            .store_data(
+                &capsule_data,
+                vec![
+                    Tag {
+                        name: "type".to_string(),
+                        value: "capsule".to_string(),
+                    },
+                    Tag {
+                        name: "secret_id".to_string(),
+                        value: secret_id.as_str().to_string(),
+                    },
+                ],
+            )
+            .unwrap();
+
+        let result = service.retrieve_capsule_with_metadata(&secret_id);
+        assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_retrieve_cfrags_from_ao() {
+        let (service, components) = create_test_service_with_components();
+        let secret_id = SecretId::new("test-secret-ghi");
+        let process_id = "requester-process-456";
+
+        let test_cfrags = vec![
+            CFragEntry {
+                cfrag_data: Binary::new(vec![1, 2, 3]),
+                holder_id: "holder-1".to_string(),
+            },
+            CFragEntry {
+                cfrag_data: Binary::new(vec![4, 5, 6]),
+                holder_id: "holder-2".to_string(),
+            },
+        ];
+
+        components
+            .mock_ao
+            .set_cfrags_for_secret(process_id, secret_id.as_str(), test_cfrags);
+
+        let result = service.retrieve_cfrags(&secret_id, process_id).await;
+        assert!(result.is_ok());
+
+        let cfrags = result.unwrap();
+        assert_eq!(cfrags.len(), 2);
+        assert_eq!(cfrags[0].cfrag_data, vec![1, 2, 3]);
+        assert_eq!(cfrags[0].holder_id, "holder-1");
+        assert_eq!(cfrags[1].cfrag_data, vec![4, 5, 6]);
+        assert_eq!(cfrags[1].holder_id, "holder-2");
+    }
+
+    #[tokio::test]
+    async fn test_retrieve_encrypted_shares_sorted() {
+        let (service, components) = create_test_service_with_components();
+        let secret_id = SecretId::new("test-secret-jkl");
+
+        for i in 0..3u8 {
+            components
+                .arweave
+                .store_data(
+                    &[100 + i; 16],
+                    vec![
+                        Tag {
+                            name: "type".to_string(),
+                            value: "encrypted_share".to_string(),
+                        },
+                        Tag {
+                            name: "secret_id".to_string(),
+                            value: secret_id.as_str().to_string(),
+                        },
+                        Tag {
+                            name: "index".to_string(),
+                            value: i.to_string(),
+                        },
+                    ],
+                )
+                .unwrap();
+        }
+
+        let result = service.retrieve_encrypted_shares(&secret_id);
+        assert!(result.is_ok());
+
+        let shares = result.unwrap();
+        assert_eq!(shares.len(), 3);
     }
 }

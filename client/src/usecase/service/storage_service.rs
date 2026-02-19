@@ -9,9 +9,10 @@ use async_trait::async_trait;
 
 use crate::service::error::ServiceResult;
 use crate::usecase::core::contract_storage::ContractStorage;
-use crate::usecase::core::crypto::KeyFragment;
+use crate::usecase::core::crypto::{CFragData, KeyFragment};
 use crate::usecase::core::storage::{
-    ArweaveStorageService, ArweaveTransaction, BatchResult, QueryParams, Tag, TransactionStatus,
+    ArweaveStorageService, ArweaveTransaction, BatchResult, QueryParams, SortBy, SortOrder, Tag,
+    TransactionStatus,
 };
 
 /// Service-layer StorageService trait combining Arweave and Contract operations
@@ -37,11 +38,11 @@ pub trait StorageService: Send + Sync {
 
     async fn retrieve_cfrags(
         &self,
-        capsule_id: &str,
-        contract_id: &str,
-    ) -> ServiceResult<Vec<Vec<u8>>>;
+        secret_id: &str,
+        requester_process_id: &str,
+    ) -> ServiceResult<Vec<CFragData>>;
 
-    async fn retrieve_threshold(&self, contract_id: &str) -> ServiceResult<u8>;
+    fn retrieve_encrypted_shares(&self, secret_id: &str) -> ServiceResult<Vec<Vec<u8>>>;
 }
 
 /// StorageService implementation composing Arweave + Contract sub-services
@@ -102,13 +103,31 @@ impl<S: ArweaveStorageService, CT: ContractStorage> StorageService for StorageSe
 
     async fn retrieve_cfrags(
         &self,
-        capsule_id: &str,
-        contract_id: &str,
-    ) -> ServiceResult<Vec<Vec<u8>>> {
-        self.contract.retrieve_cfrags(capsule_id, contract_id).await
+        secret_id: &str,
+        requester_process_id: &str,
+    ) -> ServiceResult<Vec<CFragData>> {
+        self.contract
+            .retrieve_cfrags(secret_id, requester_process_id)
+            .await
     }
 
-    async fn retrieve_threshold(&self, contract_id: &str) -> ServiceResult<u8> {
-        self.contract.retrieve_threshold(contract_id).await
+    fn retrieve_encrypted_shares(&self, secret_id: &str) -> ServiceResult<Vec<Vec<u8>>> {
+        let params = QueryParams {
+            tags: vec![
+                Tag {
+                    name: "type".to_string(),
+                    value: "encrypted_share".to_string(),
+                },
+                Tag {
+                    name: "secret_id".to_string(),
+                    value: secret_id.to_string(),
+                },
+            ],
+            limit: None,
+            sort_by: Some(SortBy::Id(SortOrder::Ascending)),
+        };
+
+        let transactions = self.arweave.query_by_tags(params)?;
+        Ok(transactions.into_iter().map(|tx| tx.data).collect())
     }
 }

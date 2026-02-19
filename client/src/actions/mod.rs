@@ -41,15 +41,16 @@
 //!     requester_pk,
 //!     "owner_process_123".to_string(),
 //!     None,
-//! )?;
+//! ).await?;
 //!
 //! // Recover the secret
 //! let recovered = container.recover(
 //!     &result.secret_id.as_str(),
 //!     requester_sk,
+//!     owner_pk,
 //!     "requester_process_456".to_string(),
 //!     None,
-//! )?;
+//! ).await?;
 //! ```
 
 pub mod builder;
@@ -59,7 +60,7 @@ pub mod error;
 pub mod options;
 
 pub use builder::{NotSet, RecoverBuilder, Set, ShareBuilder};
-pub use client::{DTpresClient, InitConfig};
+pub use client::{FormixClient, InitConfig};
 pub use di::{ActionsContainer, DefaultActionsContainer};
 pub use error::{ActionError, ActionResult};
 pub use options::{RecoverOptions, ShareOptions};
@@ -107,10 +108,10 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
     ///     owner_sk, owner_pk, requester_pk,
     ///     "owner_process".to_string(),
     ///     None,
-    /// )?;
+    /// ).await?;
     /// println!("Secret ID: {}", result.secret_id);
     /// ```
-    #[deprecated(since = "0.2.0", note = "use DTpresClient::share() builder instead")]
+    #[deprecated(since = "0.2.0", note = "use FormixClient::share() builder instead")]
     #[allow(clippy::too_many_arguments)]
     pub async fn share(
         &self,
@@ -171,6 +172,7 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
     /// # Arguments
     /// * `secret_id` - ID of the secret to recover
     /// * `requester_secret_key` - Requester's secret key for PRE decryption
+    /// * `owner_public_key` - Owner's public key (delegating_pk) for PRE decapsulation
     /// * `requester_process_id` - Requester-Process ID for AO communication
     /// * `options` - Optional parameters (reserved for future use)
     ///
@@ -183,23 +185,12 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
     /// # Security
     /// The `recovered_secret` field in the result implements Zeroize trait
     /// and will be automatically cleared from memory when dropped.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// let result = container.recover(
-    ///     "secret_abc123",
-    ///     requester_sk,
-    ///     "requester_process".to_string(),
-    ///     None,
-    /// )?;
-    /// // Use result.recovered_secret
-    /// // Memory is cleared when result goes out of scope
-    /// ```
-    #[deprecated(since = "0.2.0", note = "use DTpresClient::recover() builder instead")]
-    pub fn recover(
+    #[deprecated(since = "0.2.0", note = "use FormixClient::recover() builder instead")]
+    pub async fn recover(
         &self,
         secret_id: &str,
         requester_secret_key: SecretKey,
+        owner_public_key: PublicKey,
         requester_process_id: String,
         _options: Option<RecoverOptions>,
     ) -> ActionResult<SecretRecoveryResult> {
@@ -207,6 +198,7 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
         self.controller().recover_validator().validate(
             secret_id,
             &requester_secret_key,
+            &owner_public_key,
             &requester_process_id,
         )?;
 
@@ -215,6 +207,7 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
         let request = self.controller().recover_extractor().extract(
             secret_id_value,
             requester_secret_key,
+            owner_public_key,
             requester_process_id,
         );
 
@@ -222,7 +215,8 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
         let result = self
             .workflow_services()
             .secret_recovery_service()
-            .execute_secret_recovery(request)?;
+            .execute_secret_recovery(request)
+            .await?;
 
         Ok(result)
     }
@@ -493,12 +487,21 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_recover_empty_secret_id() {
+    #[tokio::test]
+    async fn test_recover_empty_secret_id() {
         let container = DefaultActionsContainer::new();
         let (requester_sk, _) = container.generate_keypair().unwrap();
+        let (_, owner_pk) = container.generate_keypair().unwrap();
 
-        let result = container.recover("", requester_sk, "requester_process".to_string(), None);
+        let result = container
+            .recover(
+                "",
+                requester_sk,
+                owner_pk,
+                "requester_process".to_string(),
+                None,
+            )
+            .await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -509,12 +512,21 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_recover_empty_process_id() {
+    #[tokio::test]
+    async fn test_recover_empty_process_id() {
         let container = DefaultActionsContainer::new();
         let (requester_sk, _) = container.generate_keypair().unwrap();
+        let (_, owner_pk) = container.generate_keypair().unwrap();
 
-        let result = container.recover("test_secret_id", requester_sk, String::new(), None);
+        let result = container
+            .recover(
+                "test_secret_id",
+                requester_sk,
+                owner_pk,
+                String::new(),
+                None,
+            )
+            .await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -525,19 +537,22 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_recover_nonexistent_secret() {
+    #[tokio::test]
+    async fn test_recover_nonexistent_secret() {
         let container = DefaultActionsContainer::new();
         let (requester_sk, _) = container.generate_keypair().unwrap();
+        let (_, owner_pk) = container.generate_keypair().unwrap();
 
-        let result = container.recover(
-            "nonexistent_secret_id",
-            requester_sk,
-            "requester_process".to_string(),
-            None,
-        );
+        let result = container
+            .recover(
+                "nonexistent_secret_id",
+                requester_sk,
+                owner_pk,
+                "requester_process".to_string(),
+                None,
+            )
+            .await;
 
-        // Should fail with ResourceNotFound since storage is not implemented
         assert!(result.is_err());
         match result.unwrap_err() {
             ActionError::ResourceNotFound { .. } | ActionError::WorkflowFailed { .. } => {

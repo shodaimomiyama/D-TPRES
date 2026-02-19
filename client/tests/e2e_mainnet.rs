@@ -9,7 +9,12 @@
 //!
 //! Run: cargo test --test e2e_mainnet -- --ignored --nocapture --test-threads=1
 
-#![allow(clippy::unwrap_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic
+)]
 
 use serde::{Deserialize, Serialize};
 

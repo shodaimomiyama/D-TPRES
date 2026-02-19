@@ -2,18 +2,18 @@
 
 use std::sync::Arc;
 
-use formix::actions::{ActionError, DTpresClient, InitConfig};
+use formix::actions::{ActionError, FormixClient, InitConfig};
 use formix::adapter::external::mock_ao::MockAOClient;
 use formix::domain::value_objects::SecretId;
 use formix::usecase::core::contract_storage::ContractStorageImpl;
 use formix::usecase::core::storage::ArweaveStorageServiceImpl;
 use formix::usecase::dto::SecretMetadata;
 
-fn default_client() -> DTpresClient {
+fn default_client() -> FormixClient {
     let mock_ao = Arc::new(MockAOClient::new());
     let arweave = Arc::new(ArweaveStorageServiceImpl::default());
     let contract = Arc::new(ContractStorageImpl::new(mock_ao));
-    DTpresClient::with_storage(
+    FormixClient::with_storage(
         "test_process".to_string(),
         "test_wallet".to_string(),
         "https://ao.arweave.net".to_string(),
@@ -24,12 +24,12 @@ fn default_client() -> DTpresClient {
 }
 
 // ============================================================================
-// DTpresClient initialization
+// FormixClient initialization
 // ============================================================================
 
 #[test]
 fn test_client_init_not_yet_implemented() {
-    let result = DTpresClient::init(InitConfig {
+    let result = FormixClient::init(InitConfig {
         wallet_path: "test_wallet.json".to_string(),
         ao_gateway_url: None,
         arweave_gateway_url: None,
@@ -238,17 +238,20 @@ async fn test_share_multiple_unique_ids() {
 // RecoverBuilder fluent API
 // ============================================================================
 
-#[test]
-fn test_recover_nonexistent_secret() {
+#[tokio::test]
+async fn test_recover_nonexistent_secret() {
     let client = default_client();
     let (requester_sk, _) = client.generate_keypair().unwrap();
+    let (_, owner_pk) = client.generate_keypair().unwrap();
     let fake_id = SecretId::new("nonexistent_secret_id");
 
     let result = client
         .recover()
         .secret_id(&fake_id)
         .requester_key(requester_sk)
-        .execute();
+        .owner_key(owner_pk)
+        .execute()
+        .await;
 
     assert!(result.is_err());
     match result.unwrap_err() {
@@ -260,19 +263,21 @@ fn test_recover_nonexistent_secret() {
     }
 }
 
-#[test]
-fn test_recover_builder_order_independence() {
+#[tokio::test]
+async fn test_recover_builder_order_independence() {
     let client = default_client();
     let (requester_sk, _) = client.generate_keypair().unwrap();
+    let (_, owner_pk) = client.generate_keypair().unwrap();
     let fake_id = SecretId::new("some_secret");
 
     let result = client
         .recover()
         .requester_key(requester_sk)
+        .owner_key(owner_pk)
         .secret_id(&fake_id)
-        .execute();
+        .execute()
+        .await;
 
-    // Execution will fail (no storage), but the API compiles and runs
     assert!(result.is_err());
 }
 
@@ -301,11 +306,14 @@ async fn test_share_then_recover_roundtrip() {
 
     // Recover will fail since in-memory storage doesn't persist across builder calls,
     // but this validates the full API compiles and share succeeds
+    let (_, owner_pk_for_recover) = client.generate_keypair().unwrap();
     let recover_result = client
         .recover()
         .secret_id(&share_result.secret_id)
         .requester_key(requester_sk)
-        .execute();
+        .owner_key(owner_pk_for_recover)
+        .execute()
+        .await;
 
     assert!(recover_result.is_err());
     match recover_result.unwrap_err() {
