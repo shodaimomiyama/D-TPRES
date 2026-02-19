@@ -26,6 +26,8 @@
 )]
 
 mod unit {
+    mod actions;
+    mod adapter;
     mod controller;
     mod domain;
     mod helpers;
