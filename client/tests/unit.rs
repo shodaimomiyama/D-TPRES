@@ -30,4 +30,5 @@ mod unit {
     mod domain;
     mod helpers;
     mod repositories;
+    mod usecase;
 }
