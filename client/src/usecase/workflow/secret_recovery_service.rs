@@ -107,7 +107,7 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
     }
 
     /// Retrieve Capsule, ciphertext, verifying_pk, and threshold from Arweave
-    async fn retrieve_capsule_with_metadata(
+    fn retrieve_capsule_with_metadata(
         &self,
         secret_id: &SecretId,
     ) -> WorkflowResult<(Capsule, Vec<u8>, Vec<u8>, u8)> {
@@ -277,9 +277,8 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
             .await?;
 
         // Step 2: Retrieve CapsulePayload (capsule + ciphertext + verifying_pk) from Arweave
-        let (capsule, ciphertext, verifying_pk, threshold) = self
-            .retrieve_capsule_with_metadata(&request.secret_id)
-            .await?;
+        let (capsule, ciphertext, verifying_pk, threshold) =
+            self.retrieve_capsule_with_metadata(&request.secret_id)?;
 
         // Step 3: Retrieve encrypted shares and verify threshold
         let encrypted_shares = self.retrieve_encrypted_shares(&request.secret_id)?;
@@ -316,7 +315,7 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
         secret_id: &SecretId,
         requester_process_id: &str,
     ) -> WorkflowResult<bool> {
-        let (_, _, _, threshold) = self.retrieve_capsule_with_metadata(secret_id).await?;
+        let (_, _, _, threshold) = self.retrieve_capsule_with_metadata(secret_id)?;
 
         // Retrieve available cFrags
         let cfrags = self
@@ -522,7 +521,7 @@ mod tests {
         let secret_id = SecretId::generate();
         println!("  Retrieving capsule for secret_id: {}", secret_id);
 
-        let result = service.retrieve_capsule_with_metadata(&secret_id).await;
+        let result = service.retrieve_capsule_with_metadata(&secret_id);
         println!("  Result: {:?}", result);
         assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
         println!("  [PASS] ResourceNotFound returned (no capsule in Arweave)");
@@ -867,7 +866,7 @@ mod tests {
 
         // Capsule retrieval returns ResourceNotFound (no matching transaction)
         println!("  Testing capsule retrieval...");
-        let result = service.retrieve_capsule_with_metadata(&secret_id).await;
+        let result = service.retrieve_capsule_with_metadata(&secret_id);
         println!("  Result: {:?}", result);
         assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
 
@@ -989,7 +988,7 @@ mod tests {
             )
             .unwrap();
 
-        let result = service.retrieve_capsule_with_metadata(&secret_id).await;
+        let result = service.retrieve_capsule_with_metadata(&secret_id);
         assert!(result.is_ok());
 
         let (capsule, ciphertext, verifying_pk, threshold_k) = result.unwrap();
@@ -1022,7 +1021,7 @@ mod tests {
             )
             .unwrap();
 
-        let result = service.retrieve_capsule_with_metadata(&secret_id).await;
+        let result = service.retrieve_capsule_with_metadata(&secret_id);
         assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
     }
 
@@ -1067,7 +1066,7 @@ mod tests {
             components
                 .arweave
                 .store_data(
-                    &vec![100 + i; 16],
+                    &[100 + i; 16],
                     vec![
                         Tag {
                             name: "type".to_string(),

@@ -60,7 +60,9 @@
       "Bash(gh api:*)",
       "Bash(rustc:*)",
       "Bash(gh pr view:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(cargo clean:*)",
+      "Bash(cargo run:*)"
     ],
     "deny": []
   },
