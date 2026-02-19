@@ -4,6 +4,7 @@
 
 use crate::domain::value_objects::SecretId;
 use crate::usecase::core::crypto::{PublicKey, SecretKey};
+
 use crate::usecase::dto::{SecretMetadata, SecretRecoveryRequest, SecretSharingRequest};
 
 /// Extractor for SecretSharingRequest DTO
@@ -90,11 +91,13 @@ impl RecoverExtractor {
         &self,
         secret_id: SecretId,
         requester_secret_key: SecretKey,
+        owner_public_key: PublicKey,
         requester_process_id: String,
     ) -> SecretRecoveryRequest {
         SecretRecoveryRequest {
             secret_id,
             requester_secret_key,
+            owner_public_key,
             requester_process_id,
         }
     }
@@ -288,11 +291,13 @@ mod tests {
     fn test_recover_extractor_creates_request() {
         let extractor = RecoverExtractor::new();
         let (requester_sk, _) = create_test_keys();
+        let (_, owner_pk) = create_test_keys();
         let secret_id = SecretId::new("secret_abc123");
 
         let request = extractor.extract(
             secret_id.clone(),
             requester_sk,
+            owner_pk,
             "requester_process_456".to_string(),
         );
 
@@ -304,9 +309,10 @@ mod tests {
     fn test_recover_extractor_secret_id() {
         let extractor = RecoverExtractor::new();
         let (requester_sk, _) = create_test_keys();
+        let (_, owner_pk) = create_test_keys();
         let secret_id = SecretId::new("my_secret_id");
 
-        let request = extractor.extract(secret_id, requester_sk, "process".to_string());
+        let request = extractor.extract(secret_id, requester_sk, owner_pk, "process".to_string());
 
         assert_eq!(request.secret_id.as_str(), "my_secret_id");
     }
@@ -315,9 +321,10 @@ mod tests {
     fn test_recover_extractor_requester_key() {
         let extractor = RecoverExtractor::new();
         let (requester_sk, _) = create_test_keys();
+        let (_, owner_pk) = create_test_keys();
         let secret_id = SecretId::new("secret");
 
-        let request = extractor.extract(secret_id, requester_sk, "process".to_string());
+        let request = extractor.extract(secret_id, requester_sk, owner_pk, "process".to_string());
 
         assert!(!request.requester_secret_key.is_empty());
     }
@@ -326,9 +333,15 @@ mod tests {
     fn test_recover_extractor_process_id() {
         let extractor = RecoverExtractor::new();
         let (requester_sk, _) = create_test_keys();
+        let (_, owner_pk) = create_test_keys();
         let secret_id = SecretId::new("secret");
 
-        let request = extractor.extract(secret_id, requester_sk, "my_process_id".to_string());
+        let request = extractor.extract(
+            secret_id,
+            requester_sk,
+            owner_pk,
+            "my_process_id".to_string(),
+        );
 
         assert_eq!(request.requester_process_id, "my_process_id");
     }
@@ -337,9 +350,10 @@ mod tests {
     fn test_recover_extractor_default() {
         let extractor: RecoverExtractor = Default::default();
         let (requester_sk, _) = create_test_keys();
+        let (_, owner_pk) = create_test_keys();
         let secret_id = SecretId::new("secret");
 
-        let request = extractor.extract(secret_id, requester_sk, "process".to_string());
+        let request = extractor.extract(secret_id, requester_sk, owner_pk, "process".to_string());
 
         assert_eq!(request.requester_process_id, "process");
     }

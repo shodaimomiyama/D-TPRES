@@ -30,6 +30,17 @@ struct VerificationData {
 
 use serde::{Deserialize, Serialize};
 
+/// Capsule payload for Arweave storage
+///
+/// Bundles capsule, ciphertext, and verifying_pk into a single serializable unit.
+/// Phase 1 stores this as a single Arweave transaction; Phase 3 deserializes it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct CapsulePayload {
+    pub capsule_bytes: Vec<u8>,
+    pub ciphertext: Vec<u8>,
+    pub verifying_pk: Vec<u8>,
+}
+
 // 型エイリアス：秘密鍵のバイト表現
 type SecretKeyBytes = umbral_pre::SecretBox<GenericArray<u8, U32>>;
 
@@ -237,22 +248,20 @@ pub trait CryptoService: Send + Sync {
     /// AES-256用の32バイト暗号学的に安全な乱数を生成します。
     fn generate_symmetric_key(&self) -> ServiceResult<Vec<u8>>;
 
-    /// PRE Capsuleの復号（cFragsを使用）
+    /// Serialize the instance's verifying key for storage
+    fn verifying_key_bytes(&self) -> ServiceResult<Vec<u8>>;
+
+    /// PRE Capsule decryption using cFrags
     ///
-    /// AOから取得したcFragsを使用してCapsuleを復号し、対称鍵を復元します。
-    ///
-    /// # Arguments
-    /// * `capsule` - 暗号化時に生成されたCapsule
-    /// * `cfrags` - AOから取得したcFragデータのリスト
-    /// * `requester_secret_key` - リクエスター（受信者）の秘密鍵
-    ///
-    /// # Returns
-    /// * `ServiceResult<Vec<u8>>` - 復元された対称鍵
+    /// Decrypts a re-encrypted capsule using verified cFrags and recovers the plaintext.
     fn decrypt_pre_capsule(
         &self,
         capsule: &Capsule,
         cfrags: &[CFragData],
         requester_secret_key: &SecretKey,
+        owner_public_key: &PublicKey,
+        ciphertext: &[u8],
+        verifying_pk_bytes: &[u8],
     ) -> ServiceResult<Vec<u8>>;
 }
 
@@ -860,13 +869,20 @@ impl CryptoService for CryptoServiceImpl {
         Ok(key)
     }
 
+    fn verifying_key_bytes(&self) -> ServiceResult<Vec<u8>> {
+        bincode::serialize(&self.verifying_key)
+            .map_err(|_| ServiceError::crypto_error("Failed to serialize verifying key"))
+    }
+
     fn decrypt_pre_capsule(
         &self,
         capsule: &Capsule,
         cfrags: &[CFragData],
         requester_secret_key: &SecretKey,
+        owner_public_key: &PublicKey,
+        ciphertext: &[u8],
+        verifying_pk_bytes: &[u8],
     ) -> ServiceResult<Vec<u8>> {
-        // Input validation
         if capsule.capsule_bytes.is_empty() {
             return Err(ServiceError::validation_error("Capsule cannot be empty"));
         }
@@ -881,21 +897,30 @@ impl CryptoService for CryptoServiceImpl {
             ));
         }
 
-        // Deserialize the capsule
-        let _umbral_capsule = self.deserialize_capsule(capsule)?;
+        if owner_public_key.key_data.is_empty() {
+            return Err(ServiceError::validation_error(
+                "Owner public key cannot be empty",
+            ));
+        }
 
-        // Deserialize the requester's secret key
-        let _receiving_sk = self.deserialize_secret_key(requester_secret_key)?;
+        if ciphertext.is_empty() {
+            return Err(ServiceError::validation_error("Ciphertext cannot be empty"));
+        }
 
-        // TODO: When AO integration is complete (Issue #47), cFrags will include
-        // verification data. For now, we need to handle the case where verification
-        // data may or may not be present in cfrag_data.
+        if verifying_pk_bytes.is_empty() {
+            return Err(ServiceError::validation_error(
+                "Verifying public key cannot be empty",
+            ));
+        }
 
-        // Convert CFragData to verified CapsuleFrags
-        // Note: In production, each cFrag should include verification data
-        // For this implementation, we attempt to deserialize and use without verification
-        // since the verification data structure from AO is not yet defined.
-        let mut capsule_frags = Vec::with_capacity(cfrags.len());
+        let umbral_capsule = self.deserialize_capsule(capsule)?;
+        let receiving_sk = self.deserialize_secret_key(requester_secret_key)?;
+        let delegating_pk = self.deserialize_public_key(owner_public_key)?;
+        let verifying_pk: umbral_pre::PublicKey = bincode::deserialize(verifying_pk_bytes)
+            .map_err(|_| ServiceError::crypto_error("Failed to deserialize verifying key"))?;
+        let receiving_pk = receiving_sk.public_key();
+
+        let mut verified_cfrags = Vec::with_capacity(cfrags.len());
 
         for cfrag_data in cfrags {
             if cfrag_data.cfrag_data.is_empty() {
@@ -905,7 +930,6 @@ impl CryptoService for CryptoServiceImpl {
                 )));
             }
 
-            // Try to deserialize as CapsuleFrag
             let capsule_frag = umbral_pre::CapsuleFrag::from_bytes(&cfrag_data.cfrag_data)
                 .map_err(|_| {
                     ServiceError::crypto_error(format!(
@@ -914,15 +938,33 @@ impl CryptoService for CryptoServiceImpl {
                     ))
                 })?;
 
-            capsule_frags.push(capsule_frag);
+            let verified_cfrag = capsule_frag
+                .verify(
+                    &umbral_capsule,
+                    &verifying_pk,
+                    &delegating_pk,
+                    &receiving_pk,
+                )
+                .map_err(|_| {
+                    ServiceError::crypto_error(format!(
+                        "Failed to verify cFrag from holder {}",
+                        cfrag_data.holder_id
+                    ))
+                })?;
+
+            verified_cfrags.push(verified_cfrag);
         }
 
-        // For decapsulation, we need the delegating public key
-        // TODO: This should be retrieved from the secret metadata stored on Arweave
-        // For now, return an error indicating this is not yet fully implemented
-        Err(ServiceError::crypto_error(
-            "decrypt_pre_capsule requires delegating_pk from secret metadata (Issue #47)",
-        ))
+        let plaintext = umbral_pre::decrypt_reencrypted(
+            &receiving_sk,
+            &delegating_pk,
+            &umbral_capsule,
+            verified_cfrags,
+            ciphertext,
+        )
+        .map_err(|_| ServiceError::crypto_error("PRE decryption failed"))?;
+
+        Ok(plaintext.to_vec())
     }
 }
 

@@ -7,9 +7,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::adapter::external::ao::{AOClient, Binary, ExecuteMsg};
+use crate::adapter::external::ao::{
+    AOClient, Binary, ExecuteMsg, GetCFragsBySecretResponse, QueryMsg,
+};
 use crate::service::error::{ServiceError, ServiceResult};
-use crate::usecase::core::crypto::KeyFragment;
+use crate::usecase::core::crypto::{CFragData, KeyFragment};
 
 /// Contract storage trait for AO Network communication
 #[async_trait]
@@ -20,15 +22,12 @@ pub trait ContractStorage: Send + Sync {
     /// Delegate capsule to contract (future use)
     async fn delegate_capsule(&self, capsule_data: &[u8], contract_id: &str) -> ServiceResult<()>;
 
-    /// Retrieve cFrags from contract (future use)
+    /// Retrieve cFrags for a secret from AO Network
     async fn retrieve_cfrags(
         &self,
-        capsule_id: &str,
-        contract_id: &str,
-    ) -> ServiceResult<Vec<Vec<u8>>>;
-
-    /// Retrieve threshold from contract (future use)
-    async fn retrieve_threshold(&self, contract_id: &str) -> ServiceResult<u8>;
+        secret_id: &str,
+        requester_process_id: &str,
+    ) -> ServiceResult<Vec<CFragData>>;
 }
 
 /// ContractStorage implementation using AOClient
@@ -73,22 +72,33 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
 
     async fn retrieve_cfrags(
         &self,
-        _capsule_id: &str,
-        _contract_id: &str,
-    ) -> ServiceResult<Vec<Vec<u8>>> {
-        Err(ServiceError::System(
-            crate::service::error::SystemException::Internal(
-                "Not implemented: retrieve_cfrags".to_string(),
-            ),
-        ))
-    }
+        secret_id: &str,
+        requester_process_id: &str,
+    ) -> ServiceResult<Vec<CFragData>> {
+        let msg = QueryMsg::GetCFragsBySecret {
+            secret_id: secret_id.to_string(),
+        };
+        let result = self
+            .ao_client
+            .query(requester_process_id, msg)
+            .await
+            .map_err(|e| ServiceError::ao_network_error(e.to_string()))?;
 
-    async fn retrieve_threshold(&self, _contract_id: &str) -> ServiceResult<u8> {
-        Err(ServiceError::System(
-            crate::service::error::SystemException::Internal(
-                "Not implemented: retrieve_threshold".to_string(),
-            ),
-        ))
+        let response: GetCFragsBySecretResponse = serde_json::from_slice(result.as_slice())
+            .map_err(|e| {
+                ServiceError::ao_network_error(format!("Failed to parse cFrag response: {e}"))
+            })?;
+
+        let cfrags = response
+            .cfrags
+            .into_iter()
+            .map(|entry| CFragData {
+                cfrag_data: entry.cfrag_data.into_vec(),
+                holder_id: entry.holder_id,
+            })
+            .collect();
+
+        Ok(cfrags)
     }
 }
 
@@ -133,16 +143,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_retrieve_cfrags_not_implemented() {
+    async fn test_retrieve_cfrags_empty_when_no_data() {
         let storage = create_test_contract_storage();
-        let result = storage.retrieve_cfrags("capsule-id", "test-id").await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_retrieve_threshold_not_implemented() {
-        let storage = create_test_contract_storage();
-        let result = storage.retrieve_threshold("test-id").await;
-        assert!(result.is_err());
+        let result = storage
+            .retrieve_cfrags("secret-123", "test-process-id")
+            .await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_empty());
     }
 }

@@ -227,9 +227,11 @@ mod tests {
         assert!(validate_result.is_ok());
 
         let secret_id = crate::domain::value_objects::SecretId::new("test");
+        let (_, owner_pk) = container.crypto_service().generate_keypair().unwrap();
         let request = container.controller().recover_extractor().extract(
             secret_id,
             requester_sk,
+            owner_pk,
             "process_id".to_string(),
         );
         assert_eq!(request.requester_process_id, "process_id");

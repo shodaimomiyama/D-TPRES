@@ -31,7 +31,7 @@
 //! cargo test --test e2e_arlocal --features production-ao -- --ignored --nocapture --test-threads=1
 //! ```
 
-#![allow(clippy::unwrap_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use formix::adapter::external::ao::{
     AOClient, AOConfig, ArweaveJWK, Binary, ExecuteMsg, ProductionAOClient, QueryMsg,

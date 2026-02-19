@@ -1,4 +1,4 @@
-#![allow(clippy::disallowed_names)]
+#![allow(clippy::disallowed_names, clippy::large_futures)]
 
 use async_trait::async_trait;
 use reqwest::Client;
@@ -307,6 +307,7 @@ mod tests {
 
     use super::super::data_item::ArweaveJWK;
 
+    #[allow(clippy::many_single_char_names)]
     fn test_jwk() -> ArweaveJWK {
         use base64::Engine;
         use base64::engine::general_purpose::URL_SAFE_NO_PAD;
@@ -448,10 +449,7 @@ mod tests {
         });
         let result = ProductionAOClient::parse_cu_result("proc-1", &json, None);
         let resp = result.unwrap();
-        assert_eq!(
-            resp.data.unwrap().as_ref(),
-            "plain-text-not-base64!".as_bytes()
-        );
+        assert_eq!(resp.data.unwrap().as_ref(), b"plain-text-not-base64!");
     }
 
     #[test]

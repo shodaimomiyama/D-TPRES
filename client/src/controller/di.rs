@@ -113,18 +113,23 @@ mod tests {
         let crypto_service = create_crypto_service();
         let container = ControllerContainer::new(crypto_service);
         let (requester_sk, _) = create_test_keys();
+        let (_, owner_pk) = create_test_keys();
 
         // Test valid parameters
-        let result =
-            container
-                .recover_validator()
-                .validate("secret_id", &requester_sk, "process_id");
+        let result = container.recover_validator().validate(
+            "secret_id",
+            &requester_sk,
+            &owner_pk,
+            "process_id",
+        );
         assert!(result.is_ok());
 
         // Test empty secret_id
-        let result = container
-            .recover_validator()
-            .validate("", &requester_sk, "process_id");
+        let (_, owner_pk2) = create_test_keys();
+        let result =
+            container
+                .recover_validator()
+                .validate("", &requester_sk, &owner_pk2, "process_id");
         assert!(result.is_err());
     }
 
@@ -155,11 +160,13 @@ mod tests {
         let crypto_service = create_crypto_service();
         let container = ControllerContainer::new(crypto_service);
         let (requester_sk, _) = create_test_keys();
+        let (_, owner_pk) = create_test_keys();
         let secret_id = crate::domain::value_objects::SecretId::new("test_secret");
 
         let request = container.recover_extractor().extract(
             secret_id,
             requester_sk,
+            owner_pk,
             "requester_process".to_string(),
         );
 

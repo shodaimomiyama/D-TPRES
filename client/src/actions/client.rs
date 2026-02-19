@@ -1,4 +1,4 @@
-//! DTpresClient - Main entry point for the FORMIX client library
+//! FormixClient - Main entry point for the FORMIX client library
 //!
 //! Wraps the internal ActionsContainer and provides a clean public API
 //! with builder-pattern share/recover operations.
@@ -28,7 +28,7 @@ pub struct InitConfig {
 /// acts as both data owner and requester within one AO process.
 /// A single `process_id` is used for all operations; separate
 /// `owner_process_id` / `requester_process_id` are not needed.
-pub struct DTpresClient {
+pub struct FormixClient {
     process_id: String,
     wallet_address: String,
     ao_gateway_url: String,
@@ -36,8 +36,8 @@ pub struct DTpresClient {
     actions: Arc<DefaultActionsContainer>,
 }
 
-impl DTpresClient {
-    /// Initialize a new DTpresClient
+impl FormixClient {
+    /// Initialize a new FormixClient
     ///
     /// Loads the JWK wallet, detects or spawns an AO Process,
     /// and returns a configured client instance.
@@ -48,12 +48,12 @@ impl DTpresClient {
     /// See: <https://github.com/shodaimomiyama/FORMIX/issues/60>
     pub fn init(_config: InitConfig) -> ActionResult<Self> {
         Err(ActionError::workflow_failed(
-            "DTpresClient::init is not yet implemented: \
+            "FormixClient::init is not yet implemented: \
              JWK wallet loading and AO process spawning require Issue #60",
         ))
     }
 
-    /// Create a DTpresClient with pre-configured values.
+    /// Create a FormixClient with pre-configured values.
     ///
     /// Intended for testing and scenarios where wallet/process setup
     /// is handled externally.
@@ -76,7 +76,7 @@ impl DTpresClient {
         }
     }
 
-    /// Create a DTpresClient with pre-configured storage components
+    /// Create a FormixClient with pre-configured storage components
     pub fn with_storage(
         process_id: String,
         wallet_address: String,
@@ -134,7 +134,7 @@ impl DTpresClient {
     /// Create a RecoverBuilder for the recover operation
     pub fn recover(
         &self,
-    ) -> RecoverBuilder<CoreCryptoServiceImpl, DefaultStorageService, NotSet, NotSet> {
+    ) -> RecoverBuilder<CoreCryptoServiceImpl, DefaultStorageService, NotSet, NotSet, NotSet> {
         RecoverBuilder::new(Arc::clone(&self.actions), self.process_id.clone())
     }
 

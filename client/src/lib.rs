@@ -62,15 +62,16 @@
 //!     requester_pk,
 //!     "owner_process".to_string(),
 //!     None,
-//! )?;
+//! ).await?;
 //!
 //! // Recover the secret (requires storage implementation)
 //! let recovered = container.recover(
 //!     result.secret_id.as_str(),
 //!     requester_sk,
+//!     owner_pk,
 //!     "requester_process".to_string(),
 //!     None,
-//! )?;
+//! ).await?;
 //! ```
 
 pub mod actions;
