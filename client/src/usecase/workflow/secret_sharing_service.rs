@@ -235,18 +235,21 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
             .verifying_key_bytes()
             .map_err(WorkflowError::from)?;
 
+        // Step 5: Generate secret_id before kFrag sending (binds kFrags to this secret)
+        let secret_id = SecretId::generate();
+
         // Step 5-6: Generate re-encryption key and create kFrags
         let kfrags = self.generate_kfrags(&request)?;
         let kfrag_count = kfrags.len() as u8;
 
         // Step 7: Send kFrags to Owner-Process via AO
+        // kfrag_id format: {secret_id}_{index}
         self.storage_service
-            .send_kfrags_to_contract(&kfrags, &request.owner_process_id)
+            .send_kfrags_to_contract(&kfrags, &request.owner_process_id, secret_id.as_str())
             .await
             .map_err(WorkflowError::from)?;
 
         // Step 8: Store CapsulePayload (capsule + ciphertext + verifying_pk) on Arweave
-        let secret_id = SecretId::generate();
 
         let payload = CapsulePayload {
             capsule_bytes: capsule.capsule_bytes.clone(),
@@ -577,6 +580,7 @@ mod tests {
             &self,
             kfrags: &[KeyFragment],
             contract_id: &str,
+            _secret_id: &str,
         ) -> ServiceResult<()> {
             if *self.should_fail_kfrag.read().unwrap() {
                 return Err(crate::service::error::ServiceError::ao_network_error(
@@ -604,7 +608,9 @@ mod tests {
         async fn retrieve_cfrags(
             &self,
             _secret_id: &str,
-            _requester_process_id: &str,
+            _total_shares: u8,
+            _capsule_id: &str,
+            _process_id: &str,
         ) -> ServiceResult<Vec<crate::usecase::core::crypto::CFragData>> {
             Err(crate::service::error::ServiceError::System(
                 crate::service::error::SystemException::Internal("Not implemented".to_string()),

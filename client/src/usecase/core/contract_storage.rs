@@ -7,9 +7,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::adapter::external::ao::{
-    AOClient, Binary, ExecuteMsg, GetCFragsBySecretResponse, QueryMsg,
-};
+use crate::adapter::external::ao::{AOClient, Binary, ExecuteMsg, GetCFragResponse, QueryMsg};
 use crate::service::error::{ServiceError, ServiceResult};
 use crate::usecase::core::crypto::{CFragData, KeyFragment};
 
@@ -17,16 +15,28 @@ use crate::usecase::core::crypto::{CFragData, KeyFragment};
 #[async_trait]
 pub trait ContractStorage: Send + Sync {
     /// Send kFrags to Owner-Process via AO Network
-    async fn send_kfrags(&self, kfrags: &[KeyFragment], contract_id: &str) -> ServiceResult<()>;
+    ///
+    /// kfrag_id is formatted as `{secret_id}_{index}` to bind kFrags to a secret.
+    async fn send_kfrags(
+        &self,
+        kfrags: &[KeyFragment],
+        contract_id: &str,
+        secret_id: &str,
+    ) -> ServiceResult<()>;
 
     /// Delegate capsule to contract (future use)
     async fn delegate_capsule(&self, capsule_data: &[u8], contract_id: &str) -> ServiceResult<()>;
 
     /// Retrieve cFrags for a secret from AO Network
+    ///
+    /// Generates kfrag_ids from `{secret_id}_{0..total_shares}` convention,
+    /// then queries each kfrag's cFrag individually via GetCFrag.
     async fn retrieve_cfrags(
         &self,
         secret_id: &str,
-        requester_process_id: &str,
+        total_shares: u8,
+        capsule_id: &str,
+        process_id: &str,
     ) -> ServiceResult<Vec<CFragData>>;
 }
 
@@ -43,10 +53,15 @@ impl<A: AOClient> ContractStorageImpl<A> {
 
 #[async_trait]
 impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
-    async fn send_kfrags(&self, kfrags: &[KeyFragment], contract_id: &str) -> ServiceResult<()> {
+    async fn send_kfrags(
+        &self,
+        kfrags: &[KeyFragment],
+        contract_id: &str,
+        secret_id: &str,
+    ) -> ServiceResult<()> {
         for kfrag in kfrags {
             let msg = ExecuteMsg::DelegateKFrag {
-                kfrag_id: format!("kfrag-{}", kfrag.id),
+                kfrag_id: format!("{secret_id}_{}", kfrag.id),
                 kfrag: Binary::from(kfrag.key_data.clone()),
             };
             self.ao_client
@@ -73,30 +88,37 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
     async fn retrieve_cfrags(
         &self,
         secret_id: &str,
-        requester_process_id: &str,
+        total_shares: u8,
+        capsule_id: &str,
+        process_id: &str,
     ) -> ServiceResult<Vec<CFragData>> {
-        let msg = QueryMsg::GetCFragsBySecret {
-            secret_id: secret_id.to_string(),
-        };
-        let result = self
-            .ao_client
-            .query(requester_process_id, msg)
-            .await
-            .map_err(|e| ServiceError::ao_network_error(e.to_string()))?;
+        let mut cfrags = Vec::new();
 
-        let response: GetCFragsBySecretResponse = serde_json::from_slice(result.as_slice())
-            .map_err(|e| {
-                ServiceError::ao_network_error(format!("Failed to parse cFrag response: {e}"))
-            })?;
+        for i in 0..total_shares {
+            let kfrag_id = format!("{secret_id}_{i}");
+            let msg = QueryMsg::GetCFrag {
+                kfrag_id: kfrag_id.clone(),
+                capsule_id: capsule_id.to_string(),
+            };
 
-        let cfrags = response
-            .cfrags
-            .into_iter()
-            .map(|entry| CFragData {
-                cfrag_data: entry.cfrag_data.into_vec(),
-                holder_id: entry.holder_id,
-            })
-            .collect();
+            match self.ao_client.query(process_id, msg).await {
+                Ok(result) => {
+                    let response: GetCFragResponse = serde_json::from_slice(result.as_slice())
+                        .map_err(|e| {
+                            ServiceError::ao_network_error(format!(
+                                "Failed to parse cFrag response for {kfrag_id}: {e}"
+                            ))
+                        })?;
+                    cfrags.push(CFragData {
+                        cfrag_data: response.cfrag.as_slice().to_vec(),
+                        holder_id: kfrag_id,
+                    });
+                }
+                Err(_) => {
+                    // cFrag not yet ready for this kfrag — skip
+                }
+            }
+        }
 
         Ok(cfrags)
     }
@@ -131,7 +153,9 @@ mod tests {
             },
         ];
 
-        let result = storage.send_kfrags(&kfrags, "test-process-id").await;
+        let result = storage
+            .send_kfrags(&kfrags, "test-process-id", "secret-abc")
+            .await;
         assert!(result.is_ok());
     }
 
@@ -146,7 +170,7 @@ mod tests {
     async fn test_retrieve_cfrags_empty_when_no_data() {
         let storage = create_test_contract_storage();
         let result = storage
-            .retrieve_cfrags("secret-123", "test-process-id")
+            .retrieve_cfrags("secret-123", 3, "capsule-001", "test-process-id")
             .await;
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
