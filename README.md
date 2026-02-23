@@ -104,13 +104,74 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-formix = { version = "0.1", features = ["production-ao"] }
+formix = { version = "0.1" }
 tokio = { version = "1", features = ["rt", "macros"] }
 ```
 
-Without `production-ao`, only `FormixClient` (mock backend) is available for local testing.
+By default, `FormixClient` uses a mock AO backend suitable for local development.
+Add `features = ["production-ao"]` when deploying against the real AO Network (see [Production Setup](#production-setup)).
 
-### Setup
+### Quick Start (Local Development)
+
+The mock backend lets you test the full Phase 1 workflow locally without any external services.
+
+```rust
+use std::sync::Arc;
+
+use formix::actions::FormixClient;
+use formix::adapter::external::mock_ao::MockAOClient;
+use formix::usecase::core::contract_storage::ContractStorageImpl;
+use formix::usecase::core::storage::ArweaveStorageServiceImpl;
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. Create a client with mock storage
+    let mock_ao = Arc::new(MockAOClient::new());
+    let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+
+    let client = FormixClient::with_storage(
+        "my_process".to_string(),
+        "my_wallet".to_string(),
+        "https://ao.arweave.net".to_string(),
+        "https://arweave.net".to_string(),
+        arweave,
+        contract,
+    );
+
+    // 2. Generate key pairs
+    let (owner_sk, owner_pk) = client.generate_keypair()?;
+    let (_, requester_pk) = client.generate_keypair()?;
+
+    // 3. Share a secret with 3-of-5 threshold
+    let result = client.share()
+        .secret(b"Hello, FORMIX!".to_vec())
+        .threshold(3)
+        .total_shares(5)
+        .owner_key(owner_sk)   // moved — cannot be used after this
+        .requester_key(requester_pk)
+        .execute()
+        .await?;
+
+    println!("Secret ID:   {}", result.secret_id.as_str());
+    println!("Capsule TX:  {}", result.capsule_tx_id);
+    println!("kFrag count: {}", result.kfrag_count);
+
+    Ok(())
+}
+```
+
+A runnable version of this example is included in the repository:
+
+```bash
+cargo run --example basic_usage
+```
+
+> **Mock backend limitations**: Phase 1 (share) works fully in-memory.
+> Phase 3 (recover) requires cFrags from AO Holder processes,
+> so `recover()` will return `ResourceNotFound` with the mock backend.
+
+### Production Setup
 
 #### 1. Deploy the FORMIX WASM module and spawn a process
 
@@ -150,7 +211,7 @@ The `gateways` field is optional — testnet defaults are used when omitted.
 
 **`wallet.json`** — Your Arweave JWK wallet file (the same one used in step 1, located at `ao/.cwao/accounts/<name>.json`).
 
-### Initialize the client
+#### 3. Initialize the production client
 
 ```rust
 use formix::actions::ProductionFormixClient;
@@ -161,52 +222,94 @@ let client = ProductionFormixClient::from_deploy_file(
 )?;
 ```
 
-### Share a secret (Phase 1)
+### API Reference
+
+#### `generate_keypair()` — Key pair generation
 
 ```rust
-// Generate key pairs
+let (secret_key, public_key) = client.generate_keypair()?;
+```
+
+Returns an Umbral PRE key pair. Use separate pairs for owner and requester roles.
+
+#### `share()` — Phase 1: Secret splitting and distribution
+
+```rust
 let (owner_sk, owner_pk) = client.generate_keypair()?;
 let (_, requester_pk) = client.generate_keypair()?;
 
-// Split and distribute with 3-of-5 threshold
 let result = client.share()
     .secret(b"my secret data".to_vec())
-    .threshold(3)
-    .total_shares(5)
-    .owner_key(owner_sk)
+    .threshold(3)            // k: minimum shares for recovery
+    .total_shares(5)         // n: total shares generated
+    .owner_key(owner_sk)     // owner's secret key (moved)
     .requester_key(requester_pk)
-    .execute()
+    .execute()               // async
     .await?;
 
-println!("Secret ID: {}", result.secret_id.as_str());
-println!("Key fragments: {}", result.kfrag_count);
+// result.secret_id   — save this for recovery
+// result.kfrag_count — number of key fragments distributed
 ```
 
-### Recover a secret (Phase 3)
+#### `recover()` — Phase 3: Secret recovery
 
 ```rust
 let recovered = client.recover()
-    .secret_id("SECRET_ID_FROM_SHARE")
-    .requester_key(requester_sk)
-    .owner_key(owner_pk)
-    .execute()
+    .secret_id(&secret_id)        // SecretId from share result
+    .requester_key(requester_sk)  // requester's secret key (moved)
+    .owner_key(owner_pk)          // owner's public key
+    .execute()                    // async
     .await?;
+
+// recovered.recovered_secret — the original bytes (Zeroize on drop)
 ```
 
-### Local testing (no feature flag)
+### Error Handling
+
+All operations return `Result<T, ActionError>`. The main error variants:
 
 ```rust
-use formix::actions::FormixClient;
+use formix::actions::ActionError;
 
-let client = FormixClient::new(
-    "process_id".into(),
-    "wallet_addr".into(),
-    "https://ao.arweave.net".into(),
-    "https://arweave.net".into(),
-);
-
-// Same share() / recover() / generate_keypair() API
+match result {
+    Ok(value) => { /* success */ }
+    Err(ActionError::ValidationFailed { code, message }) => {
+        // Input validation failed (e.g., empty secret, invalid threshold)
+    }
+    Err(ActionError::CryptoError { message }) => {
+        // Cryptographic operation failed
+    }
+    Err(ActionError::ResourceNotFound { resource }) => {
+        // Secret or process not found
+    }
+    Err(ActionError::WorkflowFailed { message }) => {
+        // Workflow execution failed (storage, network, etc.)
+    }
+    Err(ActionError::PartialStorageFailure { .. }) => {
+        // Some share storage operations failed (Arweave is immutable, no rollback)
+    }
+}
 ```
+
+### Important Notes
+
+- **`SecretKey` is move-only**: It implements `Zeroize + ZeroizeOnDrop` and does **not** implement `Clone`. Once passed to `owner_key()` or `requester_key()`, it cannot be reused. Generate separate key pairs for each role.
+- **`PublicKey` is cloneable**: You can freely copy and share public keys.
+- **Threshold range**: `2 <= threshold <= total_shares <= 20`. Values outside this range will return `ValidationFailed`.
+- **Async execution**: `share().execute()` and `recover().execute()` are `async` — a tokio runtime is required.
+- **Memory safety**: `SecretRecoveryResult.recovered_secret` is automatically zeroized when dropped.
+
+### Environment Variables
+
+For production deployments, gateway URLs can be configured in `deploy.json` or passed directly when constructing the AO client:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ao_mu` | `https://mu.ao-testnet.xyz` | AO Messenger Unit URL |
+| `ao_cu` | `https://cu.ao-testnet.xyz` | AO Compute Unit URL |
+| `arweave` | `https://arweave.net` | Arweave gateway URL |
+
+These are set in the `gateways` field of `deploy.json`. The timeout defaults to 30,000ms.
 
 ### Feature Flags
 

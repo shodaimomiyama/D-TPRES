@@ -164,6 +164,15 @@ pub struct CFragData {
     pub holder_id: String,
 }
 
+impl CFragData {
+    pub fn new(cfrag_data: Vec<u8>, holder_id: String) -> Self {
+        Self {
+            cfrag_data,
+            holder_id,
+        }
+    }
+}
+
 /// CryptoService trait - 暗号化操作のインターフェース
 pub trait CryptoService: Send + Sync {
     /// Shamir Secret Sharingによる秘密の分割

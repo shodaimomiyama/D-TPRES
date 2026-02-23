@@ -103,13 +103,74 @@ flowchart TD
 
 ```toml
 [dependencies]
-formix = { version = "0.1", features = ["production-ao"] }
+formix = { version = "0.1" }
 tokio = { version = "1", features = ["rt", "macros"] }
 ```
 
-`production-ao` なしの場合、ローカルテスト用の `FormixClient`（モックバックエンド）のみ利用可能です。
+デフォルトでは `FormixClient` はローカル開発用のモックAOバックエンドを使用します。
+本番AO Networkに接続する場合は `features = ["production-ao"]` を追加してください（[本番セットアップ](#本番セットアップ)参照）。
 
-### セットアップ
+### クイックスタート（ローカル開発）
+
+モックバックエンドを使用すると、外部サービスなしでPhase 1のワークフロー全体をローカルでテストできます。
+
+```rust
+use std::sync::Arc;
+
+use formix::actions::FormixClient;
+use formix::adapter::external::mock_ao::MockAOClient;
+use formix::usecase::core::contract_storage::ContractStorageImpl;
+use formix::usecase::core::storage::ArweaveStorageServiceImpl;
+
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. モックストレージでクライアントを作成
+    let mock_ao = Arc::new(MockAOClient::new());
+    let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+
+    let client = FormixClient::with_storage(
+        "my_process".to_string(),
+        "my_wallet".to_string(),
+        "https://ao.arweave.net".to_string(),
+        "https://arweave.net".to_string(),
+        arweave,
+        contract,
+    );
+
+    // 2. 鍵ペアを生成
+    let (owner_sk, owner_pk) = client.generate_keypair()?;
+    let (_, requester_pk) = client.generate_keypair()?;
+
+    // 3. 3-of-5閾値で秘密を共有
+    let result = client.share()
+        .secret(b"Hello, FORMIX!".to_vec())
+        .threshold(3)            // k: 復元に必要な最小シェア数
+        .total_shares(5)         // n: 生成するシェアの総数
+        .owner_key(owner_sk)     // ムーブされる — 以降使用不可
+        .requester_key(requester_pk)
+        .execute()               // async
+        .await?;
+
+    println!("Secret ID:   {}", result.secret_id.as_str());
+    println!("Capsule TX:  {}", result.capsule_tx_id);
+    println!("kFrag count: {}", result.kfrag_count);
+
+    Ok(())
+}
+```
+
+リポジトリに実行可能なサンプルが含まれています:
+
+```bash
+cargo run --example basic_usage
+```
+
+> **モックバックエンドの制限**: Phase 1（share）はインメモリで完全に動作します。
+> Phase 3（recover）はAO HolderプロセスからのcFragが必要なため、
+> モックバックエンドでは `recover()` は `ResourceNotFound` を返します。
+
+### 本番セットアップ
 
 #### 1. FORMIX WASMモジュールのデプロイとプロセスのspawn
 
@@ -149,7 +210,7 @@ yarn instantiate --wallet my-wallet --module_id <MODULE_ID> --scheduler <SCHEDUL
 
 **`wallet.json`** — Arweave JWKウォレットファイル（ステップ1で使用したものと同じ。`ao/.cwao/accounts/<name>.json` に生成されます）
 
-### クライアントの初期化
+#### 3. 本番クライアントの初期化
 
 ```rust
 use formix::actions::ProductionFormixClient;
@@ -160,52 +221,94 @@ let client = ProductionFormixClient::from_deploy_file(
 )?;
 ```
 
-### 秘密の共有 (Phase 1)
+### APIリファレンス
+
+#### `generate_keypair()` — 鍵ペア生成
 
 ```rust
-// 鍵ペアを生成
+let (secret_key, public_key) = client.generate_keypair()?;
+```
+
+Umbral PRE鍵ペアを返します。オーナーとリクエスターのロールには別々のペアを使用してください。
+
+#### `share()` — Phase 1: 秘密の分割と配布
+
+```rust
 let (owner_sk, owner_pk) = client.generate_keypair()?;
 let (_, requester_pk) = client.generate_keypair()?;
 
-// 3-of-5 閾値で秘密を分割・配布
 let result = client.share()
     .secret(b"my secret data".to_vec())
-    .threshold(3)
-    .total_shares(5)
-    .owner_key(owner_sk)
+    .threshold(3)            // k: 復元に必要な最小シェア数
+    .total_shares(5)         // n: 生成するシェアの総数
+    .owner_key(owner_sk)     // オーナーの秘密鍵（ムーブされる）
     .requester_key(requester_pk)
-    .execute()
+    .execute()               // async
     .await?;
 
-println!("Secret ID: {}", result.secret_id.as_str());
-println!("鍵フラグメント数: {}", result.kfrag_count);
+// result.secret_id   — 復元時に使用するID
+// result.kfrag_count — 配布された鍵フラグメント数
 ```
 
-### 秘密の復元 (Phase 3)
+#### `recover()` — Phase 3: 秘密の復元
 
 ```rust
 let recovered = client.recover()
-    .secret_id("SECRET_ID_FROM_SHARE")
-    .requester_key(requester_sk)
-    .owner_key(owner_pk)
-    .execute()
+    .secret_id(&secret_id)        // share結果のSecretId
+    .requester_key(requester_sk)  // リクエスターの秘密鍵（ムーブされる）
+    .owner_key(owner_pk)          // オーナーの公開鍵
+    .execute()                    // async
     .await?;
+
+// recovered.recovered_secret — 元のバイト列（ドロップ時にZeroize）
 ```
 
-### ローカルテスト（feature flag不要）
+### エラーハンドリング
+
+すべての操作は `Result<T, ActionError>` を返します。主なエラーバリアント:
 
 ```rust
-use formix::actions::FormixClient;
+use formix::actions::ActionError;
 
-let client = FormixClient::new(
-    "process_id".into(),
-    "wallet_addr".into(),
-    "https://ao.arweave.net".into(),
-    "https://arweave.net".into(),
-);
-
-// share() / recover() / generate_keypair() は同じAPI
+match result {
+    Ok(value) => { /* 成功 */ }
+    Err(ActionError::ValidationFailed { code, message }) => {
+        // 入力バリデーション失敗（空の秘密、無効な閾値など）
+    }
+    Err(ActionError::CryptoError { message }) => {
+        // 暗号操作の失敗
+    }
+    Err(ActionError::ResourceNotFound { resource }) => {
+        // 秘密またはプロセスが見つからない
+    }
+    Err(ActionError::WorkflowFailed { message }) => {
+        // ワークフロー実行の失敗（ストレージ、ネットワークなど）
+    }
+    Err(ActionError::PartialStorageFailure { .. }) => {
+        // 一部のシェアストレージ操作が失敗（Arweaveは不変、ロールバック不可）
+    }
+}
 ```
+
+### 重要な注意事項
+
+- **`SecretKey` はムーブ専用**: `Zeroize + ZeroizeOnDrop` を実装し、`Clone` は実装**していません**。`owner_key()` や `requester_key()` に渡すと再利用できません。各ロールに別々の鍵ペアを生成してください。
+- **`PublicKey` はクローン可能**: 公開鍵は自由にコピー・共有できます。
+- **閾値の範囲**: `2 <= threshold <= total_shares <= 20`。この範囲外の値は `ValidationFailed` を返します。
+- **非同期実行**: `share().execute()` と `recover().execute()` は `async` です。tokioランタイムが必要です。
+- **メモリ安全性**: `SecretRecoveryResult.recovered_secret` はドロップ時に自動的にゼロ化されます。
+
+### 環境変数
+
+本番デプロイでは、ゲートウェイURLを `deploy.json` で設定するか、AOクライアント構築時に直接指定できます:
+
+| 変数 | デフォルト | 説明 |
+|------|---------|------|
+| `ao_mu` | `https://mu.ao-testnet.xyz` | AO Messenger Unit URL |
+| `ao_cu` | `https://cu.ao-testnet.xyz` | AO Compute Unit URL |
+| `arweave` | `https://arweave.net` | Arweaveゲートウェイ URL |
+
+これらは `deploy.json` の `gateways` フィールドで設定します。タイムアウトのデフォルトは30,000msです。
 
 ### Feature Flags
 
