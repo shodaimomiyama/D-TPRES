@@ -204,7 +204,8 @@ impl ProcessState {
         match (&self.role, &self.phase, new_phase) {
             // Owner-Process transitions
             (ProcessRole::Owner, Initialized, KeyGeneration) => true,
-            (ProcessRole::Owner, KeyGeneration, SecretSplitting) => true,
+            (ProcessRole::Owner, KeyGeneration, Ready) => true,
+            (ProcessRole::Owner, Ready, SecretSplitting) => true,
             (ProcessRole::Owner, SecretSplitting, KFragGeneration) => true,
             
             // Holder-Process transitions
