@@ -180,20 +180,20 @@ impl<C: CoreCryptoService, Ss: StorageService> ShareBuilder<C, Ss, Set, Set, Set
             .derive_public_key(&owner_secret_key)
             .map_err(|e| ActionError::crypto_error(e.to_string()))?;
 
-        self.container
-            .controller()
-            .share_validator()
-            .validate(
-                &secret,
-                threshold,
-                total_shares,
-                &owner_secret_key,
-                &owner_public_key,
-                &requester_public_key,
-            )?;
+        self.container.controller().share_validator().validate(
+            &secret,
+            threshold,
+            total_shares,
+            &owner_secret_key,
+            &owner_public_key,
+            &requester_public_key,
+        )?;
 
         // Step 2: Build DTO — Zeroizing<Vec<u8>> moves into SecretSharingRequest.secret
-        let metadata = self.metadata.map(ShareOptions::with_metadata).and_then(|o| o.metadata);
+        let metadata = self
+            .metadata
+            .map(ShareOptions::with_metadata)
+            .and_then(|o| o.metadata);
         let request = self.container.controller().share_extractor().extract(
             secret,
             owner_secret_key,

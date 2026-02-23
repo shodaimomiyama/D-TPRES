@@ -16,6 +16,7 @@ mod client;
 mod config;
 mod deep_hash;
 mod merkle;
+pub mod storage_bridge;
 mod transaction;
 mod wallet;
 
@@ -24,4 +25,5 @@ mod tests;
 
 pub use client::ArweaveClientImpl;
 pub use config::ArweaveClientConfig;
+pub use storage_bridge::ProductionArweaveStorageService;
 pub use wallet::ArweaveWallet;

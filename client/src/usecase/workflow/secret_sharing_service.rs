@@ -66,7 +66,7 @@ pub trait SecretSharingWorkflowService: Send + Sync {
     /// # Errors
     /// * `WorkflowError::ResourceNotFound` - Secret not found
     /// * `WorkflowError::StorageError` - Storage query failed
-    fn get_secret_status(&self, secret_id: &SecretId) -> WorkflowResult<SecretStatus>;
+    async fn get_secret_status(&self, secret_id: &SecretId) -> WorkflowResult<SecretStatus>;
 }
 
 // ============================================================================
@@ -282,6 +282,7 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
                     },
                 ],
             )
+            .await
             .map_err(WorkflowError::from)?;
 
         let share_items: Vec<(Vec<u8>, Vec<Tag>)> = encrypted_shares
@@ -311,6 +312,7 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
         let batch_result = self
             .storage_service
             .batch_store(share_items)
+            .await
             .map_err(WorkflowError::from)?;
         if !batch_result.failed.is_empty() {
             let failed_count = batch_result.failed.len();
@@ -334,7 +336,7 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
         })
     }
 
-    fn get_secret_status(&self, secret_id: &SecretId) -> WorkflowResult<SecretStatus> {
+    async fn get_secret_status(&self, secret_id: &SecretId) -> WorkflowResult<SecretStatus> {
         let params = QueryParams {
             tags: vec![
                 Tag {
@@ -353,6 +355,7 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
         let results = self
             .storage_service
             .query_by_tags(params)
+            .await
             .map_err(WorkflowError::from)?;
 
         if results.is_empty() {
@@ -500,7 +503,7 @@ mod tests {
 
     #[async_trait]
     impl StorageService for MockStorageService {
-        fn store_data(&self, data: &[u8], tags: Vec<Tag>) -> ServiceResult<String> {
+        async fn store_data(&self, data: &[u8], tags: Vec<Tag>) -> ServiceResult<String> {
             if *self.should_fail_store.read().unwrap() {
                 return Err(crate::service::error::ServiceError::storage_error(
                     "Mock storage failure",
@@ -516,7 +519,7 @@ mod tests {
             Ok(tx_id)
         }
 
-        fn retrieve_data(&self, transaction_id: &str) -> ServiceResult<ArweaveTransaction> {
+        async fn retrieve_data(&self, transaction_id: &str) -> ServiceResult<ArweaveTransaction> {
             let stored = self.stored_data.read().unwrap();
             stored
                 .iter()
@@ -535,18 +538,21 @@ mod tests {
                 })
         }
 
-        fn query_by_tags(&self, _params: QueryParams) -> ServiceResult<Vec<ArweaveTransaction>> {
+        async fn query_by_tags(
+            &self,
+            _params: QueryParams,
+        ) -> ServiceResult<Vec<ArweaveTransaction>> {
             Ok(self.query_results.read().unwrap().clone())
         }
 
-        fn check_transaction_status(
+        async fn check_transaction_status(
             &self,
             _transaction_id: &str,
         ) -> ServiceResult<TransactionStatus> {
             Ok(TransactionStatus::Confirmed)
         }
 
-        fn batch_store(&self, items: Vec<(Vec<u8>, Vec<Tag>)>) -> ServiceResult<BatchResult> {
+        async fn batch_store(&self, items: Vec<(Vec<u8>, Vec<Tag>)>) -> ServiceResult<BatchResult> {
             if *self.should_fail_store.read().unwrap() {
                 return Err(crate::service::error::ServiceError::storage_error(
                     "Mock batch storage failure",
@@ -566,14 +572,18 @@ mod tests {
             })
         }
 
-        fn exists(&self, transaction_id: &str) -> ServiceResult<bool> {
+        async fn exists(&self, transaction_id: &str) -> ServiceResult<bool> {
             let stored = self.stored_data.read().unwrap();
             Ok(stored.iter().any(|item| item.tx_id == transaction_id))
         }
 
-        fn update_tags(&self, transaction_id: &str, new_tags: Vec<Tag>) -> ServiceResult<String> {
-            let data = self.retrieve_data(transaction_id)?.data;
-            self.store_data(&data, new_tags)
+        async fn update_tags(
+            &self,
+            transaction_id: &str,
+            new_tags: Vec<Tag>,
+        ) -> ServiceResult<String> {
+            let data = self.retrieve_data(transaction_id).await?.data;
+            self.store_data(&data, new_tags).await
         }
 
         async fn send_kfrags_to_contract(
@@ -617,7 +627,7 @@ mod tests {
             ))
         }
 
-        fn retrieve_encrypted_shares(&self, _secret_id: &str) -> ServiceResult<Vec<Vec<u8>>> {
+        async fn retrieve_encrypted_shares(&self, _secret_id: &str) -> ServiceResult<Vec<Vec<u8>>> {
             Err(crate::service::error::ServiceError::System(
                 crate::service::error::SystemException::Internal("Not implemented".to_string()),
             ))
@@ -1118,14 +1128,14 @@ mod tests {
         println!("  [PASS] Validation correctly failed for empty secret");
     }
 
-    #[test]
-    fn test_get_secret_status_not_implemented() {
+    #[tokio::test]
+    async fn test_get_secret_status_not_implemented() {
         println!("\n=== test_get_secret_status_not_implemented ===");
         let service = create_test_service();
         let secret_id = SecretId::generate();
         println!("  Checking status for secret_id: {}", secret_id);
 
-        let result = service.get_secret_status(&secret_id);
+        let result = service.get_secret_status(&secret_id).await;
         println!("  Result: {:?}", result);
         assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
 

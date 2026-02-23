@@ -180,6 +180,8 @@ pub struct ProductionFormixClient {
 use crate::actions::di::{ProductionActionsContainer, ProductionStorageService};
 #[cfg(feature = "production-ao")]
 use crate::adapter::external::ao::{AOConfig, ArweaveJWK, DataItemSigner, ProductionAOClient};
+#[cfg(feature = "production-ao")]
+use crate::adapter::external::arweave::{ArweaveClientConfig, ArweaveClientImpl};
 
 #[cfg(feature = "production-ao")]
 impl ProductionFormixClient {
@@ -224,7 +226,23 @@ impl ProductionFormixClient {
             ActionError::workflow_failed(format!("Failed to create AO client: {e}"))
         })?);
 
-        let actions = Arc::new(ProductionActionsContainer::with_production_ao(ao_client));
+        let arweave_gateway = deploy
+            .gateways
+            .as_ref()
+            .and_then(|gw| gw.arweave.as_deref())
+            .unwrap_or("https://arweave.net");
+        let arweave_config = ArweaveClientConfig::new()
+            .with_gateway_url(arweave_gateway)
+            .with_graphql_url(format!("{arweave_gateway}/graphql"));
+        let arweave_client =
+            Arc::new(ArweaveClientImpl::read_only(arweave_config).map_err(|e| {
+                ActionError::workflow_failed(format!("Failed to create Arweave client: {e}"))
+            })?);
+
+        let actions = Arc::new(ProductionActionsContainer::with_production_ao(
+            ao_client,
+            arweave_client,
+        ));
 
         Ok(Self {
             process_id: deploy.process_id,
