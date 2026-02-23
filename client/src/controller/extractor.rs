@@ -115,6 +115,8 @@ impl Default for RecoverExtractor {
 #[allow(clippy::default_constructed_unit_structs, clippy::redundant_clone)]
 mod tests {
     use super::*;
+    use zeroize::Zeroizing;
+
     use crate::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
     use zeroize::Zeroizing;
 

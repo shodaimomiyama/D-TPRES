@@ -10,6 +10,8 @@
 
 use std::sync::Arc;
 
+use zeroize::Zeroizing;
+
 use formix::adapter::external::mock_ao::MockAOClient;
 use formix::usecase::SecretSharingRequest;
 use formix::usecase::core::contract_storage::ContractStorageImpl;
@@ -408,7 +410,7 @@ async fn test_roundtrip_workflow_services_integration() {
 
     println!("\n[Step 1] Create SecretSharingRequest");
     let request = SecretSharingRequest {
-        secret: secret_data.clone(),
+        secret: Zeroizing::new(secret_data.clone()),
         owner_secret_key: owner_sk,
         owner_public_key: owner_pk.clone(),
         requester_public_key: requester_pk,

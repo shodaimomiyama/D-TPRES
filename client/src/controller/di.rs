@@ -141,7 +141,7 @@ mod tests {
         let (_, requester_pk) = create_test_keys();
 
         let request = container.share_extractor().extract(
-            b"secret".to_vec(),
+            zeroize::Zeroizing::new(b"secret".to_vec()),
             owner_sk,
             owner_pk,
             requester_pk,
