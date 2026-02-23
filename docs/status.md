@@ -1,7 +1,7 @@
 ---
 title: "FORMIX Development Status"
-version: "2.0.0"
-last_updated: "2026-02-16"
+version: "2.1.0"
+last_updated: "2026-02-23"
 author: "FORMIX Development Team"
 status: "active"
 ---
@@ -130,10 +130,12 @@ status: "active"
 
 ## 5. Testing Infrastructure
 
-**Progress**: 60% (Unit tests for core components, integration test framework)
+**Progress**: 75% (All inline tests extracted to external test directory)
 
 | Component | Implementation | Test | Notes |
 | :-------- | :------------: | :--: | :--- |
+| External Unit Tests (`tests/unit/`) | ✅ | ✅ | 273 tests across all layers (domain, controller, usecase, adapter, actions) |
+| Integration Tests (`tests/integration/`) | ✅ | ✅ | 60 tests for workflow E2E, builder API, roundtrips |
 | CryptoService Tests | ✅ | ✅ | Comprehensive crypto operation tests |
 | Workflow Tests | ✅ | ✅ | Secret sharing/recovery E2E tests |
 | Controller Tests | ✅ | ✅ | Validator/Extractor tests |
@@ -182,6 +184,7 @@ status: "active"
 
 | Version | Date | Changes | Author |
 |---------|------|---------|--------|
+| 2.1.0 | 2026-02-23 | Extract all inline tests from client/src/ to client/tests/unit/ (273 unit tests, 0 inline tests remaining) | FORMIX Development Team |
 | 2.0.0 | 2026-02-16 | Major docs cleanup: removed 30 outdated docs files, updated status to reflect actual client/src/ implementation (entities, services, controllers, adapters) | FORMIX Development Team |
 | 1.6.0 | 2026-02-16 | Removed EVM/Elciao references, restructured phases from 6 to 3, updated CLAUDE.md/README/docs/.claude/rules/ | FORMIX Development Team |
 | 1.5.0 | 2025-01-02 | CryptoService complete, 8 tests passing, security audit, service layer 25%->40% | FORMIX Development Team |
@@ -201,4 +204,4 @@ status: "active"
 
 ---
 
-*Last updated: 2026-02-16 by FORMIX Development Team*
+*Last updated: 2026-02-23 by FORMIX Development Team*
