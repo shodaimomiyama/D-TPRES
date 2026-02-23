@@ -113,7 +113,7 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
 
     /// Retrieve Capsule, ciphertext, verifying_pk, threshold_k, and threshold_n from Arweave
     #[allow(clippy::type_complexity)]
-    fn retrieve_capsule_with_metadata(
+    async fn retrieve_capsule_with_metadata(
         &self,
         secret_id: &SecretId,
     ) -> WorkflowResult<(Capsule, Vec<u8>, Vec<u8>, u8, u8)> {
@@ -141,6 +141,7 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
         let transactions = self
             .storage_service
             .query_by_tags(params)
+            .await
             .map_err(WorkflowError::from)?;
 
         let tx = transactions.into_iter().next().ok_or_else(|| {
@@ -186,9 +187,13 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
     }
 
     /// Retrieve encrypted shares from Arweave via StorageService
-    fn retrieve_encrypted_shares(&self, secret_id: &SecretId) -> WorkflowResult<Vec<Vec<u8>>> {
+    async fn retrieve_encrypted_shares(
+        &self,
+        secret_id: &SecretId,
+    ) -> WorkflowResult<Vec<Vec<u8>>> {
         self.storage_service
             .retrieve_encrypted_shares(secret_id.as_str())
+            .await
             .map_err(WorkflowError::from)
     }
 
@@ -254,15 +259,15 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
                         "decrypt_shares: share {i} failed AES-GCM decryption, skipping: {e}"
                     );
                 }
-                Ok(data) if data.is_empty() => {
+                Ok(plaintext) if plaintext.is_empty() => {
                     log::warn!("decrypt_shares: share {i} decrypted to empty bytes, skipping");
                 }
-                Ok(data) => {
+                Ok(plaintext) => {
                     // shamirsecretsharing library embeds the index in the first byte
-                    let index = data[0];
+                    let index = plaintext[0];
                     decrypted.push(ShamirShare {
                         index,
-                        share_data: data,
+                        share_data: plaintext,
                     });
                 }
             }
@@ -296,7 +301,7 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
     ///
     /// TODO: also call this from error paths in `execute_secret_recovery` so that
     /// failed recovery attempts are recorded as well.
-    fn record_audit_trail(
+    async fn record_audit_trail(
         &self,
         secret_id: &SecretId,
         requester_process_id: &str,
@@ -336,6 +341,7 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
                     },
                 ],
             )
+            .await
             .map_err(WorkflowError::from)
     }
 }
@@ -353,8 +359,9 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
         self.validate_request(&request)?;
 
         // Step 1: Retrieve CapsulePayload (capsule + ciphertext + verifying_pk + thresholds) from Arweave
-        let (capsule, ciphertext, verifying_pk, threshold, threshold_n) =
-            self.retrieve_capsule_with_metadata(&request.secret_id)?;
+        let (capsule, ciphertext, verifying_pk, threshold, threshold_n) = self
+            .retrieve_capsule_with_metadata(&request.secret_id)
+            .await?;
 
         // Step 2: Retrieve cFrags from AO using kfrag_id convention {secret_id}_{index}
         let cfrags = self
@@ -367,7 +374,7 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
             .await?;
 
         // Step 3: Retrieve encrypted shares and verify threshold
-        let encrypted_shares = self.retrieve_encrypted_shares(&request.secret_id)?;
+        let encrypted_shares = self.retrieve_encrypted_shares(&request.secret_id).await?;
         self.verify_threshold(&cfrags, threshold)?;
 
         // Step 4-5: Decrypt Capsule using PRE and recover symmetric key
@@ -387,8 +394,9 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
         let recovered_secret = self.reconstruct_secret(&decrypted_shares, threshold)?;
 
         // Step 8: Record audit trail
-        let audit_tx_id =
-            self.record_audit_trail(&request.secret_id, &request.requester_process_id)?;
+        let audit_tx_id = self
+            .record_audit_trail(&request.secret_id, &request.requester_process_id)
+            .await?;
 
         Ok(SecretRecoveryResult {
             recovered_secret,
@@ -401,7 +409,8 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
         secret_id: &SecretId,
         requester_process_id: &str,
     ) -> WorkflowResult<bool> {
-        let (_, _, _, threshold, threshold_n) = self.retrieve_capsule_with_metadata(secret_id)?;
+        let (_, _, _, threshold, threshold_n) =
+            self.retrieve_capsule_with_metadata(secret_id).await?;
 
         let cfrags = self
             .retrieve_cfrags(
@@ -612,20 +621,20 @@ mod tests {
         let secret_id = SecretId::generate();
         println!("  Retrieving capsule for secret_id: {}", secret_id);
 
-        let result = service.retrieve_capsule_with_metadata(&secret_id);
+        let result = service.retrieve_capsule_with_metadata(&secret_id).await;
         println!("  Result: {:?}", result);
         assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
         println!("  [PASS] ResourceNotFound returned (no capsule in Arweave)");
     }
 
-    #[test]
-    fn test_phase3_retrieve_encrypted_shares_empty_when_no_data() {
+    #[tokio::test]
+    async fn test_phase3_retrieve_encrypted_shares_empty_when_no_data() {
         println!("\n=== test_phase3_retrieve_encrypted_shares_empty_when_no_data ===");
         let service = create_test_service();
         let secret_id = SecretId::generate();
         println!("  Retrieving encrypted shares for secret_id: {}", secret_id);
 
-        let result = service.retrieve_encrypted_shares(&secret_id);
+        let result = service.retrieve_encrypted_shares(&secret_id).await;
         println!("  Result: {:?}", result);
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
@@ -744,14 +753,16 @@ mod tests {
         println!("  [PASS] Zero cFrags correctly rejected");
     }
 
-    #[test]
-    fn test_record_audit_trail_placeholder() {
+    #[tokio::test]
+    async fn test_record_audit_trail_placeholder() {
         println!("\n=== test_record_audit_trail_placeholder ===");
         let service = create_test_service();
         let secret_id = SecretId::generate();
         println!("  Recording audit trail for secret_id: {}", secret_id);
 
-        let result = service.record_audit_trail(&secret_id, "requester-123");
+        let result = service
+            .record_audit_trail(&secret_id, "requester-123")
+            .await;
         println!("  Result: {:?}", result);
         assert!(result.is_ok());
 
@@ -793,7 +804,7 @@ mod tests {
 
         // Decrypt using the service
         println!("  Decrypting shares...");
-        let result = service.decrypt_shares(&encrypted_shares, &symmetric_key);
+        let result = service.decrypt_shares(&encrypted_shares, &symmetric_key, 2);
         assert!(result.is_ok());
 
         let decrypted = result.unwrap();
@@ -830,9 +841,12 @@ mod tests {
 
         // Try to decrypt with wrong key
         println!("  Attempting to decrypt with wrong key...");
-        let result = service.decrypt_shares(&[encrypted_share], &wrong_key);
+        let result = service.decrypt_shares(&[encrypted_share], &wrong_key, 1);
         println!("  Result: {:?}", result);
-        assert!(matches!(result, Err(WorkflowError::DecryptionError { .. })));
+        assert!(matches!(
+            result,
+            Err(WorkflowError::InsufficientCFrags { .. })
+        ));
         println!("  [PASS] Correctly failed with wrong key");
     }
 
@@ -845,7 +859,7 @@ mod tests {
 
         println!("  Testing with empty shares array...");
         let encrypted_shares: Vec<Vec<u8>> = vec![];
-        let result = service.decrypt_shares(&encrypted_shares, &symmetric_key);
+        let result = service.decrypt_shares(&encrypted_shares, &symmetric_key, 0);
         println!("  Result: {:?}", result.is_ok());
         assert!(result.is_ok());
 
@@ -959,13 +973,13 @@ mod tests {
 
         // Capsule retrieval returns ResourceNotFound (no matching transaction)
         println!("  Testing capsule retrieval...");
-        let result = service.retrieve_capsule_with_metadata(&secret_id);
+        let result = service.retrieve_capsule_with_metadata(&secret_id).await;
         println!("  Result: {:?}", result);
         assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
 
         // Encrypted shares retrieval returns empty vec (no matching transactions)
         println!("  Testing encrypted shares retrieval...");
-        let result = service.retrieve_encrypted_shares(&secret_id);
+        let result = service.retrieve_encrypted_shares(&secret_id).await;
         println!("  Result: {:?}", result);
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
@@ -1079,9 +1093,10 @@ mod tests {
                     },
                 ],
             )
+            .await
             .unwrap();
 
-        let result = service.retrieve_capsule_with_metadata(&secret_id);
+        let result = service.retrieve_capsule_with_metadata(&secret_id).await;
         assert!(result.is_ok());
 
         let (capsule, ciphertext, verifying_pk, threshold_k, threshold_n) = result.unwrap();
@@ -1113,9 +1128,10 @@ mod tests {
                     },
                 ],
             )
+            .await
             .unwrap();
 
-        let result = service.retrieve_capsule_with_metadata(&secret_id);
+        let result = service.retrieve_capsule_with_metadata(&secret_id).await;
         assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
     }
 
@@ -1178,10 +1194,11 @@ mod tests {
                         },
                     ],
                 )
+                .await
                 .unwrap();
         }
 
-        let result = service.retrieve_encrypted_shares(&secret_id);
+        let result = service.retrieve_encrypted_shares(&secret_id).await;
         assert!(result.is_ok());
 
         let shares = result.unwrap();

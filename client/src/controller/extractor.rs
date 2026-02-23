@@ -118,7 +118,6 @@ mod tests {
     use zeroize::Zeroizing;
 
     use crate::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
-    use zeroize::Zeroizing;
 
     fn create_test_keys() -> (SecretKey, PublicKey) {
         let crypto_service = CryptoServiceImpl::new();
