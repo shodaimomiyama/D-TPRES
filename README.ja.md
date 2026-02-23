@@ -111,14 +111,32 @@ tokio = { version = "1", features = ["rt", "macros"] }
 
 ### セットアップ
 
-2つのファイルを用意します:
+#### 1. FORMIX WASMモジュールのデプロイとプロセスのspawn
 
-**`deploy.json`** — AOプロセスのデプロイ情報（[サンプル](deploy.example.json)):
+FORMIXのAOプロセスは [cwao](https://github.com/nicholasgasior/cwao)（CosmWasm on AO）を使用します。`ao/` ディレクトリのスクリプトを使います:
+
+```bash
+cd ao
+yarn install
+
+# ウォレット生成（未作成の場合）
+yarn keygen my-wallet
+
+# WASMモジュールをArweaveにデプロイ → module_idが出力される
+yarn deploy --wallet my-wallet
+
+# AOプロセスをspawn → process_idが出力される
+yarn instantiate --wallet my-wallet --module_id <MODULE_ID> --scheduler <SCHEDULER_ADDRESS>
+```
+
+#### 2. 設定ファイルの作成
+
+**`deploy.json`** — ステップ1で取得したIDを記載（[サンプル](deploy.example.json)):
 
 ```json
 {
-  "module_id": "YOUR_AO_MODULE_ID",
-  "process_id": "YOUR_AO_PROCESS_ID",
+  "module_id": "MODULE_ID_FROM_DEPLOY",
+  "process_id": "PROCESS_ID_FROM_INSTANTIATE",
   "gateways": {
     "ao_mu": "https://mu.ao-testnet.xyz",
     "ao_cu": "https://cu.ao-testnet.xyz",
@@ -129,7 +147,7 @@ tokio = { version = "1", features = ["rt", "macros"] }
 
 `gateways` フィールドは省略可能です。省略時はtestnetのデフォルト値が使われます。
 
-**`wallet.json`** — Arweave JWKウォレットファイル（`arweave-js` または ArConnect で生成）
+**`wallet.json`** — Arweave JWKウォレットファイル（ステップ1で使用したものと同じ。`ao/.cwao/accounts/<name>.json` に生成されます）
 
 ### クライアントの初期化
 
