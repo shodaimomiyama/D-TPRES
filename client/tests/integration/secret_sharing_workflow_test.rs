@@ -6,6 +6,8 @@
 
 use std::sync::Arc;
 
+use zeroize::Zeroizing;
+
 use formix::adapter::external::mock_ao::MockAOClient;
 use formix::usecase::core::contract_storage::ContractStorageImpl;
 use formix::usecase::core::crypto::{CryptoService, CryptoServiceImpl as CoreCryptoServiceImpl};
@@ -38,7 +40,7 @@ fn create_valid_request(crypto: &CoreCryptoServiceImpl) -> SecretSharingRequest 
     let (_requester_sk, requester_pk) = crypto.generate_keypair().unwrap();
 
     SecretSharingRequest {
-        secret: b"Integration test secret data".to_vec(),
+        secret: Zeroizing::new(b"Integration test secret data".to_vec()),
         owner_secret_key: owner_sk,
         owner_public_key: owner_pk,
         requester_public_key: requester_pk,
@@ -73,7 +75,7 @@ async fn test_phase1_integration_complete_flow() {
     );
 
     let mut request = create_valid_request(&crypto);
-    request.secret = secret_data.clone();
+    request.secret = Zeroizing::new(secret_data.clone());
     request.threshold = 3;
     request.total_shares = 5;
     println!("  Threshold (k): {}", request.threshold);
@@ -239,7 +241,7 @@ async fn test_phase1_integration_various_threshold_combinations() {
         let mut request = create_valid_request(&crypto);
         request.threshold = threshold;
         request.total_shares = total;
-        request.secret = b"Test secret for threshold combo".to_vec();
+        request.secret = Zeroizing::new(b"Test secret for threshold combo".to_vec());
 
         let result = service.execute_secret_sharing(request).await;
         assert!(
@@ -289,7 +291,7 @@ async fn test_phase1_integration_secret_size_limits() {
         println!("\n[Test] {} ({} bytes)", description, size);
 
         let mut request = create_valid_request(&crypto);
-        request.secret = vec![0xAB; size];
+        request.secret = Zeroizing::new(vec![0xAB; size]);
 
         let result = service.execute_secret_sharing(request).await;
         assert!(
@@ -366,7 +368,7 @@ async fn test_phase1_integration_validation_errors() {
 
     println!("\n[Test 1] Empty secret");
     let mut request = create_valid_request(&crypto);
-    request.secret = vec![];
+    request.secret = Zeroizing::new(vec![]);
     let result = service.execute_secret_sharing(request).await;
     assert!(matches!(result, Err(WorkflowError::ValidationError(_))));
     println!("  [PASS] Empty secret rejected");

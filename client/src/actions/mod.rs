@@ -120,7 +120,7 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
     #[allow(clippy::too_many_arguments)]
     pub async fn share(
         &self,
-        secret: Vec<u8>,
+        secret: Zeroizing<Vec<u8>>,
         threshold: u8,
         total_shares: u8,
         owner_secret_key: SecretKey,
@@ -129,9 +129,6 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
         owner_process_id: String,
         options: Option<ShareOptions>,
     ) -> ActionResult<SecretSharingResult> {
-        // Wrap secret in Zeroizing to ensure cleanup on early returns or panics
-        let secret = Zeroizing::new(secret);
-
         // Step 1: Validate parameters via Controller layer
         self.controller().share_validator().validate(
             &secret,
@@ -143,8 +140,6 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
         )?;
 
         // Step 2: Extract DTO via Controller layer
-        // Pass the Zeroizing<Vec<u8>> directly so the secret bytes remain under
-        // zeroize control throughout the call chain into SecretSharingRequest.
         let metadata = options.and_then(|o| o.metadata);
         let request = self.controller().share_extractor().extract(
             secret,
@@ -259,6 +254,7 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
 #[allow(deprecated, clippy::large_futures)]
 mod tests {
     use super::*;
+    use zeroize::Zeroizing;
 
     fn create_test_container() -> DefaultActionsContainer {
         use std::sync::Arc;
@@ -281,7 +277,7 @@ mod tests {
 
         let result = container
             .share(
-                b"test secret data".to_vec(),
+                Zeroizing::new(b"test secret data".to_vec()),
                 3,
                 5,
                 owner_sk,
@@ -306,7 +302,7 @@ mod tests {
 
         let result = container
             .share(
-                vec![],
+                Zeroizing::new(vec![]),
                 3,
                 5,
                 owner_sk,
@@ -334,7 +330,7 @@ mod tests {
 
         let result = container
             .share(
-                b"test secret".to_vec(),
+                Zeroizing::new(b"test secret".to_vec()),
                 0,
                 5,
                 owner_sk,
@@ -362,7 +358,7 @@ mod tests {
 
         let result = container
             .share(
-                b"test secret".to_vec(),
+                Zeroizing::new(b"test secret".to_vec()),
                 6,
                 5,
                 owner_sk,
@@ -390,7 +386,7 @@ mod tests {
 
         let result = container
             .share(
-                b"test secret".to_vec(),
+                Zeroizing::new(b"test secret".to_vec()),
                 3,
                 5,
                 owner_sk,
@@ -413,7 +409,7 @@ mod tests {
 
         let result = container
             .share(
-                b"test secret".to_vec(),
+                Zeroizing::new(b"test secret".to_vec()),
                 3,
                 7,
                 owner_sk,
@@ -446,7 +442,7 @@ mod tests {
 
         let result = container
             .share(
-                b"test secret".to_vec(),
+                Zeroizing::new(b"test secret".to_vec()),
                 3,
                 5,
                 owner_sk,
@@ -472,7 +468,7 @@ mod tests {
 
             let result = container
                 .share(
-                    b"test secret".to_vec(),
+                    Zeroizing::new(b"test secret".to_vec()),
                     threshold,
                     total,
                     owner_sk,
@@ -611,7 +607,7 @@ mod tests {
 
         let result = container
             .share(
-                b"test secret".to_vec(),
+                Zeroizing::new(b"test secret".to_vec()),
                 3,
                 5,
                 owner_sk,

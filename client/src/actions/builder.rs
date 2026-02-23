@@ -157,8 +157,7 @@ impl<C: CoreCryptoService, Ss: StorageService, S, T, N, O, R> ShareBuilder<C, Ss
 impl<C: CoreCryptoService, Ss: StorageService> ShareBuilder<C, Ss, Set, Set, Set, Set, Set> {
     #[allow(clippy::missing_const_for_fn, clippy::large_futures)]
     pub async fn execute(self) -> ActionResult<SecretSharingResult> {
-        // secret is already Zeroizing<Vec<u8>> — keep it wrapped throughout to ensure
-        // the bytes are securely overwritten even if an error occurs mid-pipeline.
+        // Zeroizing<Vec<u8>> ensures the bytes are securely overwritten even on early returns
         let secret = self.secret.ok_or_else(|| {
             ActionError::validation_failed("missing_secret", "secret is required")
         })?;
@@ -181,7 +180,6 @@ impl<C: CoreCryptoService, Ss: StorageService> ShareBuilder<C, Ss, Set, Set, Set
             .derive_public_key(&owner_secret_key)
             .map_err(|e| ActionError::crypto_error(e.to_string()))?;
 
-        // Step 1: Validate
         self.container
             .controller()
             .share_validator()

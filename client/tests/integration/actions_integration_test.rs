@@ -9,6 +9,8 @@
 
 use std::sync::Arc;
 
+use zeroize::Zeroizing;
+
 use formix::actions::{ActionError, DefaultActionsContainer, RecoverOptions, ShareOptions};
 use formix::adapter::external::mock_ao::MockAOClient;
 use formix::usecase::core::contract_storage::ContractStorageImpl;
@@ -34,7 +36,7 @@ async fn test_actions_share_valid_params() {
 
     let result = container
         .share(
-            b"test secret data for integration".to_vec(),
+            Zeroizing::new(b"test secret data for integration".to_vec()),
             3,
             5,
             owner_sk,
@@ -59,7 +61,7 @@ async fn test_actions_share_empty_secret_fails() {
 
     let result = container
         .share(
-            vec![],
+            Zeroizing::new(vec![]),
             3,
             5,
             owner_sk,
@@ -91,7 +93,7 @@ async fn test_actions_share_zero_threshold_fails() {
 
     let result = container
         .share(
-            b"test secret".to_vec(),
+            Zeroizing::new(b"test secret".to_vec()),
             0,
             5,
             owner_sk,
@@ -119,7 +121,7 @@ async fn test_actions_share_threshold_exceeds_total_fails() {
 
     let result = container
         .share(
-            b"test secret".to_vec(),
+            Zeroizing::new(b"test secret".to_vec()),
             6,
             5,
             owner_sk,
@@ -147,7 +149,7 @@ async fn test_actions_share_result_has_valid_secret_id() {
 
     let result = container
         .share(
-            b"my secret data".to_vec(),
+            Zeroizing::new(b"my secret data".to_vec()),
             3,
             5,
             owner_sk,
@@ -174,7 +176,7 @@ async fn test_actions_share_result_kfrag_count_matches() {
 
         let result = container
             .share(
-                b"test secret".to_vec(),
+                Zeroizing::new(b"test secret".to_vec()),
                 threshold,
                 total,
                 owner_sk,
@@ -210,7 +212,7 @@ async fn test_actions_share_with_metadata() {
 
     let result = container
         .share(
-            b"secret with metadata".to_vec(),
+            Zeroizing::new(b"secret with metadata".to_vec()),
             3,
             5,
             owner_sk,
@@ -235,7 +237,7 @@ async fn test_actions_share_various_threshold_combinations() {
 
         let result = container
             .share(
-                b"test secret for combination".to_vec(),
+                Zeroizing::new(b"test secret for combination".to_vec()),
                 threshold,
                 total,
                 owner_sk,
@@ -268,7 +270,7 @@ async fn test_actions_share_unique_secret_ids() {
 
         let result = container
             .share(
-                b"test secret".to_vec(),
+                Zeroizing::new(b"test secret".to_vec()),
                 3,
                 5,
                 owner_sk,
@@ -435,7 +437,7 @@ async fn test_actions_generate_keypair_usable_with_share() {
 
     let result = container
         .share(
-            b"test secret using generated keys".to_vec(),
+            Zeroizing::new(b"test secret using generated keys".to_vec()),
             3,
             5,
             owner_sk,
@@ -489,7 +491,7 @@ async fn test_actions_share_produces_valid_result_for_recovery() {
 
     let share_result = container
         .share(
-            original_secret.clone(),
+            Zeroizing::new(original_secret.clone()),
             3,
             5,
             owner_sk,
@@ -542,7 +544,7 @@ async fn test_actions_roundtrip_with_various_secret_sizes() {
 
         let result = container
             .share(
-                secret.clone(),
+                Zeroizing::new(secret.clone()),
                 3,
                 5,
                 owner_sk,
@@ -575,7 +577,7 @@ async fn test_actions_error_display_is_informative() {
 
     let result = container
         .share(
-            vec![],
+            Zeroizing::new(vec![]),
             3,
             5,
             owner_sk,
@@ -605,7 +607,7 @@ async fn test_actions_validation_errors_have_code() {
 
     let result = container
         .share(
-            vec![],
+            Zeroizing::new(vec![]),
             3,
             5,
             owner_sk,

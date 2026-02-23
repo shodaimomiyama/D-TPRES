@@ -15,7 +15,7 @@ use crate::usecase::core::crypto::{PublicKey, SecretKey};
 /// Phase 1 execution request for secret sharing
 ///
 /// Contains all parameters needed to split and distribute a secret.
-/// Sensitive data (secret, owner_secret_key) is zeroized on drop.
+/// Sensitive data (secret, owner_secret_key) is zeroized on drop via Zeroizing wrapper.
 #[derive(Debug)]
 #[allow(clippy::exhaustive_structs)]
 pub struct SecretSharingRequest {
