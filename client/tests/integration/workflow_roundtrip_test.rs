@@ -14,7 +14,7 @@ use formix::adapter::external::mock_ao::MockAOClient;
 use formix::usecase::SecretSharingRequest;
 use formix::usecase::core::contract_storage::ContractStorageImpl;
 use formix::usecase::core::crypto::{
-    CryptoService, CryptoServiceImpl as CoreCryptoServiceImpl, ShamirShare,
+    CFragData, CryptoService, CryptoServiceImpl as CoreCryptoServiceImpl, ShamirShare,
 };
 use formix::usecase::core::storage::ArweaveStorageServiceImpl;
 use formix::usecase::service::{
@@ -458,4 +458,186 @@ async fn test_roundtrip_workflow_services_integration() {
     println!("  [PASS] AES decryption works");
 
     println!("\n[PASS] Workflow services integration successful");
+}
+
+/// Full PRE roundtrip: Phase 1 → Phase 2 → Phase 3
+///
+/// Verifies the complete Proxy Re-Encryption flow including Shamir + AES layers.
+/// Uses a single CryptoServiceImpl instance so that signer/verifying_key are consistent
+/// across kFrag generation (Phase 1) and cFrag verification (Phase 2/3).
+#[test]
+fn test_full_pre_roundtrip_phase1_phase2_phase3() {
+    println!("\n========================================");
+    println!("Full PRE Roundtrip: Phase 1 → Phase 2 → Phase 3");
+    println!("========================================");
+
+    let crypto = Arc::new(CoreCryptoServiceImpl::new());
+
+    let original_secret = b"End-to-end PRE roundtrip test secret!";
+    let secret_data: Vec<u8> = original_secret.to_vec();
+    let threshold: u8 = 3;
+    let total: u8 = 5;
+
+    // ========================================
+    // PHASE 1: Secret Sharing & PRE Setup
+    // ========================================
+    println!("\n--- PHASE 1: Secret Sharing & PRE Setup ---");
+
+    println!("\n[P1-1] Generate keypairs");
+    let (owner_sk, owner_pk) = crypto.generate_keypair().unwrap();
+    let (requester_sk, requester_pk) = crypto.generate_keypair().unwrap();
+
+    println!("\n[P1-2] Generate symmetric key and encrypt original secret with AES");
+    let symmetric_key = crypto.generate_symmetric_key().unwrap();
+    let encrypted_secret = crypto
+        .aes_gcm_encrypt(&symmetric_key, &secret_data)
+        .unwrap();
+    println!("  Symmetric key: {} bytes", symmetric_key.len());
+    println!("  Encrypted secret: {} bytes", encrypted_secret.len());
+
+    println!(
+        "\n[P1-3] Split original secret via Shamir (k={}, n={})",
+        threshold, total
+    );
+    let shares = crypto
+        .split_secret_shamir(&secret_data, threshold, total)
+        .unwrap();
+    println!("  Generated {} Shamir shares", shares.len());
+
+    println!("\n[P1-4] AES-encrypt each Shamir share with the symmetric key");
+    let encrypted_shares: Vec<Vec<u8>> = shares
+        .iter()
+        .map(|share| {
+            crypto
+                .aes_gcm_encrypt(&symmetric_key, &share.share_data)
+                .unwrap()
+        })
+        .collect();
+    println!("  Encrypted {} shares", encrypted_shares.len());
+
+    println!("\n[P1-5] Create PRE capsule (encrypts symmetric key via Umbral)");
+    let (capsule, capsule_ciphertext) = crypto
+        .create_pre_capsule(&owner_pk, &symmetric_key)
+        .unwrap();
+    println!("  Capsule: {} bytes", capsule.capsule_bytes.len());
+    println!("  Capsule ciphertext: {} bytes", capsule_ciphertext.len());
+
+    println!("\n[P1-6] Generate reencryption key and kFrags");
+    let reenc_key = crypto
+        .generate_reencryption_key(&owner_sk, &requester_pk)
+        .unwrap();
+    let kfrags = crypto.create_kfrags(&reenc_key, threshold, total).unwrap();
+    println!(
+        "  Generated {} kFrags (threshold={})",
+        kfrags.len(),
+        threshold
+    );
+
+    // ========================================
+    // PHASE 2: Proxy Re-Encryption
+    // ========================================
+    println!("\n--- PHASE 2: Proxy Re-Encryption ---");
+
+    println!(
+        "\n[P2-1] Proxy re-encrypt with threshold ({}) kFrags",
+        threshold
+    );
+    let cipher_fragments: Vec<_> = kfrags
+        .iter()
+        .take(threshold as usize)
+        .enumerate()
+        .map(|(i, kfrag)| {
+            let cfrag = crypto.proxy_reencrypt(kfrag, &capsule).unwrap();
+            println!(
+                "  cFrag {} (id={}): capsule_fragment={} bytes",
+                i,
+                cfrag.fragment_id,
+                cfrag.capsule_fragment.len()
+            );
+            cfrag
+        })
+        .collect();
+    println!("  Generated {} cFrags", cipher_fragments.len());
+
+    // ========================================
+    // PHASE 3: Secret Recovery via PRE
+    // ========================================
+    println!("\n--- PHASE 3: Secret Recovery via PRE ---");
+
+    println!("\n[P3-1] Convert CipherFragment → CFragData");
+    let cfrag_data_list: Vec<CFragData> = cipher_fragments
+        .iter()
+        .enumerate()
+        .map(|(i, cf)| CFragData::new(cf.capsule_fragment.clone(), format!("holder-{}", i)))
+        .collect();
+    println!("  Prepared {} CFragData entries", cfrag_data_list.len());
+
+    println!("\n[P3-2] Get verifying key bytes");
+    let verifying_pk_bytes = crypto.verifying_key_bytes().unwrap();
+    println!("  Verifying key: {} bytes", verifying_pk_bytes.len());
+
+    println!("\n[P3-3] Decrypt PRE capsule → recover symmetric key");
+    let recovered_symmetric_key = crypto
+        .decrypt_pre_capsule(
+            &capsule,
+            &cfrag_data_list,
+            &requester_sk,
+            &owner_pk,
+            &capsule_ciphertext,
+            &verifying_pk_bytes,
+        )
+        .unwrap();
+    assert_eq!(
+        recovered_symmetric_key, symmetric_key,
+        "Recovered symmetric key must match original"
+    );
+    println!(
+        "  [PASS] Symmetric key recovered via PRE ({} bytes)",
+        recovered_symmetric_key.len()
+    );
+
+    println!("\n[P3-4] AES-decrypt Shamir shares and verify integrity");
+    for (i, enc_share) in encrypted_shares.iter().enumerate() {
+        let decrypted = crypto
+            .aes_gcm_decrypt(&recovered_symmetric_key, enc_share)
+            .unwrap();
+        assert_eq!(
+            decrypted, shares[i].share_data,
+            "Decrypted share {} must match original share data",
+            i
+        );
+    }
+    println!(
+        "  [PASS] All {} decrypted shares match originals",
+        encrypted_shares.len()
+    );
+
+    println!(
+        "\n[P3-5] Reconstruct original secret via Shamir (using {} of {} shares)",
+        threshold, total
+    );
+    let collected: Vec<ShamirShare> = shares.into_iter().take(threshold as usize).collect();
+    let recovered_secret = crypto
+        .reconstruct_secret_shamir(&collected, threshold)
+        .unwrap();
+    assert_eq!(
+        recovered_secret, secret_data,
+        "Recovered secret must match original"
+    );
+    println!(
+        "  [PASS] Secret recovered: {:?}",
+        String::from_utf8_lossy(&recovered_secret)
+    );
+
+    // ========================================
+    // Additional: Verify AES path also works
+    // ========================================
+    println!("\n--- Additional: Verify AES decryption path ---");
+    let aes_recovered = crypto
+        .aes_gcm_decrypt(&recovered_symmetric_key, &encrypted_secret)
+        .unwrap();
+    assert_eq!(aes_recovered, secret_data);
+    println!("  [PASS] AES-encrypted secret also decrypted correctly");
+
+    println!("\n[PASS] Full PRE roundtrip Phase 1 → Phase 2 → Phase 3 successful!");
 }

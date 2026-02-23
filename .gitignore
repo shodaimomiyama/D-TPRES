@@ -1,6 +1,6 @@
 /target
 
-.github/tmp_pr_description.md
+**/tmp_pr_description.md
 
 .env
 
