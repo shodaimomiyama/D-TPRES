@@ -121,6 +121,35 @@ impl Default for DefaultActionsContainer {
     }
 }
 
+#[cfg(feature = "production-ao")]
+use crate::adapter::external::ao::ProductionAOClient;
+
+#[cfg(feature = "production-ao")]
+pub type ProductionStorageService =
+    ServiceStorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<ProductionAOClient>>;
+
+#[cfg(feature = "production-ao")]
+pub type ProductionActionsContainer =
+    ActionsContainer<CoreCryptoServiceImpl, ProductionStorageService>;
+
+#[cfg(feature = "production-ao")]
+impl ProductionActionsContainer {
+    pub fn with_production_ao(ao_client: Arc<ProductionAOClient>) -> Self {
+        let crypto_service = Arc::new(CoreCryptoServiceImpl::new());
+        let service_crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&crypto_service)));
+        let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+        let contract = Arc::new(ContractStorageImpl::new(ao_client));
+        let storage_service = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
+        let controller = ControllerContainer::new(Arc::clone(&crypto_service));
+        let workflow_services = WorkflowServiceContainer::new(service_crypto, storage_service);
+        Self {
+            controller,
+            workflow_services,
+            crypto_service,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

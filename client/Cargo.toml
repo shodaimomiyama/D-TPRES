@@ -2,6 +2,8 @@
 name = "formix"
 version = "0.1.0"
 edition = "2024"
+description = "Decentralized threshold proxy re-encryption library for Arweave and AO Network"
+license = "MIT"
 
 [dependencies]
 zeroize = { version = "1.8", features = ["derive"] }
