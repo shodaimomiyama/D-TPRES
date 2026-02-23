@@ -32,6 +32,7 @@ pub trait StorageService: Send + Sync {
         &self,
         kfrags: &[KeyFragment],
         contract_id: &str,
+        secret_id: &str,
     ) -> ServiceResult<()>;
 
     async fn delegate_capsule(&self, capsule_data: &[u8], contract_id: &str) -> ServiceResult<()>;
@@ -39,7 +40,9 @@ pub trait StorageService: Send + Sync {
     async fn retrieve_cfrags(
         &self,
         secret_id: &str,
-        requester_process_id: &str,
+        total_shares: u8,
+        capsule_id: &str,
+        process_id: &str,
     ) -> ServiceResult<Vec<CFragData>>;
 
     fn retrieve_encrypted_shares(&self, secret_id: &str) -> ServiceResult<Vec<Vec<u8>>>;
@@ -91,8 +94,11 @@ impl<S: ArweaveStorageService, CT: ContractStorage> StorageService for StorageSe
         &self,
         kfrags: &[KeyFragment],
         contract_id: &str,
+        secret_id: &str,
     ) -> ServiceResult<()> {
-        self.contract.send_kfrags(kfrags, contract_id).await
+        self.contract
+            .send_kfrags(kfrags, contract_id, secret_id)
+            .await
     }
 
     async fn delegate_capsule(&self, capsule_data: &[u8], contract_id: &str) -> ServiceResult<()> {
@@ -104,10 +110,12 @@ impl<S: ArweaveStorageService, CT: ContractStorage> StorageService for StorageSe
     async fn retrieve_cfrags(
         &self,
         secret_id: &str,
-        requester_process_id: &str,
+        total_shares: u8,
+        capsule_id: &str,
+        process_id: &str,
     ) -> ServiceResult<Vec<CFragData>> {
         self.contract
-            .retrieve_cfrags(secret_id, requester_process_id)
+            .retrieve_cfrags(secret_id, total_shares, capsule_id, process_id)
             .await
     }
 

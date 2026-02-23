@@ -95,22 +95,28 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
     }
 
     /// Retrieve cFrags from AO Network via StorageService
+    ///
+    /// Generates kfrag_ids from `{secret_id}_{0..total_shares}` convention,
+    /// then queries each kfrag's cFrag individually via GetCFrag.
     async fn retrieve_cfrags(
         &self,
         secret_id: &SecretId,
-        requester_process_id: &str,
+        total_shares: u8,
+        capsule_id: &str,
+        process_id: &str,
     ) -> WorkflowResult<Vec<CFragData>> {
         self.storage_service
-            .retrieve_cfrags(secret_id.as_str(), requester_process_id)
+            .retrieve_cfrags(secret_id.as_str(), total_shares, capsule_id, process_id)
             .await
             .map_err(WorkflowError::from)
     }
 
-    /// Retrieve Capsule, ciphertext, verifying_pk, and threshold from Arweave
+    /// Retrieve Capsule, ciphertext, verifying_pk, threshold_k, and threshold_n from Arweave
+    #[allow(clippy::type_complexity)]
     fn retrieve_capsule_with_metadata(
         &self,
         secret_id: &SecretId,
-    ) -> WorkflowResult<(Capsule, Vec<u8>, Vec<u8>, u8)> {
+    ) -> WorkflowResult<(Capsule, Vec<u8>, Vec<u8>, u8, u8)> {
         // Phase 1 stores exactly one capsule per secret_id (UUID v4), so limit=1
         // with no sort is safe. See CapsuleRepository.find_by_secret_id -> Option<Capsule>.
         let params = QueryParams {
@@ -148,6 +154,17 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
             .parse::<u8>()
             .map_err(|e| WorkflowError::validation(format!("Invalid threshold_k value: {e}")))?;
 
+        let threshold_n = tx
+            .tags
+            .iter()
+            .find(|t| t.name == "threshold_n")
+            .ok_or_else(|| {
+                WorkflowError::not_found("threshold_n tag missing from capsule transaction")
+            })?
+            .value
+            .parse::<u8>()
+            .map_err(|e| WorkflowError::validation(format!("Invalid threshold_n value: {e}")))?;
+
         let payload: CapsulePayload = bincode::deserialize(&tx.data)
             .map_err(|_| WorkflowError::crypto("Failed to deserialize CapsulePayload"))?;
 
@@ -160,6 +177,7 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
             payload.ciphertext,
             payload.verifying_pk,
             threshold_k,
+            threshold_n,
         ))
     }
 
@@ -271,14 +289,19 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
         // Step 0: Validate input parameters
         self.validate_request(&request)?;
 
-        // Step 1: Retrieve cFrags from Requester-Process via AO
-        let cfrags = self
-            .retrieve_cfrags(&request.secret_id, &request.requester_process_id)
-            .await?;
-
-        // Step 2: Retrieve CapsulePayload (capsule + ciphertext + verifying_pk) from Arweave
-        let (capsule, ciphertext, verifying_pk, threshold) =
+        // Step 1: Retrieve CapsulePayload (capsule + ciphertext + verifying_pk + thresholds) from Arweave
+        let (capsule, ciphertext, verifying_pk, threshold, threshold_n) =
             self.retrieve_capsule_with_metadata(&request.secret_id)?;
+
+        // Step 2: Retrieve cFrags from AO using kfrag_id convention {secret_id}_{index}
+        let cfrags = self
+            .retrieve_cfrags(
+                &request.secret_id,
+                threshold_n,
+                request.secret_id.as_str(),
+                &request.requester_process_id,
+            )
+            .await?;
 
         // Step 3: Retrieve encrypted shares and verify threshold
         let encrypted_shares = self.retrieve_encrypted_shares(&request.secret_id)?;
@@ -315,14 +338,17 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
         secret_id: &SecretId,
         requester_process_id: &str,
     ) -> WorkflowResult<bool> {
-        let (_, _, _, threshold) = self.retrieve_capsule_with_metadata(secret_id)?;
+        let (_, _, _, threshold, threshold_n) = self.retrieve_capsule_with_metadata(secret_id)?;
 
-        // Retrieve available cFrags
         let cfrags = self
-            .retrieve_cfrags(secret_id, requester_process_id)
+            .retrieve_cfrags(
+                secret_id,
+                threshold_n,
+                secret_id.as_str(),
+                requester_process_id,
+            )
             .await?;
 
-        // Check if we have enough
         Ok(cfrags.len() as u8 >= threshold)
     }
 }
@@ -337,7 +363,7 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
 )]
 mod tests {
     use super::*;
-    use crate::adapter::external::ao::{Binary, CFragEntry};
+    use crate::adapter::external::ao::{AOClient, ExecuteMsg};
     use crate::adapter::external::mock_ao::MockAOClient;
     use crate::usecase::core::contract_storage::ContractStorageImpl;
     use crate::usecase::core::crypto::{
@@ -507,7 +533,9 @@ mod tests {
         let secret_id = SecretId::generate();
         println!("  Retrieving cFrags for secret_id: {}", secret_id);
 
-        let result = service.retrieve_cfrags(&secret_id, "requester-123").await;
+        let result = service
+            .retrieve_cfrags(&secret_id, 3, secret_id.as_str(), "requester-123")
+            .await;
         println!("  Result: {:?}", result);
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
@@ -850,7 +878,9 @@ mod tests {
         let secret_id = SecretId::generate();
         println!("  Testing AO retrieval for secret_id: {}", secret_id);
 
-        let result = service.retrieve_cfrags(&secret_id, "requester-123").await;
+        let result = service
+            .retrieve_cfrags(&secret_id, 3, secret_id.as_str(), "requester-123")
+            .await;
         println!("  Result: {:?}", result);
         assert!(result.is_ok());
         assert!(result.unwrap().is_empty());
@@ -991,11 +1021,12 @@ mod tests {
         let result = service.retrieve_capsule_with_metadata(&secret_id);
         assert!(result.is_ok());
 
-        let (capsule, ciphertext, verifying_pk, threshold_k) = result.unwrap();
+        let (capsule, ciphertext, verifying_pk, threshold_k, threshold_n) = result.unwrap();
         assert_eq!(capsule.capsule_bytes, capsule_data);
         assert_eq!(ciphertext, ciphertext_data);
         assert_eq!(verifying_pk, verifying_pk_data);
         assert_eq!(threshold_k, 3);
+        assert_eq!(threshold_n, 5);
     }
 
     #[tokio::test]
@@ -1030,31 +1061,33 @@ mod tests {
         let (service, components) = create_test_service_with_components();
         let secret_id = SecretId::new("test-secret-ghi");
         let process_id = "requester-process-456";
+        let capsule_id = secret_id.as_str();
 
-        let test_cfrags = vec![
-            CFragEntry {
-                cfrag_data: Binary::new(vec![1, 2, 3]),
-                holder_id: "holder-1".to_string(),
-            },
-            CFragEntry {
-                cfrag_data: Binary::new(vec![4, 5, 6]),
-                holder_id: "holder-2".to_string(),
-            },
-        ];
+        // Set up cFrags via Reencrypt for kfrag_ids following {secret_id}_{index} convention
+        for i in 0..2u8 {
+            let kfrag_id = format!("{}_{}", secret_id, i);
+            components
+                .mock_ao
+                .execute(
+                    process_id,
+                    ExecuteMsg::Reencrypt {
+                        kfrag_id,
+                        capsule_id: capsule_id.to_string(),
+                    },
+                )
+                .await
+                .unwrap();
+        }
 
-        components
-            .mock_ao
-            .set_cfrags_for_secret(process_id, secret_id.as_str(), test_cfrags);
-
-        let result = service.retrieve_cfrags(&secret_id, process_id).await;
+        let result = service
+            .retrieve_cfrags(&secret_id, 2, capsule_id, process_id)
+            .await;
         assert!(result.is_ok());
 
         let cfrags = result.unwrap();
         assert_eq!(cfrags.len(), 2);
-        assert_eq!(cfrags[0].cfrag_data, vec![1, 2, 3]);
-        assert_eq!(cfrags[0].holder_id, "holder-1");
-        assert_eq!(cfrags[1].cfrag_data, vec![4, 5, 6]);
-        assert_eq!(cfrags[1].holder_id, "holder-2");
+        assert_eq!(cfrags[0].holder_id, format!("{}_0", secret_id));
+        assert_eq!(cfrags[1].holder_id, format!("{}_1", secret_id));
     }
 
     #[tokio::test]
