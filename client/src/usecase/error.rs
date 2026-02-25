@@ -264,14 +264,18 @@ pub enum WorkflowError {
         total_count: usize,
     },
 
-    /// DelegateCapsule to AO partially failed mid-loop (AO state may be inconsistent)
+    /// DelegateCapsule to AO partially failed after exhausting all retries.
     ///
     /// Encrypted shares and capsule **are safely stored on Arweave** (`share_tx_ids`
-    /// and `capsule_tx_id`). Only the AO delegation step had failures.
+    /// and `capsule_tx_id`). Only the AO delegation step had persistent failures.
     ///
-    /// Whether retry is safe depends on the AO contract's idempotency guarantee.
-    /// Consult the AO contract spec before retrying DelegateCapsule calls.
-    #[error("DelegateCapsule partial failure: {failed_count} of {total_count} kFrag delegations failed for capsule {capsule_tx_id}")]
+    /// **Retry safety:** The AO contract implements `IDEM_FLAGS` keyed on
+    /// `(process_id, kfrag_id, capsule_id)`. Successful delegations return `NoOp`
+    /// on re-submission; failed ones re-process cleanly from scratch. Manual retry
+    /// of the failed kFrags in `failed_kfrag_ids` is therefore safe.
+    /// Alternatively, use the AO `Reencrypt` message to trigger re-encryption for
+    /// capsules already stored in the holder contract.
+    #[error("DelegateCapsule partial failure: {failed_count} of {total_count} kFrag delegations failed after retries for capsule {capsule_tx_id}")]
     PartialDelegateCapsuleFailure {
         /// Arweave capsule tx ID (= `capsule_id` on AO contract)
         capsule_tx_id: String,
