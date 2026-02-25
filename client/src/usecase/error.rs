@@ -263,6 +263,22 @@ pub enum WorkflowError {
         failed_count: usize,
         total_count: usize,
     },
+
+    /// DelegateCapsule to AO partially failed mid-loop (AO state may be inconsistent)
+    ///
+    /// Some kFrags were successfully delegated before the failure.
+    /// Retry is safe only if the AO contract treats DelegateCapsule as idempotent.
+    #[error("DelegateCapsule partial failure: {failed_count} of {total_count} kFrag delegations failed for capsule {capsule_tx_id}")]
+    PartialDelegateCapsuleFailure {
+        /// Arweave capsule tx ID (= `capsule_id` on AO contract)
+        capsule_tx_id: String,
+        /// kFrag IDs that were successfully delegated
+        successful_kfrag_ids: Vec<String>,
+        /// (kfrag_id, error_message) pairs for failed delegations
+        failed_kfrag_ids: Vec<(String, String)>,
+        failed_count: usize,
+        total_count: usize,
+    },
 }
 
 /// Conversion from ServiceError to WorkflowError
@@ -334,5 +350,22 @@ impl WorkflowError {
             self,
             Self::ValidationError(_) | Self::ResourceNotFound(_) | Self::InsufficientCFrags { .. }
         )
+    }
+
+    /// Create a partial DelegateCapsule failure error
+    pub fn partial_delegate_capsule_failure(
+        capsule_tx_id: impl Into<String>,
+        successful_kfrag_ids: Vec<String>,
+        failed_kfrag_ids: Vec<(String, String)>,
+    ) -> Self {
+        let failed_count = failed_kfrag_ids.len();
+        let total_count = successful_kfrag_ids.len() + failed_count;
+        Self::PartialDelegateCapsuleFailure {
+            capsule_tx_id: capsule_tx_id.into(),
+            successful_kfrag_ids,
+            failed_kfrag_ids,
+            failed_count,
+            total_count,
+        }
     }
 }

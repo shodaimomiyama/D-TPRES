@@ -155,16 +155,14 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
             .parse::<u8>()
             .map_err(|e| WorkflowError::validation(format!("Invalid threshold_k value: {e}")))?;
 
+        // threshold_n may be absent on capsules created before this tag was introduced.
+        // Falling back to threshold_k is safe (n >= k always; using k as the lower bound).
         let threshold_n = tx
             .tags
             .iter()
             .find(|t| t.name == "threshold_n")
-            .ok_or_else(|| {
-                WorkflowError::not_found("threshold_n tag missing from capsule transaction")
-            })?
-            .value
-            .parse::<u8>()
-            .map_err(|e| WorkflowError::validation(format!("Invalid threshold_n value: {e}")))?;
+            .and_then(|t| t.value.parse::<u8>().ok())
+            .unwrap_or(threshold_k);
 
         let payload: CapsulePayload = bincode::deserialize(&tx.data)
             .map_err(|_| WorkflowError::crypto("Failed to deserialize CapsulePayload"))?;

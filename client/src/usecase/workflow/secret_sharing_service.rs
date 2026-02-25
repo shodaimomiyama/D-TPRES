@@ -285,16 +285,37 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
         //
         // This triggers Phase 2 re-encryption on the AO contract side.
         // Must be done after Step 8 because capsule_tx_id (Arweave tx) is required.
-        for kfrag in &kfrags {
-            self.storage_service
-                .delegate_capsule(
-                    &capsule.capsule_bytes,
-                    &request.owner_process_id,
-                    &format!("kfrag-{}", kfrag.id),
+        //
+        // All kFrags are attempted even if some fail, so we can report exactly
+        // which delegations succeeded/failed (AO state has no rollback).
+        {
+            let mut successful_kfrag_ids: Vec<String> = Vec::with_capacity(kfrags.len());
+            let mut failed_kfrag_ids: Vec<(String, String)> = Vec::new();
+
+            for kfrag in &kfrags {
+                let kfrag_id = format!("kfrag-{}", kfrag.id);
+                match self
+                    .storage_service
+                    .delegate_capsule(
+                        &capsule.capsule_bytes,
+                        &request.owner_process_id,
+                        &kfrag_id,
+                        &capsule_tx_id,
+                    )
+                    .await
+                {
+                    Ok(()) => successful_kfrag_ids.push(kfrag_id),
+                    Err(e) => failed_kfrag_ids.push((kfrag_id, e.to_string())),
+                }
+            }
+
+            if !failed_kfrag_ids.is_empty() {
+                return Err(WorkflowError::partial_delegate_capsule_failure(
                     &capsule_tx_id,
-                )
-                .await
-                .map_err(WorkflowError::from)?;
+                    successful_kfrag_ids,
+                    failed_kfrag_ids,
+                ));
+            }
         }
 
         let share_items: Vec<(Vec<u8>, Vec<Tag>)> = encrypted_shares
