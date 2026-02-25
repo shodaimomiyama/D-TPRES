@@ -283,41 +283,38 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
 
         // Step 8b: DelegateCapsule to AO for each kFrag
         //
-        // This triggers Phase 2 re-encryption on the AO contract side.
-        // Must be done after Step 8 because capsule_tx_id (Arweave tx) is required.
+        // Triggers Phase 2 re-encryption on the AO contract side.
+        // Must run after Step 8 because capsule_tx_id (Arweave tx) is required.
         //
-        // All kFrags are attempted even if some fail, so we can report exactly
-        // which delegations succeeded/failed (AO state has no rollback).
-        {
-            let mut successful_kfrag_ids: Vec<String> = Vec::with_capacity(kfrags.len());
-            let mut failed_kfrag_ids: Vec<(String, String)> = Vec::new();
+        // All kFrags are attempted even on partial failure so we know exactly
+        // which delegations succeeded/failed (AO has no rollback).
+        //
+        // NOTE: We intentionally do NOT return early here.
+        // Encrypted shares (Step 9) must be stored on Arweave regardless of AO
+        // outcome — otherwise a temporary AO failure would permanently orphan the
+        // capsule and leave shares unrecoverable.
+        let mut delegate_successful_ids: Vec<String> = Vec::with_capacity(kfrags.len());
+        let mut delegate_failed_ids: Vec<(String, String)> = Vec::new();
 
-            for kfrag in &kfrags {
-                let kfrag_id = format!("kfrag-{}", kfrag.id);
-                match self
-                    .storage_service
-                    .delegate_capsule(
-                        &capsule.capsule_bytes,
-                        &request.owner_process_id,
-                        &kfrag_id,
-                        &capsule_tx_id,
-                    )
-                    .await
-                {
-                    Ok(()) => successful_kfrag_ids.push(kfrag_id),
-                    Err(e) => failed_kfrag_ids.push((kfrag_id, e.to_string())),
-                }
-            }
-
-            if !failed_kfrag_ids.is_empty() {
-                return Err(WorkflowError::partial_delegate_capsule_failure(
+        for kfrag in &kfrags {
+            let kfrag_id = format!("kfrag-{}", kfrag.id);
+            match self
+                .storage_service
+                .delegate_capsule(
+                    &capsule.capsule_bytes,
+                    &request.owner_process_id,
+                    &kfrag_id,
                     &capsule_tx_id,
-                    successful_kfrag_ids,
-                    failed_kfrag_ids,
-                ));
+                )
+                .await
+            {
+                Ok(()) => delegate_successful_ids.push(kfrag_id),
+                Err(e) => delegate_failed_ids.push((kfrag_id, e.to_string())),
             }
         }
 
+        // Step 9: Store encrypted shares on Arweave
+        // Always runs — AO failures above do not skip share storage.
         let share_items: Vec<(Vec<u8>, Vec<Tag>)> = encrypted_shares
             .into_iter()
             .enumerate()
@@ -358,6 +355,17 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
             });
         }
         let share_tx_ids = batch_result.successful;
+
+        // Now that shares are safely stored, surface any DelegateCapsule failures.
+        // share_tx_ids is included so the caller knows Arweave data is intact.
+        if !delegate_failed_ids.is_empty() {
+            return Err(WorkflowError::partial_delegate_capsule_failure(
+                &capsule_tx_id,
+                share_tx_ids,
+                delegate_successful_ids,
+                delegate_failed_ids,
+            ));
+        }
 
         Ok(SecretSharingResult {
             secret_id,
