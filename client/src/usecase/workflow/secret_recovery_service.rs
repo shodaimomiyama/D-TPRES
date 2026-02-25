@@ -98,6 +98,20 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
     ///
     /// Generates kfrag_ids from `{secret_id}_{0..total_shares}` convention,
     /// then queries each kfrag's cFrag individually via GetCFrag.
+    ///
+    /// # Architecture Note: Single-Contract Design
+    ///
+    /// The `process_id` parameter is the ID of the **single deployed AO contract**
+    /// that handles all roles (Owner / Holder / Requester) in one instance.
+    /// The same contract is used in Phase 1 (`owner_process_id`) and Phase 3
+    /// (`requester_process_id`). Passing `requester_process_id` here is correct
+    /// because it refers to the same contract.
+    ///
+    /// # Known Issue: capsule_id
+    ///
+    /// Currently `capsule_id` is set to `secret_id`, but the AO contract stores
+    /// cFrags keyed by the Arweave `capsule_tx_id`. This will be resolved once
+    /// `DelegateCapsule` is implemented in Phase 1 (see Issue #70).
     async fn retrieve_cfrags(
         &self,
         secret_id: &SecretId,
@@ -367,6 +381,9 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
             .await?;
 
         // Step 2: Retrieve cFrags from AO using kfrag_id convention {secret_id}_{index}
+        // TODO(#70): Replace `secret_id.as_str()` with `capsule_tx_id` (Arweave TxId) once
+        //            DelegateCapsule is implemented in Phase 1. Currently Phase 1 does not call
+        //            DelegateCapsule, so no cFrags exist in the AO contract yet.
         let cfrags = self
             .retrieve_cfrags(
                 &request.secret_id,
