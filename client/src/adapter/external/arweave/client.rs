@@ -44,11 +44,19 @@ pub(crate) struct TransactionEdge {
     pub cursor: String,
 }
 
-/// Transaction node with ID and block info
+/// Tag entry in a GraphQL transaction response
+#[derive(Debug, Deserialize)]
+pub(crate) struct GqlTag {
+    pub name: String,
+    pub value: String,
+}
+
+/// Transaction node with ID, tags, and block info
 #[derive(Debug, Deserialize)]
 pub(crate) struct TransactionNode {
     pub id: String,
-    #[allow(dead_code)]
+    #[serde(default)]
+    pub tags: Vec<GqlTag>,
     pub block: Option<BlockInfo>,
 }
 
@@ -57,6 +65,7 @@ pub(crate) struct TransactionNode {
 pub(crate) struct BlockInfo {
     #[allow(dead_code)]
     pub height: u64,
+    pub timestamp: Option<u64>,
 }
 
 /// Pagination info for GraphQL queries
@@ -111,7 +120,7 @@ async fn sleep_backoff(_duration: Duration) {
     // WASM environment: immediate retry without delay
     // Browser fetch handles its own timeout/retry semantics
 }
-use crate::adapter::repository_impl::{ArweaveClient, Tag};
+use crate::adapter::repository_impl::{ArweaveClient, QueryResult, Tag};
 
 use super::wallet::ArweaveWallet;
 
@@ -211,7 +220,8 @@ impl ArweaveClientImpl {
                     edges {{
                         node {{
                             id
-                            block {{ height }}
+                            tags {{ name value }}
+                            block {{ height timestamp }}
                         }}
                         cursor
                     }}
@@ -645,5 +655,124 @@ impl ArweaveClient for ArweaveClientImpl {
         }
 
         Ok(all_tx_ids)
+    }
+
+    async fn query_with_meta(&self, tags: Vec<Tag>) -> Result<Vec<QueryResult>, AdapterError> {
+        let mut all_results = Vec::new();
+        let mut cursor: Option<String> = None;
+        let max_retries = self.config.max_retries();
+        let backoff_ms = self.config.retry_backoff_ms();
+
+        loop {
+            let query = Self::build_graphql_query(&tags, cursor.as_deref());
+            let payload = serde_json::json!({ "query": query });
+            let mut retries = 0;
+
+            let graphql_response: GraphQLResponse = loop {
+                match self
+                    .http_client
+                    .post(self.config.graphql_url())
+                    .json(&payload)
+                    .send()
+                    .await
+                {
+                    Ok(response) => {
+                        let status = response.status();
+
+                        if status.is_success() {
+                            break response.json().await.map_err(|e| {
+                                AdapterError::serialization_error(
+                                    "query_with_meta",
+                                    &format!("Failed to parse response: {e}"),
+                                )
+                            })?;
+                        }
+
+                        if status.is_client_error() {
+                            return Err(AdapterError::network_error(
+                                "query_with_meta",
+                                &format!("Client error: {status}"),
+                                retries,
+                            ));
+                        }
+
+                        if retries >= max_retries {
+                            return Err(AdapterError::network_error(
+                                "query_with_meta",
+                                &format!("GraphQL request failed: {status}"),
+                                retries,
+                            ));
+                        }
+                    }
+                    Err(e) => {
+                        if retries >= max_retries {
+                            return Err(AdapterError::network_error(
+                                "query_with_meta",
+                                &format!("Request failed: {e}"),
+                                retries,
+                            ));
+                        }
+                    }
+                }
+
+                retries += 1;
+                sleep_backoff(Duration::from_millis(
+                    backoff_ms.saturating_mul(1u64.checked_shl(retries).unwrap_or(u64::MAX)),
+                ))
+                .await;
+            };
+
+            if let Some(errors) = graphql_response.errors {
+                if !errors.is_empty() {
+                    return Err(AdapterError::query_error(
+                        "query_with_meta",
+                        &errors
+                            .iter()
+                            .map(|e| e.message.clone())
+                            .collect::<Vec<_>>()
+                            .join(", "),
+                    ));
+                }
+            }
+
+            let response_data = graphql_response.data.ok_or_else(|| {
+                AdapterError::query_error("query_with_meta", "No data in GraphQL response")
+            })?;
+
+            for edge in &response_data.transactions.edges {
+                let node = &edge.node;
+                let adapter_tags: Vec<Tag> = node
+                    .tags
+                    .iter()
+                    .map(|t| Tag::new(t.name.clone(), t.value.clone()))
+                    .collect();
+                let timestamp = node
+                    .block
+                    .as_ref()
+                    .and_then(|b| b.timestamp)
+                    .unwrap_or(0);
+                all_results.push(QueryResult {
+                    tx_id: node.id.clone(),
+                    tags: adapter_tags,
+                    timestamp,
+                });
+            }
+
+            if response_data.transactions.edges.is_empty() {
+                break;
+            }
+
+            if response_data.transactions.page_info.has_next_page {
+                cursor = response_data
+                    .transactions
+                    .edges
+                    .last()
+                    .map(|e| e.cursor.clone());
+            } else {
+                break;
+            }
+        }
+
+        Ok(all_results)
     }
 }

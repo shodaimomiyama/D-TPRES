@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::adapter::repository_impl::{ArweaveClient, Tag as AdapterTag};
+use crate::adapter::repository_impl::{ArweaveClient, QueryResult as AdapterQueryResult, Tag as AdapterTag};
 use crate::service::error::ServiceError;
 use crate::usecase::core::storage::{
     ArweaveStorageService, ArweaveTransaction, BatchResult, QueryParams, SortBy, SortOrder, Tag,
@@ -97,20 +97,28 @@ impl<C: ArweaveClient> ArweaveStorageService for ProductionArweaveStorageService
         }
 
         let adapter_tags = to_adapter_tags(&params.tags);
-        let tx_ids = self
+        let meta_results: Vec<AdapterQueryResult> = self
             .client
-            .query(adapter_tags)
+            .query_with_meta(adapter_tags)
             .await
             .map_err(map_adapter_error)?;
 
         let mut transactions = Vec::new();
-        for tx_id in &tx_ids {
-            if let Some(content) = self.client.get(tx_id).await.map_err(map_adapter_error)? {
+        for meta in &meta_results {
+            if let Some(content) = self.client.get(&meta.tx_id).await.map_err(map_adapter_error)? {
+                let tags: Vec<Tag> = meta
+                    .tags
+                    .iter()
+                    .map(|t| Tag {
+                        name: t.name.clone(),
+                        value: t.value.clone(),
+                    })
+                    .collect();
                 transactions.push(ArweaveTransaction {
-                    id: tx_id.clone(),
+                    id: meta.tx_id.clone(),
                     data: content,
-                    tags: Vec::new(),
-                    timestamp: 0,
+                    tags,
+                    timestamp: meta.timestamp,
                 });
             }
         }
