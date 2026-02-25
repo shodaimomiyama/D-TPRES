@@ -4,6 +4,7 @@
 //! PHASE 1 workflow: secret splitting, encryption, kFrag generation, and storage.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use zeroize::Zeroizing;
@@ -16,6 +17,17 @@ use crate::usecase::core::storage::{QueryParams, Tag};
 use crate::usecase::dto::{SecretSharingRequest, SecretSharingResult, SecretStatus};
 use crate::usecase::error::{WorkflowError, WorkflowResult};
 use crate::usecase::service::{CryptoService, StorageService};
+
+// ============================================================================
+// DelegateCapsule Retry Config
+// ============================================================================
+
+/// Maximum number of retries for each DelegateCapsule call (excluding the initial attempt).
+/// AO contract uses IDEM_FLAGS to ensure idempotency on success; retries on failure are safe.
+const DELEGATE_CAPSULE_MAX_RETRIES: u32 = 3;
+
+/// Base delay for exponential backoff (doubles each retry: 100ms → 200ms → 400ms).
+const DELEGATE_CAPSULE_RETRY_BASE_DELAY_MS: u64 = 100;
 
 // ============================================================================
 // SecretSharingWorkflowService Trait
@@ -333,26 +345,49 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
         // Called AFTER both capsule and shares are safely on Arweave (Steps 8 & 9).
         // This prevents AO from triggering re-encryption before shares are available.
         //
-        // All kFrags are attempted even on partial failure so we know exactly
-        // which delegations succeeded/failed (AO has no rollback).
-        // share_tx_ids is included in the error so callers know Arweave is intact.
+        // Retry with exponential backoff per kFrag (safe because the AO contract
+        // implements IDEM_FLAGS: successful calls return NoOp on re-submission,
+        // failed calls re-process cleanly from scratch).
+        // share_tx_ids is included in any error so callers know Arweave is intact.
         let mut delegate_successful_ids: Vec<String> = Vec::with_capacity(kfrags.len());
         let mut delegate_failed_ids: Vec<(String, String)> = Vec::new();
 
         for kfrag in &kfrags {
             let kfrag_id = format!("kfrag-{}", kfrag.id);
-            match self
-                .storage_service
-                .delegate_capsule(
-                    &capsule.capsule_bytes,
-                    &request.owner_process_id,
-                    &kfrag_id,
-                    &capsule_tx_id,
-                )
-                .await
-            {
-                Ok(()) => delegate_successful_ids.push(kfrag_id),
-                Err(e) => delegate_failed_ids.push((kfrag_id, e.to_string())),
+            let mut last_err: Option<String> = None;
+
+            for attempt in 0..=DELEGATE_CAPSULE_MAX_RETRIES {
+                if attempt > 0 {
+                    // Exponential backoff: 100ms, 200ms, 400ms
+                    let delay_ms =
+                        DELEGATE_CAPSULE_RETRY_BASE_DELAY_MS * (1u64 << (attempt - 1));
+                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                }
+
+                match self
+                    .storage_service
+                    .delegate_capsule(
+                        &capsule.capsule_bytes,
+                        &request.owner_process_id,
+                        &kfrag_id,
+                        &capsule_tx_id,
+                    )
+                    .await
+                {
+                    Ok(()) => {
+                        last_err = None;
+                        break; // success — stop retrying this kFrag
+                    }
+                    Err(e) => {
+                        last_err = Some(e.to_string());
+                        // continue to next attempt
+                    }
+                }
+            }
+
+            match last_err {
+                None => delegate_successful_ids.push(kfrag_id),
+                Some(err) => delegate_failed_ids.push((kfrag_id, err)),
             }
         }
 
