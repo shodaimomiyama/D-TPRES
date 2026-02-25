@@ -57,14 +57,22 @@ impl FormixClient {
     ///
     /// Intended for testing and scenarios where wallet/process setup
     /// is handled externally.
+    ///
+    /// # Note: Gateway URLs are currently ignored
+    ///
+    /// `ao_gateway_url` and `arweave_gateway_url` are stored on the struct but are
+    /// **not yet wired into `ActionsContainer`**.  All network I/O uses the default
+    /// (in-memory / mock) implementations until Issue #51 / #52 are resolved.
+    ///
+    /// See: <https://github.com/shodaimomiyama/FORMIX/issues/51>
     pub fn new(
         process_id: String,
         wallet_address: String,
         ao_gateway_url: String,
         arweave_gateway_url: String,
     ) -> Self {
-        // TODO(#51/#52): Pass gateway URLs to ActionsContainer
-        // when StorageService/AOClient DI integration is implemented
+        // TODO(#51/#52): Pass ao_gateway_url / arweave_gateway_url to ActionsContainer
+        // so that StorageService and AOClient are configured to use the caller-provided URLs.
         let actions = Arc::new(DefaultActionsContainer::new());
 
         Self {

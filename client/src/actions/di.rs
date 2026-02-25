@@ -134,9 +134,26 @@ pub type ProductionActionsContainer =
 
 #[cfg(feature = "production-ao")]
 impl ProductionActionsContainer {
+    /// Create a `ProductionActionsContainer` wired to the given AO client.
+    ///
+    /// # Warning: Arweave storage is not yet persistent
+    ///
+    /// This constructor currently uses `ArweaveStorageServiceImpl::default()` which is an
+    /// **in-memory** stub. No data will be persisted to the Arweave network.
+    /// A real Arweave client implementation must be wired here before production use.
+    /// See: <https://github.com/shodaimomiyama/FORMIX/issues/60>
+    ///
+    /// TODO: Replace `ArweaveStorageServiceImpl::default()` with a real
+    /// `ArweaveClientImpl` once Issue #60 is resolved.
     pub fn with_production_ao(ao_client: Arc<ProductionAOClient>) -> Self {
+        log::warn!(
+            "ProductionActionsContainer: ArweaveStorageServiceImpl is using an in-memory stub. \
+             Arweave persistence is NOT implemented. Data will be lost on process restart. \
+             See https://github.com/shodaimomiyama/FORMIX/issues/60"
+        );
         let crypto_service = Arc::new(CoreCryptoServiceImpl::new());
         let service_crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&crypto_service)));
+        // TODO(#60): Replace with real ArweaveClientImpl for persistent storage
         let arweave = Arc::new(ArweaveStorageServiceImpl::default());
         let contract = Arc::new(ContractStorageImpl::new(ao_client));
         let storage_service = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
