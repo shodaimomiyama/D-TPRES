@@ -32,13 +32,17 @@ use serde::{Deserialize, Serialize};
 
 /// Capsule payload for Arweave storage
 ///
-/// Bundles capsule, ciphertext, and verifying_pk into a single serializable unit.
-/// Phase 1 stores this as a single Arweave transaction; Phase 3 deserializes it.
+/// Bundles capsule, ciphertext, verifying_pk, and threshold parameters into a single
+/// serializable unit. Phase 1 stores this as a single Arweave transaction; Phase 3
+/// deserializes it. Thresholds are embedded here as a fail-safe to avoid relying on
+/// Arweave tags (which may not be populated in all client implementations).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct CapsulePayload {
     pub capsule_bytes: Vec<u8>,
     pub ciphertext: Vec<u8>,
     pub verifying_pk: Vec<u8>,
+    pub threshold_k: u8,
+    pub threshold_n: u8,
 }
 
 // 型エイリアス：秘密鍵のバイト表現

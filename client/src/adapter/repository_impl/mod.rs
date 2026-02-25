@@ -83,6 +83,17 @@ pub mod tag_values {
     pub const ENTITY_CFRAG: &str = "CFrag";
 }
 
+/// A query result containing full transaction metadata (tx_id, tags, timestamp).
+#[derive(Debug, Clone)]
+pub struct QueryResult {
+    /// Arweave transaction ID
+    pub tx_id: String,
+    /// Tags attached to the transaction
+    pub tags: Vec<Tag>,
+    /// Block timestamp in seconds (0 if unavailable/not yet confirmed)
+    pub timestamp: u64,
+}
+
 /// Arweave client trait for abstracting Arweave operations
 ///
 /// This trait defines the interface for Arweave storage operations.
@@ -107,6 +118,12 @@ pub trait ArweaveClient: Send + Sync {
     ///
     /// Returns a list of matching transaction IDs.
     async fn query(&self, tags: Vec<Tag>) -> Result<Vec<String>, AdapterError>;
+
+    /// Query transactions with full metadata (tags + timestamp).
+    ///
+    /// Returns a list of [`QueryResult`] entries each containing the tx_id,
+    /// the tags attached at upload time, and the block timestamp.
+    async fn query_with_meta(&self, tags: Vec<Tag>) -> Result<Vec<QueryResult>, AdapterError>;
 }
 
 /// Arweave client trait for abstracting Arweave operations (WASM version)
@@ -128,6 +145,12 @@ pub trait ArweaveClient {
     ///
     /// Returns a list of matching transaction IDs.
     async fn query(&self, tags: Vec<Tag>) -> Result<Vec<String>, AdapterError>;
+
+    /// Query transactions with full metadata (tags + timestamp).
+    ///
+    /// Returns a list of [`QueryResult`] entries each containing the tx_id,
+    /// the tags attached at upload time, and the block timestamp.
+    async fn query_with_meta(&self, tags: Vec<Tag>) -> Result<Vec<QueryResult>, AdapterError>;
 }
 
 /// Helper functions for creating common tags
@@ -173,7 +196,7 @@ pub mod tag_helpers {
 /// Mock Arweave client module for testing
 #[cfg(test)]
 pub mod mock {
-    use super::{AdapterError, ArweaveClient, Tag};
+    use super::{AdapterError, ArweaveClient, QueryResult, Tag};
     use async_trait::async_trait;
     use std::collections::HashMap;
     use std::sync::RwLock;
@@ -281,6 +304,30 @@ pub mod mock {
             });
 
             Ok(matching_ids)
+        }
+
+        async fn query_with_meta(&self, tags: Vec<Tag>) -> Result<Vec<QueryResult>, AdapterError> {
+            let storage = self.storage.read().unwrap();
+            let mut results: Vec<QueryResult> = storage
+                .iter()
+                .filter(|(_, entry)| Self::tags_match(&entry.tags, &tags))
+                .map(|(tx_id, entry)| QueryResult {
+                    tx_id: tx_id.clone(),
+                    tags: entry.tags.clone(),
+                    timestamp: 0,
+                })
+                .collect();
+
+            results.sort_by(|a, b| {
+                let extract_num = |s: &str| {
+                    s.strip_prefix("mock_tx_")
+                        .and_then(|n| n.parse::<u64>().ok())
+                        .unwrap_or(0)
+                };
+                extract_num(&a.tx_id).cmp(&extract_num(&b.tx_id))
+            });
+
+            Ok(results)
         }
     }
 

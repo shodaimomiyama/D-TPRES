@@ -148,30 +148,29 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
             WorkflowError::not_found(format!("Capsule not found for secret {secret_id}"))
         })?;
 
-        let threshold_k = tx
-            .tags
-            .iter()
-            .find(|t| t.name == "threshold_k")
-            .ok_or_else(|| {
-                WorkflowError::not_found("threshold_k tag missing from capsule transaction")
-            })?
-            .value
-            .parse::<u8>()
-            .map_err(|e| WorkflowError::validation(format!("Invalid threshold_k value: {e}")))?;
-
-        let threshold_n = tx
-            .tags
-            .iter()
-            .find(|t| t.name == "threshold_n")
-            .ok_or_else(|| {
-                WorkflowError::not_found("threshold_n tag missing from capsule transaction")
-            })?
-            .value
-            .parse::<u8>()
-            .map_err(|e| WorkflowError::validation(format!("Invalid threshold_n value: {e}")))?;
-
+        // Deserialize CapsulePayload first — threshold values are now embedded in the
+        // payload (fail-safe), so we no longer depend on Arweave tags being populated.
         let payload: CapsulePayload = bincode::deserialize(&tx.data)
             .map_err(|_| WorkflowError::crypto("Failed to deserialize CapsulePayload"))?;
+
+        let threshold_k = payload.threshold_k;
+        let threshold_n = payload.threshold_n;
+
+        // Validate threshold values immediately after retrieval
+        const MIN_THRESHOLD: u8 = 2;
+        if threshold_k < MIN_THRESHOLD {
+            return Err(WorkflowError::validation(format!(
+                "threshold_k ({threshold_k}) must be >= {MIN_THRESHOLD}"
+            )));
+        }
+        if threshold_n == 0 {
+            return Err(WorkflowError::validation("threshold_n must be > 0"));
+        }
+        if threshold_k > threshold_n {
+            return Err(WorkflowError::validation(format!(
+                "threshold_k ({threshold_k}) must be <= threshold_n ({threshold_n})"
+            )));
+        }
 
         let capsule = Capsule {
             capsule_bytes: payload.capsule_bytes,
@@ -311,9 +310,13 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
             .unwrap_or_default()
             .as_secs();
 
-        let audit_record = format!(
-            r#"{{"secret_id":"{secret_id}","requester_process_id":"{requester_process_id}","status":"success","timestamp_secs":{timestamp}}}"#
-        );
+        let audit_record = serde_json::json!({
+            "secret_id": secret_id.as_str(),
+            "requester_process_id": requester_process_id,
+            "status": "success",
+            "timestamp_secs": timestamp,
+        })
+        .to_string();
 
         self.storage_service
             .store_data(
@@ -1067,6 +1070,8 @@ mod tests {
             capsule_bytes: capsule_data.clone(),
             ciphertext: ciphertext_data.clone(),
             verifying_pk: verifying_pk_data.clone(),
+            threshold_k: 3,
+            threshold_n: 5,
         };
         let payload_bytes = bincode::serialize(&payload).unwrap();
 
@@ -1082,14 +1087,6 @@ mod tests {
                     Tag {
                         name: "secret_id".to_string(),
                         value: secret_id.as_str().to_string(),
-                    },
-                    Tag {
-                        name: "threshold_k".to_string(),
-                        value: "3".to_string(),
-                    },
-                    Tag {
-                        name: "threshold_n".to_string(),
-                        value: "5".to_string(),
                     },
                 ],
             )
@@ -1108,15 +1105,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_retrieve_capsule_missing_threshold_tag() {
+    async fn test_retrieve_capsule_invalid_payload_data() {
+        // When stored data is not a valid CapsulePayload, deserialization fails with CryptoError.
+        // (Previously this test checked for a missing threshold tag; now thresholds are in the payload.)
         let (service, components) = create_test_service_with_components();
         let secret_id = SecretId::new("test-secret-def");
-        let capsule_data = vec![10, 20, 30];
+        let invalid_data = vec![10, 20, 30]; // not a serialized CapsulePayload
 
         components
             .arweave
             .store_data(
-                &capsule_data,
+                &invalid_data,
                 vec![
                     Tag {
                         name: "type".to_string(),
@@ -1132,7 +1131,7 @@ mod tests {
             .unwrap();
 
         let result = service.retrieve_capsule_with_metadata(&secret_id).await;
-        assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
+        assert!(matches!(result, Err(WorkflowError::CryptoError(_))));
     }
 
     #[tokio::test]

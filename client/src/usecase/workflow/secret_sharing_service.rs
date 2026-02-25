@@ -255,6 +255,8 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
             capsule_bytes: capsule.capsule_bytes.clone(),
             ciphertext,
             verifying_pk: verifying_pk_bytes,
+            threshold_k: request.threshold,
+            threshold_n: request.total_shares,
         };
         let payload_bytes = bincode::serialize(&payload)
             .map_err(|_| WorkflowError::crypto("Failed to serialize CapsulePayload"))?;
