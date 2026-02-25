@@ -1,7 +1,8 @@
 [package]
 name = "formix"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
+
 description = "Decentralized threshold proxy re-encryption library for Arweave and AO Network"
 license = "MIT"
 
