@@ -266,12 +266,17 @@ pub enum WorkflowError {
 
     /// DelegateCapsule to AO partially failed mid-loop (AO state may be inconsistent)
     ///
-    /// Some kFrags were successfully delegated before the failure.
-    /// Retry is safe only if the AO contract treats DelegateCapsule as idempotent.
+    /// Encrypted shares and capsule **are safely stored on Arweave** (`share_tx_ids`
+    /// and `capsule_tx_id`). Only the AO delegation step had failures.
+    ///
+    /// Whether retry is safe depends on the AO contract's idempotency guarantee.
+    /// Consult the AO contract spec before retrying DelegateCapsule calls.
     #[error("DelegateCapsule partial failure: {failed_count} of {total_count} kFrag delegations failed for capsule {capsule_tx_id}")]
     PartialDelegateCapsuleFailure {
         /// Arweave capsule tx ID (= `capsule_id` on AO contract)
         capsule_tx_id: String,
+        /// Arweave share tx IDs — encrypted shares are stored even on failure
+        share_tx_ids: Vec<String>,
         /// kFrag IDs that were successfully delegated
         successful_kfrag_ids: Vec<String>,
         /// (kfrag_id, error_message) pairs for failed delegations
@@ -353,8 +358,12 @@ impl WorkflowError {
     }
 
     /// Create a partial DelegateCapsule failure error
+    ///
+    /// `share_tx_ids` should contain the Arweave tx IDs of encrypted shares that
+    /// were successfully stored, so callers know Arweave data is intact.
     pub fn partial_delegate_capsule_failure(
         capsule_tx_id: impl Into<String>,
+        share_tx_ids: Vec<String>,
         successful_kfrag_ids: Vec<String>,
         failed_kfrag_ids: Vec<(String, String)>,
     ) -> Self {
@@ -362,6 +371,7 @@ impl WorkflowError {
         let total_count = successful_kfrag_ids.len() + failed_count;
         Self::PartialDelegateCapsuleFailure {
             capsule_tx_id: capsule_tx_id.into(),
+            share_tx_ids,
             successful_kfrag_ids,
             failed_kfrag_ids,
             failed_count,
