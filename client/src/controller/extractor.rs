@@ -2,6 +2,8 @@
 //!
 //! Converts validated raw parameters into UseCase layer DTOs.
 
+use zeroize::Zeroizing;
+
 use crate::domain::value_objects::SecretId;
 use crate::usecase::core::crypto::{PublicKey, SecretKey};
 
@@ -37,7 +39,7 @@ impl ShareExtractor {
     #[allow(clippy::too_many_arguments)]
     pub fn extract(
         &self,
-        secret: Vec<u8>,
+        secret: Zeroizing<Vec<u8>>,
         owner_secret_key: SecretKey,
         owner_public_key: PublicKey,
         requester_public_key: PublicKey,
@@ -114,6 +116,7 @@ impl Default for RecoverExtractor {
 mod tests {
     use super::*;
     use crate::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
+    use zeroize::Zeroizing;
 
     fn create_test_keys() -> (SecretKey, PublicKey) {
         let crypto_service = CryptoServiceImpl::new();
@@ -133,7 +136,7 @@ mod tests {
         let (_, requester_pk) = create_test_keys();
 
         let request = extractor.extract(
-            b"secret data".to_vec(),
+            Zeroizing::new(b"secret data".to_vec()),
             owner_sk,
             owner_pk,
             requester_pk,
@@ -156,7 +159,7 @@ mod tests {
         let secret = b"my secret data".to_vec();
 
         let request = extractor.extract(
-            secret.clone(),
+            Zeroizing::new(secret.clone()),
             owner_sk,
             owner_pk,
             requester_pk,
@@ -166,7 +169,7 @@ mod tests {
             None,
         );
 
-        assert_eq!(request.secret, secret);
+        assert_eq!(*request.secret, secret);
     }
 
     #[test]
@@ -176,7 +179,7 @@ mod tests {
         let (_, requester_pk) = create_test_keys();
 
         let request = extractor.extract(
-            b"secret".to_vec(),
+            Zeroizing::new(b"secret".to_vec()),
             owner_sk,
             owner_pk,
             requester_pk,
@@ -198,7 +201,7 @@ mod tests {
         let owner_pk_bytes = owner_pk.key_data.clone();
 
         let request = extractor.extract(
-            b"secret".to_vec(),
+            Zeroizing::new(b"secret".to_vec()),
             owner_sk,
             owner_pk,
             requester_pk,
@@ -220,7 +223,7 @@ mod tests {
         let requester_pk_bytes = requester_pk.key_data.clone();
 
         let request = extractor.extract(
-            b"secret".to_vec(),
+            Zeroizing::new(b"secret".to_vec()),
             owner_sk,
             owner_pk,
             requester_pk,
@@ -247,7 +250,7 @@ mod tests {
         };
 
         let request = extractor.extract(
-            b"secret".to_vec(),
+            Zeroizing::new(b"secret".to_vec()),
             owner_sk,
             owner_pk,
             requester_pk,
@@ -270,7 +273,7 @@ mod tests {
         let (_, requester_pk) = create_test_keys();
 
         let request = extractor.extract(
-            b"secret".to_vec(),
+            Zeroizing::new(b"secret".to_vec()),
             owner_sk,
             owner_pk,
             requester_pk,

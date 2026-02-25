@@ -15,6 +15,7 @@ use crate::domain::value_objects::SecretId;
 use crate::usecase::core::crypto::{CryptoService as CoreCryptoService, PublicKey, SecretKey};
 use crate::usecase::dto::{SecretMetadata, SecretRecoveryResult, SecretSharingResult};
 use crate::usecase::service::StorageService;
+use crate::usecase::workflow::secret_sharing_service::SecretSharingWorkflowService;
 
 use super::di::ActionsContainer;
 
@@ -154,9 +155,11 @@ impl<C: CoreCryptoService, Ss: StorageService, S, T, N, O, R> ShareBuilder<C, Ss
 }
 
 impl<C: CoreCryptoService, Ss: StorageService> ShareBuilder<C, Ss, Set, Set, Set, Set, Set> {
-    #[allow(deprecated, clippy::missing_const_for_fn, clippy::large_futures)]
+    #[allow(clippy::missing_const_for_fn, clippy::large_futures)]
     pub async fn execute(self) -> ActionResult<SecretSharingResult> {
-        let mut secret = self.secret.ok_or_else(|| {
+        // secret is already Zeroizing<Vec<u8>> — keep it wrapped throughout to ensure
+        // the bytes are securely overwritten even if an error occurs mid-pipeline.
+        let secret = self.secret.ok_or_else(|| {
             ActionError::validation_failed("missing_secret", "secret is required")
         })?;
         let threshold = self.threshold.ok_or_else(|| {
@@ -178,21 +181,39 @@ impl<C: CoreCryptoService, Ss: StorageService> ShareBuilder<C, Ss, Set, Set, Set
             .derive_public_key(&owner_secret_key)
             .map_err(|e| ActionError::crypto_error(e.to_string()))?;
 
-        let secret = std::mem::take(&mut *secret);
-        let options = self.metadata.map(ShareOptions::with_metadata);
-
+        // Step 1: Validate
         self.container
-            .share(
-                secret,
+            .controller()
+            .share_validator()
+            .validate(
+                &secret,
                 threshold,
                 total_shares,
-                owner_secret_key,
-                owner_public_key,
-                requester_public_key,
-                self.process_id,
-                options,
-            )
+                &owner_secret_key,
+                &owner_public_key,
+                &requester_public_key,
+            )?;
+
+        // Step 2: Build DTO — Zeroizing<Vec<u8>> moves into SecretSharingRequest.secret
+        let metadata = self.metadata.map(ShareOptions::with_metadata).and_then(|o| o.metadata);
+        let request = self.container.controller().share_extractor().extract(
+            secret,
+            owner_secret_key,
+            owner_public_key,
+            requester_public_key,
+            threshold,
+            total_shares,
+            self.process_id,
+            metadata,
+        );
+
+        // Step 3: Execute workflow
+        self.container
+            .workflow_services()
+            .secret_sharing_service()
+            .execute_secret_sharing(request)
             .await
+            .map_err(ActionError::from)
     }
 }
 

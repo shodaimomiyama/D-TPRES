@@ -655,7 +655,7 @@ mod tests {
         let (_requester_sk, requester_pk) = crypto.generate_keypair().unwrap();
 
         SecretSharingRequest {
-            secret: b"Test secret data for sharing".to_vec(),
+            secret: Zeroizing::new(b"Test secret data for sharing".to_vec()),
             owner_secret_key: owner_sk,
             owner_public_key: owner_pk,
             requester_public_key: requester_pk,
@@ -754,7 +754,7 @@ mod tests {
         let service = create_test_service();
         let crypto = CoreCryptoServiceImpl::new();
         let mut request = create_test_request(&crypto);
-        request.secret = vec![];
+        request.secret = Zeroizing::new(vec![]);
         println!("  Testing empty secret");
 
         let result = service.validate_request(&request);
@@ -1038,7 +1038,7 @@ mod tests {
         );
 
         let mut request = create_test_request(&crypto);
-        request.secret = original_secret.clone();
+        request.secret = Zeroizing::new(original_secret.clone());
         request.threshold = 3;
         request.total_shares = 5;
         println!("  Parameters: threshold=3, total_shares=5");
@@ -1090,7 +1090,7 @@ mod tests {
         let mut request = create_test_request(&crypto);
 
         // Test with max supported secret size (63 bytes - DATA_SIZE is 64, 1 byte for length prefix)
-        request.secret = vec![0xAB; 63];
+        request.secret = Zeroizing::new(vec![0xAB; 63]);
         println!("  Testing max secret size: {} bytes", request.secret.len());
 
         let result = service.execute_secret_sharing(request).await;
@@ -1109,7 +1109,7 @@ mod tests {
         let service = create_test_service();
         let crypto = CoreCryptoServiceImpl::new();
         let mut request = create_test_request(&crypto);
-        request.secret = vec![]; // Invalid
+        request.secret = Zeroizing::new(vec![]); // Invalid
         println!("  Testing with empty secret (should fail validation)");
 
         let result = service.execute_secret_sharing(request).await;

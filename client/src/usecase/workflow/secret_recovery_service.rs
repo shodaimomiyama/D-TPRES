@@ -11,7 +11,7 @@ use crate::domain::value_objects::SecretId;
 use crate::usecase::core::crypto::{
     CFragData, Capsule, CapsulePayload, PublicKey, SecretKey, ShamirShare,
 };
-use crate::usecase::core::storage::{QueryParams, Tag};
+use crate::usecase::core::storage::{QueryParams, SortBy, SortOrder, Tag};
 use crate::usecase::dto::{SecretRecoveryRequest, SecretRecoveryResult};
 use crate::usecase::error::{WorkflowError, WorkflowResult};
 use crate::usecase::service::{CryptoService, StorageService};
@@ -117,8 +117,12 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
         &self,
         secret_id: &SecretId,
     ) -> WorkflowResult<(Capsule, Vec<u8>, Vec<u8>, u8, u8)> {
-        // Phase 1 stores exactly one capsule per secret_id (UUID v4), so limit=1
-        // with no sort is safe. See CapsuleRepository.find_by_secret_id -> Option<Capsule>.
+        // Ideally there is exactly one capsule per secret_id (UUID v4), but if multiple
+        // transactions exist for the same secret_id (e.g. due to retries), we pick the
+        // most-recently stored one by sorting descending by timestamp.
+        // TODO: Verify that the Arweave GraphQL API used by ArweaveStorageServiceImpl
+        //       propagates the SortBy::Timestamp ordering to the underlying query;
+        //       the in-memory implementation already supports it.
         let params = QueryParams {
             tags: vec![
                 Tag {
@@ -131,7 +135,7 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
                 },
             ],
             limit: Some(1),
-            sort_by: None,
+            sort_by: Some(SortBy::Timestamp(SortOrder::Descending)),
         };
 
         let transactions = self
@@ -224,38 +228,53 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
             })
     }
 
-    /// Decrypt shares with AES-GCM
+    /// Decrypt shares with AES-GCM, skipping corrupted/invalid shares.
+    ///
+    /// If a share fails to decrypt it is logged and skipped rather than aborting
+    /// the entire recovery.  The caller (`execute_secret_recovery`) checks that at
+    /// least `threshold` shares were successfully decrypted before proceeding to
+    /// Shamir reconstruction.
     fn decrypt_shares(
         &self,
         encrypted_shares: &[Vec<u8>],
         symmetric_key: &[u8],
+        threshold: u8,
     ) -> WorkflowResult<Vec<ShamirShare>> {
-        encrypted_shares
-            .iter()
-            .enumerate()
-            .map(|(i, encrypted_share)| {
-                let decrypted_data = self
-                    .crypto_service
-                    .aes_gcm_decrypt(symmetric_key, encrypted_share)
-                    .map_err(|e| WorkflowError::DecryptionError {
-                        phase: format!("AES-GCM decryption of share {i}: {e}"),
-                    })?;
+        let mut decrypted = Vec::with_capacity(encrypted_shares.len());
 
-                // shamirsecretsharing library embeds the index in the first byte of share data
-                if decrypted_data.is_empty() {
-                    return Err(WorkflowError::DecryptionError {
-                        phase: "Share data is empty after decryption".to_string(),
+        for (i, encrypted_share) in encrypted_shares.iter().enumerate() {
+            match self
+                .crypto_service
+                .aes_gcm_decrypt(symmetric_key, encrypted_share)
+            {
+                Err(e) => {
+                    // Skip this share and continue — a corrupted/missing share must not
+                    // prevent recovery when enough valid shares remain.
+                    log::warn!(
+                        "decrypt_shares: share {i} failed AES-GCM decryption, skipping: {e}"
+                    );
+                }
+                Ok(data) if data.is_empty() => {
+                    log::warn!("decrypt_shares: share {i} decrypted to empty bytes, skipping");
+                }
+                Ok(data) => {
+                    // shamirsecretsharing library embeds the index in the first byte
+                    let index = data[0];
+                    decrypted.push(ShamirShare {
+                        index,
+                        share_data: data,
                     });
                 }
+            }
+        }
 
-                let index = decrypted_data[0];
+        // Verify we still have enough valid shares to meet the threshold
+        let available = decrypted.len() as u8;
+        if available < threshold {
+            return Err(WorkflowError::insufficient_cfrags(threshold, available));
+        }
 
-                Ok(ShamirShare {
-                    index,
-                    share_data: decrypted_data,
-                })
-            })
-            .collect()
+        Ok(decrypted)
     }
 
     /// Reconstruct secret using Shamir Secret Sharing
@@ -267,13 +286,57 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
             })
     }
 
-    /// Record audit trail on Arweave (placeholder)
+    /// Record an audit trail entry on Arweave.
+    ///
+    /// Stores a minimal JSON record containing:
+    /// - `secret_id` — which secret was accessed
+    /// - `requester_process_id` — who requested access
+    /// - `status` — outcome (`"success"` when called from the happy path)
+    /// - `timestamp_secs` — Unix timestamp of the event
+    ///
+    /// TODO: also call this from error paths in `execute_secret_recovery` so that
+    /// failed recovery attempts are recorded as well.
     fn record_audit_trail(
         &self,
-        _secret_id: &SecretId,
-        _requester_process_id: &str,
+        secret_id: &SecretId,
+        requester_process_id: &str,
     ) -> WorkflowResult<String> {
-        Ok("audit_not_implemented".to_string())
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        let audit_record = format!(
+            r#"{{"secret_id":"{secret_id}","requester_process_id":"{requester_process_id}","status":"success","timestamp_secs":{timestamp}}}"#
+        );
+
+        self.storage_service
+            .store_data(
+                audit_record.as_bytes(),
+                vec![
+                    Tag {
+                        name: "type".to_string(),
+                        value: "audit_trail".to_string(),
+                    },
+                    Tag {
+                        name: "secret_id".to_string(),
+                        value: secret_id.as_str().to_string(),
+                    },
+                    Tag {
+                        name: "requester_process_id".to_string(),
+                        value: requester_process_id.to_string(),
+                    },
+                    Tag {
+                        name: "status".to_string(),
+                        value: "success".to_string(),
+                    },
+                    Tag {
+                        name: "timestamp_secs".to_string(),
+                        value: timestamp.to_string(),
+                    },
+                ],
+            )
+            .map_err(WorkflowError::from)
     }
 }
 
@@ -317,8 +380,8 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
             &verifying_pk,
         )?;
 
-        // Step 6: Decrypt each share with AES-GCM
-        let decrypted_shares = self.decrypt_shares(&encrypted_shares, &symmetric_key)?;
+        // Step 6: Decrypt each share with AES-GCM (corrupt shares are skipped)
+        let decrypted_shares = self.decrypt_shares(&encrypted_shares, &symmetric_key, threshold)?;
 
         // Step 7: Reconstruct secret using Shamir
         let recovered_secret = self.reconstruct_secret(&decrypted_shares, threshold)?;

@@ -129,8 +129,8 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
         owner_process_id: String,
         options: Option<ShareOptions>,
     ) -> ActionResult<SecretSharingResult> {
-        // Wrap secret in Zeroizing to ensure cleanup on early returns
-        let mut secret = Zeroizing::new(secret);
+        // Wrap secret in Zeroizing to ensure cleanup on early returns or panics
+        let secret = Zeroizing::new(secret);
 
         // Step 1: Validate parameters via Controller layer
         self.controller().share_validator().validate(
@@ -143,10 +143,11 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
         )?;
 
         // Step 2: Extract DTO via Controller layer
-        // Take ownership from Zeroizing wrapper (leaves empty vec, which is a no-op for zeroize)
+        // Pass the Zeroizing<Vec<u8>> directly so the secret bytes remain under
+        // zeroize control throughout the call chain into SecretSharingRequest.
         let metadata = options.and_then(|o| o.metadata);
         let request = self.controller().share_extractor().extract(
-            std::mem::take(&mut *secret),
+            secret,
             owner_secret_key,
             owner_public_key,
             requester_public_key,
