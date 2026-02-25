@@ -281,6 +281,22 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
             )
             .map_err(WorkflowError::from)?;
 
+        // Step 8b: DelegateCapsule to AO for each kFrag
+        //
+        // This triggers Phase 2 re-encryption on the AO contract side.
+        // Must be done after Step 8 because capsule_tx_id (Arweave tx) is required.
+        for kfrag in &kfrags {
+            self.storage_service
+                .delegate_capsule(
+                    &capsule.capsule_bytes,
+                    &request.owner_process_id,
+                    &format!("kfrag-{}", kfrag.id),
+                    &capsule_tx_id,
+                )
+                .await
+                .map_err(WorkflowError::from)?;
+        }
+
         let share_items: Vec<(Vec<u8>, Vec<Tag>)> = encrypted_shares
             .into_iter()
             .enumerate()
