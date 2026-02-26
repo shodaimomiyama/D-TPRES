@@ -1,4 +1,4 @@
-use formix::domain::{SYMMETRIC_KEY_SIZE, SymmetricKey};
+use formix::domain::{SymmetricKey, SYMMETRIC_KEY_SIZE};
 
 #[test]
 fn test_symmetric_key_new() {

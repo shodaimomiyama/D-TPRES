@@ -11,7 +11,7 @@ use zeroize::Zeroizing;
 
 use crate::domain::value_objects::SecretId;
 use crate::usecase::core::crypto::{
-    CapsulePayload, KeyFragment, PublicKey, ShamirShare, constants,
+    constants, CapsulePayload, KeyFragment, PublicKey, ShamirShare,
 };
 use crate::usecase::core::storage::{QueryParams, Tag};
 use crate::usecase::dto::{SecretSharingRequest, SecretSharingResult, SecretStatus};
@@ -359,8 +359,7 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
             for attempt in 0..=DELEGATE_CAPSULE_MAX_RETRIES {
                 if attempt > 0 {
                     // Exponential backoff: 100ms, 200ms, 400ms
-                    let delay_ms =
-                        DELEGATE_CAPSULE_RETRY_BASE_DELAY_MS * (1u64 << (attempt - 1));
+                    let delay_ms = DELEGATE_CAPSULE_RETRY_BASE_DELAY_MS * (1u64 << (attempt - 1));
                     tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                 }
 

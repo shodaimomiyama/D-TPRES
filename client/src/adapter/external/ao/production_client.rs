@@ -166,8 +166,8 @@ impl ProductionAOClient {
                 .filter(|s| !s.is_empty())
             {
                 use base64::{
-                    Engine,
                     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+                    Engine,
                 };
                 Some(
                     match STANDARD
@@ -219,8 +219,8 @@ impl ProductionAOClient {
             // Standard AO CU: Output.data is a base64-encoded string
             if let Some(data_str) = obj.get("data").and_then(|d| d.as_str()) {
                 use base64::{
-                    Engine,
                     engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+                    Engine,
                 };
                 return match STANDARD
                     .decode(data_str)

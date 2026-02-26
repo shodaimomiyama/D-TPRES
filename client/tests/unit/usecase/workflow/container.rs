@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use formix::usecase::workflow::{
-    DefaultWorkflowServiceContainer, create_secret_recovery_service, create_secret_sharing_service,
-    create_workflow_services,
+    create_secret_recovery_service, create_secret_sharing_service, create_workflow_services,
+    DefaultWorkflowServiceContainer,
 };
 
 #[test]

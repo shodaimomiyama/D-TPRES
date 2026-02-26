@@ -18,7 +18,7 @@ use crate::domain::errors::DomainResult;
 use crate::domain::value_objects::{KFragId, SecretId};
 use crate::repositories::{KFragRepository, Repository};
 
-use super::{ArweaveClient, Tag, tag_helpers, tag_names, tag_values};
+use super::{tag_helpers, tag_names, tag_values, ArweaveClient, Tag};
 
 /// Serializable representation of KFrag for Arweave storage
 #[derive(Serialize, Deserialize)]

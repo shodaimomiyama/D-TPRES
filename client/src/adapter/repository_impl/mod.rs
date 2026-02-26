@@ -132,7 +132,7 @@ pub trait ArweaveClient {
 
 /// Helper functions for creating common tags
 pub mod tag_helpers {
-    use super::{Tag, tag_names, tag_values};
+    use super::{tag_names, tag_values, Tag};
 
     /// Create application name tag
     pub fn app_tag() -> Tag {
