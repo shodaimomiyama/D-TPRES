@@ -4,12 +4,12 @@
 //! AO環境の制約に従い、すべての操作は同期的に実行されます。
 
 use aes_gcm::{
-    Aes256Gcm, Nonce,
     aead::{Aead, AeadCore, KeyInit, OsRng},
+    Aes256Gcm, Nonce,
 };
 use bincode;
-use generic_array::{GenericArray, typenum::U32};
-use shamirsecretsharing::{DATA_SIZE, combine_shares, create_shares};
+use generic_array::{typenum::U32, GenericArray};
+use shamirsecretsharing::{combine_shares, create_shares, DATA_SIZE};
 use subtle::ConstantTimeEq;
 use umbral_pre::{self, DefaultDeserialize, DefaultSerialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};

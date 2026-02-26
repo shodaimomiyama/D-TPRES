@@ -2,8 +2,8 @@
 
 use std::fmt;
 
-use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine;
 use rand::rngs::OsRng;
 use rsa::pss::SigningKey;
 use rsa::signature::RandomizedSigner;

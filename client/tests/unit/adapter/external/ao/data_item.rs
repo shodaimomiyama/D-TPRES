@@ -4,11 +4,11 @@ use formix::adapter::external::ao::{
 
 #[allow(clippy::many_single_char_names)]
 fn test_jwk() -> ArweaveJWK {
-    use base64::Engine;
     use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    use base64::Engine;
     use rand::rngs::OsRng;
-    use rsa::RsaPrivateKey;
     use rsa::traits::{PrivateKeyParts, PublicKeyParts};
+    use rsa::RsaPrivateKey;
 
     let private_key = RsaPrivateKey::new(&mut OsRng, 4096).unwrap();
     let public_key = private_key.to_public_key();

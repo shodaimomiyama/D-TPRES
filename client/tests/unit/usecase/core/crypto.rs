@@ -1,4 +1,4 @@
-use formix::usecase::core::crypto::{CryptoService, CryptoServiceImpl, constants};
+use formix::usecase::core::crypto::{constants, CryptoService, CryptoServiceImpl};
 
 #[test]
 fn test_create_kfrags() {

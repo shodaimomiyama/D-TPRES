@@ -11,7 +11,6 @@
 use std::sync::Arc;
 
 use formix::adapter::external::mock_ao::MockAOClient;
-use formix::usecase::SecretSharingRequest;
 use formix::usecase::core::contract_storage::ContractStorageImpl;
 use formix::usecase::core::crypto::{
     CryptoService, CryptoServiceImpl as CoreCryptoServiceImpl, ShamirShare,
@@ -21,6 +20,7 @@ use formix::usecase::service::{
     CryptoServiceImpl as ServiceCryptoServiceImpl, StorageServiceImpl as ServiceStorageServiceImpl,
 };
 use formix::usecase::workflow::{SecretSharingWorkflowService, SecretSharingWorkflowServiceImpl};
+use formix::usecase::SecretSharingRequest;
 
 // ============================================================================
 // PHASE 1 → PHASE 3 Roundtrip Tests (Task 22)

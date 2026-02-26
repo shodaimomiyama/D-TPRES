@@ -15,8 +15,8 @@ pub use entities::{
 
 // Re-export value objects
 pub use value_objects::{
-    CFragId, CapsuleId, KFragId, KeyPair, SYMMETRIC_KEY_SIZE, SecretData, SecretId,
-    ShareCollectionId, SymmetricKey,
+    CFragId, CapsuleId, KFragId, KeyPair, SecretData, SecretId, ShareCollectionId, SymmetricKey,
+    SYMMETRIC_KEY_SIZE,
 };
 
 pub use errors::{DomainError, DomainResult};
