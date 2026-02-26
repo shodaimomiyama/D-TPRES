@@ -19,8 +19,24 @@ pub trait ContractStorage: Send + Sync {
     /// Send kFrags to Owner-Process via AO Network
     async fn send_kfrags(&self, kfrags: &[KeyFragment], contract_id: &str) -> ServiceResult<()>;
 
-    /// Delegate capsule to contract (future use)
-    async fn delegate_capsule(&self, capsule_data: &[u8], contract_id: &str) -> ServiceResult<()>;
+    /// Delegate capsule to AO contract for re-encryption triggering
+    ///
+    /// Associates the Arweave capsule with its kFrag so the AO contract
+    /// can trigger Phase 2 re-encryption.
+    ///
+    /// # Arguments
+    /// * `capsule_data` - Serialized capsule bytes (from Arweave CapsulePayload)
+    /// * `contract_id` - Owner-Process contract ID on AO Network
+    /// * `kfrag_id`    - kFrag identifier matching the corresponding DelegateKFrag call
+    ///                   (format: `"kfrag-{index}"`)
+    /// * `capsule_id`  - Arweave transaction ID of the stored capsule (`capsule_tx_id`)
+    async fn delegate_capsule(
+        &self,
+        capsule_data: &[u8],
+        contract_id: &str,
+        kfrag_id: &str,
+        capsule_id: &str,
+    ) -> ServiceResult<()>;
 
     /// Retrieve cFrags for a secret from AO Network
     async fn retrieve_cfrags(
@@ -60,14 +76,21 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
 
     async fn delegate_capsule(
         &self,
-        _capsule_data: &[u8],
-        _contract_id: &str,
+        capsule_data: &[u8],
+        contract_id: &str,
+        kfrag_id: &str,
+        capsule_id: &str,
     ) -> ServiceResult<()> {
-        Err(ServiceError::System(
-            crate::service::error::SystemException::Internal(
-                "Not implemented: delegate_capsule".to_string(),
-            ),
-        ))
+        let msg = ExecuteMsg::DelegateCapsule {
+            kfrag_id: kfrag_id.to_string(),
+            capsule_id: capsule_id.to_string(),
+            capsule: Binary::from(capsule_data.to_vec()),
+        };
+        self.ao_client
+            .execute(contract_id, msg)
+            .await
+            .map_err(|e| ServiceError::ao_network_error(e.to_string()))?;
+        Ok(())
     }
 
     async fn retrieve_cfrags(

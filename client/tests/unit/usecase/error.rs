@@ -177,16 +177,14 @@ fn test_workflow_error_is_recoverable() {
     assert!(!WorkflowError::storage("test").is_recoverable());
     assert!(!WorkflowError::ao_communication("test").is_recoverable());
     assert!(!WorkflowError::decryption("test").is_recoverable());
-    assert!(
-        !WorkflowError::PartialStorageFailure {
-            capsule_tx_id: "tx".to_string(),
-            successful_share_tx_ids: vec![],
-            failed_shares: vec![],
-            failed_count: 0,
-            total_count: 0,
-        }
-        .is_recoverable()
-    );
+    assert!(!WorkflowError::PartialStorageFailure {
+        capsule_tx_id: "tx".to_string(),
+        successful_share_tx_ids: vec![],
+        failed_shares: vec![],
+        failed_count: 0,
+        total_count: 0,
+    }
+    .is_recoverable());
 }
 
 #[test]

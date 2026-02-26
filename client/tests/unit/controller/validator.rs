@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use formix::controller::{
-    MAX_SHARES, MIN_THRESHOLD, RecoverValidator, ShareValidator, error_codes,
+    error_codes, RecoverValidator, ShareValidator, MAX_SHARES, MIN_THRESHOLD,
 };
 use formix::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
 

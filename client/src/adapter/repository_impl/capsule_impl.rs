@@ -16,7 +16,7 @@ use crate::domain::errors::DomainResult;
 use crate::domain::value_objects::{CapsuleId, SecretId};
 use crate::repositories::{CapsuleRepository, Repository};
 
-use super::{ArweaveClient, Tag, tag_helpers, tag_names, tag_values};
+use super::{tag_helpers, tag_names, tag_values, ArweaveClient, Tag};
 
 /// Serializable representation of Capsule for Arweave storage
 #[derive(Serialize, Deserialize)]

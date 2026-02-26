@@ -187,6 +187,6 @@ fn decode_jwk_field(
 }
 
 fn base64url_decode_internal(encoded: &str) -> Result<Vec<u8>, base64::DecodeError> {
-    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
     URL_SAFE_NO_PAD.decode(encoded)
 }

@@ -106,11 +106,16 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
             .map_err(WorkflowError::from)
     }
 
-    /// Retrieve Capsule, ciphertext, verifying_pk, and threshold from Arweave
+    /// Retrieve Capsule, ciphertext, verifying_pk, thresholds, and capsule_tx_id from Arweave
+    ///
+    /// Returns `(capsule, ciphertext, verifying_pk, threshold_k, threshold_n, capsule_tx_id)`.
+    /// - `threshold_k` – minimum kFrags required for reconstruction
+    /// - `threshold_n` – total kFrags generated (stored for audit / future use)
+    /// - `capsule_tx_id` – Arweave transaction ID of the stored capsule (= `capsule_id` for AO)
     fn retrieve_capsule_with_metadata(
         &self,
         secret_id: &SecretId,
-    ) -> WorkflowResult<(Capsule, Vec<u8>, Vec<u8>, u8)> {
+    ) -> WorkflowResult<(Capsule, Vec<u8>, Vec<u8>, u8, u8, String)> {
         // Phase 1 stores exactly one capsule per secret_id (UUID v4), so limit=1
         // with no sort is safe. See CapsuleRepository.find_by_secret_id -> Option<Capsule>.
         let params = QueryParams {
@@ -137,6 +142,8 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
             WorkflowError::not_found(format!("Capsule not found for secret {secret_id}"))
         })?;
 
+        let capsule_tx_id = tx.id.clone();
+
         let threshold_k = tx
             .tags
             .iter()
@@ -147,6 +154,15 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
             .value
             .parse::<u8>()
             .map_err(|e| WorkflowError::validation(format!("Invalid threshold_k value: {e}")))?;
+
+        // threshold_n may be absent on capsules created before this tag was introduced.
+        // Falling back to threshold_k is safe (n >= k always; using k as the lower bound).
+        let threshold_n = tx
+            .tags
+            .iter()
+            .find(|t| t.name == "threshold_n")
+            .and_then(|t| t.value.parse::<u8>().ok())
+            .unwrap_or(threshold_k);
 
         let payload: CapsulePayload = bincode::deserialize(&tx.data)
             .map_err(|_| WorkflowError::crypto("Failed to deserialize CapsulePayload"))?;
@@ -160,6 +176,8 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowServiceImpl<C, 
             payload.ciphertext,
             payload.verifying_pk,
             threshold_k,
+            threshold_n,
+            capsule_tx_id,
         ))
     }
 
@@ -277,7 +295,9 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
             .await?;
 
         // Step 2: Retrieve CapsulePayload (capsule + ciphertext + verifying_pk) from Arweave
-        let (capsule, ciphertext, verifying_pk, threshold) =
+        // capsule_tx_id is the Arweave tx ID of the capsule (= capsule_id on AO contract side)
+        // threshold_n is stored for audit / future use
+        let (capsule, ciphertext, verifying_pk, threshold, _threshold_n, _capsule_tx_id) =
             self.retrieve_capsule_with_metadata(&request.secret_id)?;
 
         // Step 3: Retrieve encrypted shares and verify threshold
@@ -315,7 +335,7 @@ impl<C: CryptoService, ST: StorageService> SecretRecoveryWorkflowService
         secret_id: &SecretId,
         requester_process_id: &str,
     ) -> WorkflowResult<bool> {
-        let (_, _, _, threshold) = self.retrieve_capsule_with_metadata(secret_id)?;
+        let (_, _, _, threshold, _, _) = self.retrieve_capsule_with_metadata(secret_id)?;
 
         // Retrieve available cFrags
         let cfrags = self
