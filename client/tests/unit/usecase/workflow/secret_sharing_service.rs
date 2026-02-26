@@ -4,7 +4,7 @@ use formix::adapter::external::mock_ao::MockAOClient;
 use formix::domain::SecretId;
 use formix::usecase::core::contract_storage::ContractStorageImpl;
 use formix::usecase::core::crypto::{
-    CryptoService as CoreCryptoService, CryptoServiceImpl as CoreCryptoServiceImpl, constants,
+    constants, CryptoService as CoreCryptoService, CryptoServiceImpl as CoreCryptoServiceImpl,
 };
 use formix::usecase::core::storage::ArweaveStorageServiceImpl;
 use formix::usecase::dto::SecretSharingRequest;

@@ -1,4 +1,4 @@
-use formix::controller::{MAX_SHARES, MIN_THRESHOLD, ValidationError, error_codes};
+use formix::controller::{error_codes, ValidationError, MAX_SHARES, MIN_THRESHOLD};
 use formix::usecase::error::WorkflowError;
 
 #[test]

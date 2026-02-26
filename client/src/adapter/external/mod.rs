@@ -12,7 +12,7 @@ pub use arweave::{ArweaveClientConfig, ArweaveClientImpl, ArweaveWallet};
 pub use ao::{
     AOAttribute, AOClient, AOConfig, AOEvent, AOMessageTags, AOResponse, Binary, BlobMeta,
     CapsuleInfo, CapsuleStatus, ExecuteMsg, GetCFragResponse, ListCapsulesByKFragResponse,
-    MAX_BINARY_SIZE, MAX_ID_LENGTH, QueryMsg, ValidateMessage,
+    QueryMsg, ValidateMessage, MAX_BINARY_SIZE, MAX_ID_LENGTH,
 };
 #[cfg(feature = "production-ao")]
 pub use ao::{ArweaveJWK, DataItemBuilder, DataItemSigner, ProductionAOClient};

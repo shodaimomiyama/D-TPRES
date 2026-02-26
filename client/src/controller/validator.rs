@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use subtle::ConstantTimeEq;
 
-use crate::controller::error::{MAX_SHARES, MIN_THRESHOLD, ValidationError, error_codes};
+use crate::controller::error::{error_codes, ValidationError, MAX_SHARES, MIN_THRESHOLD};
 use crate::usecase::core::crypto::{CryptoService, PublicKey, SecretKey};
 
 /// Validator for secret sharing requests

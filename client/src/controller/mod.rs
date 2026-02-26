@@ -9,6 +9,6 @@ pub mod extractor;
 pub mod validator;
 
 pub use di::ControllerContainer;
-pub use error::{MAX_SHARES, MIN_THRESHOLD, ValidationError, error_codes};
+pub use error::{error_codes, ValidationError, MAX_SHARES, MIN_THRESHOLD};
 pub use extractor::{RecoverExtractor, ShareExtractor};
 pub use validator::{RecoverValidator, ShareValidator};

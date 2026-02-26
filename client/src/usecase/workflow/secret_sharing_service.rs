@@ -4,18 +4,30 @@
 //! PHASE 1 workflow: secret splitting, encryption, kFrag generation, and storage.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use zeroize::Zeroizing;
 
 use crate::domain::value_objects::SecretId;
 use crate::usecase::core::crypto::{
-    CapsulePayload, KeyFragment, PublicKey, ShamirShare, constants,
+    constants, CapsulePayload, KeyFragment, PublicKey, ShamirShare,
 };
 use crate::usecase::core::storage::{QueryParams, Tag};
 use crate::usecase::dto::{SecretSharingRequest, SecretSharingResult, SecretStatus};
 use crate::usecase::error::{WorkflowError, WorkflowResult};
 use crate::usecase::service::{CryptoService, StorageService};
+
+// ============================================================================
+// DelegateCapsule Retry Config
+// ============================================================================
+
+/// Maximum number of retries for each DelegateCapsule call (excluding the initial attempt).
+/// AO contract uses IDEM_FLAGS to ensure idempotency on success; retries on failure are safe.
+const DELEGATE_CAPSULE_MAX_RETRIES: u32 = 3;
+
+/// Base delay for exponential backoff (doubles each retry: 100ms → 200ms → 400ms).
+const DELEGATE_CAPSULE_RETRY_BASE_DELAY_MS: u64 = 100;
 
 // ============================================================================
 // SecretSharingWorkflowService Trait
@@ -281,6 +293,12 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
             )
             .map_err(WorkflowError::from)?;
 
+        // Step 9: Store encrypted shares on Arweave
+        //
+        // Shares are stored BEFORE DelegateCapsule (Step 9b) to ensure all
+        // Arweave data (capsule + shares) is durable before the AO contract is
+        // notified. If AO triggers re-encryption immediately on DelegateCapsule,
+        // the shares must already be available for Phase 3 retrieval.
         let share_items: Vec<(Vec<u8>, Vec<Tag>)> = encrypted_shares
             .into_iter()
             .enumerate()
@@ -321,6 +339,65 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
             });
         }
         let share_tx_ids = batch_result.successful;
+
+        // Step 9b: DelegateCapsule to AO for each kFrag
+        //
+        // Called AFTER both capsule and shares are safely on Arweave (Steps 8 & 9).
+        // This prevents AO from triggering re-encryption before shares are available.
+        //
+        // Retry with exponential backoff per kFrag (safe because the AO contract
+        // implements IDEM_FLAGS: successful calls return NoOp on re-submission,
+        // failed calls re-process cleanly from scratch).
+        // share_tx_ids is included in any error so callers know Arweave is intact.
+        let mut delegate_successful_ids: Vec<String> = Vec::with_capacity(kfrags.len());
+        let mut delegate_failed_ids: Vec<(String, String)> = Vec::new();
+
+        for kfrag in &kfrags {
+            let kfrag_id = format!("kfrag-{}", kfrag.id);
+            let mut last_err: Option<String> = None;
+
+            for attempt in 0..=DELEGATE_CAPSULE_MAX_RETRIES {
+                if attempt > 0 {
+                    // Exponential backoff: 100ms, 200ms, 400ms
+                    let delay_ms = DELEGATE_CAPSULE_RETRY_BASE_DELAY_MS * (1u64 << (attempt - 1));
+                    tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                }
+
+                match self
+                    .storage_service
+                    .delegate_capsule(
+                        &capsule.capsule_bytes,
+                        &request.owner_process_id,
+                        &kfrag_id,
+                        &capsule_tx_id,
+                    )
+                    .await
+                {
+                    Ok(()) => {
+                        last_err = None;
+                        break; // success — stop retrying this kFrag
+                    }
+                    Err(e) => {
+                        last_err = Some(e.to_string());
+                        // continue to next attempt
+                    }
+                }
+            }
+
+            match last_err {
+                None => delegate_successful_ids.push(kfrag_id),
+                Some(err) => delegate_failed_ids.push((kfrag_id, err)),
+            }
+        }
+
+        if !delegate_failed_ids.is_empty() {
+            return Err(WorkflowError::partial_delegate_capsule_failure(
+                &capsule_tx_id,
+                share_tx_ids,
+                delegate_successful_ids,
+                delegate_failed_ids,
+            ));
+        }
 
         Ok(SecretSharingResult {
             secret_id,
