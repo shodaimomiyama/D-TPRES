@@ -1,0 +1,6 @@
+edition = "2021"  # Rust 2021 edition
+max_width = 100   # 一行の最大長
+tab_spaces = 4    # インデントに使用するスペース数
+newline_style = "Unix"  # 改行スタイル
+use_field_init_shorthand = true  # フィールド初期化の省略記法を使用
+# format_code_in_doc_comments = true  # Unstable feature, only available in nightly
