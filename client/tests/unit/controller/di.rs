@@ -3,6 +3,7 @@ use std::sync::Arc;
 use formix::controller::ControllerContainer;
 use formix::domain::SecretId;
 use formix::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
+use zeroize::Zeroizing;
 
 fn create_crypto_service() -> Arc<CryptoServiceImpl> {
     Arc::new(CryptoServiceImpl::new())
@@ -75,7 +76,7 @@ fn test_container_share_extractor() {
     let (_, requester_pk) = create_test_keys();
 
     let request = container.share_extractor().extract(
-        b"secret".to_vec(),
+        Zeroizing::new(b"secret".to_vec()),
         owner_sk,
         owner_pk,
         requester_pk,
