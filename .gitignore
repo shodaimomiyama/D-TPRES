@@ -7,6 +7,7 @@ demo/target/
 demo/.env
 demo/deploy.json
 demo/wallet.json
+ao/wallet.json
 
 .serena/
 
