@@ -1,0 +1,9 @@
+# Clippyの警告をできるだけ多く有効にする
+warn-on-all-wildcard-imports = true
+
+# 慣例に従った命名規則を強制する
+disallowed-names = []
+
+# 特定のlintを無効化する
+# Clippyの警告を無効化するには-Aフラグを使用する
+# 例: cargo clippy -- -A clippy::dead_code
