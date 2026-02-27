@@ -2,6 +2,7 @@ use formix::controller::{RecoverExtractor, ShareExtractor};
 use formix::domain::SecretId;
 use formix::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
 use formix::usecase::dto::SecretMetadata;
+use zeroize::Zeroizing;
 
 fn create_test_keys() -> (
     formix::usecase::core::crypto::SecretKey,
@@ -24,7 +25,7 @@ fn test_share_extractor_creates_request() {
     let (_, requester_pk) = create_test_keys();
 
     let request = extractor.extract(
-        b"secret data".to_vec(),
+        Zeroizing::new(b"secret data".to_vec()),
         owner_sk,
         owner_pk,
         requester_pk,
@@ -47,7 +48,7 @@ fn test_share_extractor_secret_preserved() {
     let secret = b"my secret data".to_vec();
 
     let request = extractor.extract(
-        secret.clone(),
+        Zeroizing::new(secret.clone()),
         owner_sk,
         owner_pk,
         requester_pk,
@@ -57,7 +58,7 @@ fn test_share_extractor_secret_preserved() {
         None,
     );
 
-    assert_eq!(request.secret, secret);
+    assert_eq!(*request.secret, secret);
 }
 
 #[test]
@@ -67,7 +68,7 @@ fn test_share_extractor_threshold_params() {
     let (_, requester_pk) = create_test_keys();
 
     let request = extractor.extract(
-        b"secret".to_vec(),
+        Zeroizing::new(b"secret".to_vec()),
         owner_sk,
         owner_pk,
         requester_pk,
@@ -89,7 +90,7 @@ fn test_share_extractor_owner_keys() {
     let owner_pk_bytes = owner_pk.key_data.clone();
 
     let request = extractor.extract(
-        b"secret".to_vec(),
+        Zeroizing::new(b"secret".to_vec()),
         owner_sk,
         owner_pk,
         requester_pk,
@@ -111,7 +112,7 @@ fn test_share_extractor_requester_key() {
     let requester_pk_bytes = requester_pk.key_data.clone();
 
     let request = extractor.extract(
-        b"secret".to_vec(),
+        Zeroizing::new(b"secret".to_vec()),
         owner_sk,
         owner_pk,
         requester_pk,
@@ -138,7 +139,7 @@ fn test_share_extractor_with_metadata() {
     };
 
     let request = extractor.extract(
-        b"secret".to_vec(),
+        Zeroizing::new(b"secret".to_vec()),
         owner_sk,
         owner_pk,
         requester_pk,
@@ -161,7 +162,7 @@ fn test_share_extractor_default() {
     let (_, requester_pk) = create_test_keys();
 
     let request = extractor.extract(
-        b"secret".to_vec(),
+        Zeroizing::new(b"secret".to_vec()),
         owner_sk,
         owner_pk,
         requester_pk,
