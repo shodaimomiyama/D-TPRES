@@ -48,8 +48,9 @@ demo-recover: build ## Run recover subcommand (Phase 3)
 	@test -n "$(SECRET_ID)" || (echo "Error: SECRET_ID is required" && exit 1)
 	cargo run --release -- recover --secret-id $(SECRET_ID)
 
-demo-local-share: build ## Local Phase 1: split secret
-	cargo run --release -- local share
+demo-local-share: build ## Local Phase 1: split secret (REQUESTER_PUBKEY required)
+	@test -n "$(REQUESTER_PUBKEY)" || (echo "Error: REQUESTER_PUBKEY required. Example: make demo-local-share REQUESTER_PUBKEY=\$$(jq -r .public_key_hex .formix-demo/requester.json)" && exit 1)
+	cargo run --release -- local share --requester-pubkey $(REQUESTER_PUBKEY) $(if $(PLAINTEXT),--plaintext "$(PLAINTEXT)",)
 
 demo-local-reencrypt: build ## Local Phase 2: re-encrypt via contract (SECRET_ID required)
 	@test -n "$(SECRET_ID)" || (echo "Error: SECRET_ID required" && exit 1)
@@ -60,7 +61,7 @@ demo-local-recover: build ## Local Phase 3: recover secret (SECRET_ID required)
 	cargo run --release -- local recover --secret-id $(SECRET_ID)
 
 demo-local-all: build ## Run all local steps (keygen + share + reencrypt + recover)
-	cargo run --release -- local all
+	cargo run --release -- local all $(if $(PLAINTEXT),--plaintext "$(PLAINTEXT)",)
 
 demo-local: demo-local-all ## Alias for demo-local-all (backward compat)
 

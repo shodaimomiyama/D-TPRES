@@ -12,8 +12,8 @@ sequenceDiagram
 
     Note over Requester: 1. keygen --role requester
     Note over Owner: 2. keygen --role owner
-    Note over Owner: (requester.json の PK を参照)
-    Owner->>Net: 3. share (owner_sk + requester_pk)
+    Note over Owner: (requester の公開鍵 hex を受け取る)
+    Owner->>Net: 3. share (owner_sk + requester_pk_hex)
     Note right of Net: Shamir 分割 + Umbral カプセル
     Owner->>Net: capsule を Arweave に保存
     Owner->>Net: shares を Arweave に保存
@@ -50,14 +50,18 @@ make demo-local
 cargo run --release -- keygen --role requester
 cargo run --release -- keygen --role owner
 
-# Step 2: Phase 1 — ローカル秘密分割
-cargo run --release -- local share
-# → secret_id が出力されます
+# Step 2: requester の公開鍵 hex を取得
+REQUESTER_PK=$(jq -r .public_key_hex .formix-demo/requester.json)
 
-# Step 3: Phase 2 — コントラクトコードで再暗号化
+# Step 3: Phase 1 — ローカル秘密分割（requester 公開鍵を hex で指定）
+cargo run --release -- local share --requester-pubkey $REQUESTER_PK
+# → secret_id が出力されます
+# --plaintext でカスタム秘密も指定可能（デフォルト: "Hello FORMIX - Threshold PRE Demo"）
+
+# Step 4: Phase 2 — コントラクトコードで再暗号化
 cargo run --release -- local reencrypt --secret-id <SECRET_ID>
 
-# Step 4: Phase 3 — ローカル秘密復元
+# Step 5: Phase 3 — ローカル秘密復元
 cargo run --release -- local recover --secret-id <SECRET_ID>
 ```
 
@@ -66,7 +70,7 @@ Make ターゲットも使用可能です:
 ```bash
 make demo-keygen ROLE=owner
 make demo-keygen ROLE=requester
-make demo-local-share
+make demo-local-share REQUESTER_PUBKEY=$(jq -r .public_key_hex .formix-demo/requester.json)
 make demo-local-reencrypt SECRET_ID=<id>
 make demo-local-recover SECRET_ID=<id>
 ```
@@ -123,7 +127,7 @@ make demo-local-recover SECRET_ID=<id>
 [Result] Phase 3 completed successfully
   recovered secret: Hello FORMIX - Threshold PRE Demo
 
-  SUCCESS: Secret matches original!
+  SUCCESS: Secret recovered!
 ```
 
 ## 前提条件
@@ -217,8 +221,14 @@ cargo run -- recover --secret-id <SECRET_ID> [--requester-key-file <PATH>] [--sh
 ### `local share` - Phase 1: ローカル秘密分割
 
 ```bash
-cargo run -- local share [--owner-key-file <PATH>] [--requester-pubkey-file <PATH>]
+cargo run -- local share --requester-pubkey <HEX> [--owner-key-file <PATH>] [--plaintext <TEXT>]
 ```
+
+| オプション | デフォルト | 説明 |
+|-----------|-----------|------|
+| `--requester-pubkey` | (必須) | Requester の公開鍵（hex 文字列） |
+| `--owner-key-file` | `.formix-demo/owner.json` | Owner 鍵ファイルのパス |
+| `--plaintext` | `Hello FORMIX - Threshold PRE Demo` | 分割する秘密テキスト |
 
 ### `local reencrypt` - Phase 2: コントラクト再暗号化
 
@@ -235,8 +245,14 @@ cargo run -- local recover --secret-id <SECRET_ID> [--requester-key-file <PATH>]
 ### `local all` - 全ステップ一括実行
 
 ```bash
-cargo run -- local all [--owner-key-file <PATH>] [--requester-key-file <PATH>]
+cargo run -- local all [--owner-key-file <PATH>] [--requester-key-file <PATH>] [--plaintext <TEXT>]
 ```
+
+| オプション | デフォルト | 説明 |
+|-----------|-----------|------|
+| `--owner-key-file` | `.formix-demo/owner.json` | Owner 鍵ファイルのパス |
+| `--requester-key-file` | `.formix-demo/requester.json` | Requester 鍵ファイルのパス |
+| `--plaintext` | `Hello FORMIX - Threshold PRE Demo` | 分割する秘密テキスト |
 
 ## CLI オプション
 
@@ -267,7 +283,7 @@ Commands:
 | `make demo-share` | Phase 1: 秘密分割（Production） | - |
 | `make demo-recover` | Phase 3: 秘密復元（Production） | `SECRET_ID` |
 | `make demo-local` | ローカル全ステップ実行 | - |
-| `make demo-local-share` | ローカル Phase 1: 秘密分割 | - |
+| `make demo-local-share` | ローカル Phase 1: 秘密分割 | `REQUESTER_PUBKEY` |
 | `make demo-local-reencrypt` | ローカル Phase 2: コントラクト再暗号化 | `SECRET_ID` |
 | `make demo-local-recover` | ローカル Phase 3: 秘密復元 | `SECRET_ID` |
 | `make demo-local-all` | ローカル全ステップ実行 | - |
@@ -284,8 +300,8 @@ Commands:
 **"Failed to load owner key from ..."**
 先に `keygen --role owner` を実行して鍵ファイルを生成してください。
 
-**"Failed to load requester PK from ..."**
-先に `keygen --role requester` を実行して鍵ファイルを生成してください。
+**"Invalid requester public key hex"**
+`--requester-pubkey` に渡した hex 文字列が正しいか確認してください。`jq -r .public_key_hex .formix-demo/requester.json` で取得できます。
 
 **"Failed to load local share from ..."**
 先に `local share` を実行してください。`--secret-id` が正しいことを確認してください。

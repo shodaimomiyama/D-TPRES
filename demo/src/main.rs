@@ -94,9 +94,13 @@ enum LocalCommands {
         #[arg(long, default_value = ".formix-demo/owner.json")]
         owner_key_file: PathBuf,
 
-        /// Path to requester public key file
-        #[arg(long, default_value = ".formix-demo/requester.json")]
-        requester_pubkey_file: PathBuf,
+        /// Requester public key as hex string
+        #[arg(long)]
+        requester_pubkey: String,
+
+        /// Plaintext secret to share
+        #[arg(long, default_value = "Hello FORMIX - Threshold PRE Demo")]
+        plaintext: String,
     },
     /// Phase 2: re-encrypt using actual contract code
     Reencrypt {
@@ -135,6 +139,10 @@ enum LocalCommands {
         /// Path to requester key file
         #[arg(long, default_value = ".formix-demo/requester.json")]
         requester_key_file: PathBuf,
+
+        /// Plaintext secret to share
+        #[arg(long, default_value = "Hello FORMIX - Threshold PRE Demo")]
+        plaintext: String,
     },
 }
 
@@ -349,7 +357,11 @@ async fn run_recover(
 
 // ─────────────────── Local commands ───────────────────
 
-fn run_local_share(owner_key_file: &Path, requester_pubkey_file: &Path) -> Result<String> {
+fn run_local_share(
+    owner_key_file: &Path,
+    requester_pubkey_hex: &str,
+    plaintext: &[u8],
+) -> Result<String> {
     use formix::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
 
     let crypto = CryptoServiceImpl::new();
@@ -364,19 +376,17 @@ fn run_local_share(owner_key_file: &Path, requester_pubkey_file: &Path) -> Resul
         owner_key_file.display()
     );
 
-    let requester_pk = key_store::load_public_key(requester_pubkey_file).with_context(|| {
-        format!(
-            "Failed to load requester PK from {}",
-            requester_pubkey_file.display()
-        )
-    })?;
+    let requester_pk_bytes =
+        hex::decode(requester_pubkey_hex).context("Invalid requester public key hex")?;
+    let requester_pk = formix::service::core::crypto::PublicKey::from_bytes(requester_pk_bytes)
+        .map_err(|e| anyhow::anyhow!(e))?;
     println!(
-        "  {} Requester public key loaded from {}",
+        "  {} Requester public key loaded from hex ({}...)",
         "OK".green(),
-        requester_pubkey_file.display()
+        &requester_pubkey_hex[..std::cmp::min(16, requester_pubkey_hex.len())]
     );
 
-    let secret_data = b"Hello FORMIX - Threshold PRE Demo".to_vec();
+    let secret_data = plaintext.to_vec();
     print_phase("Phase 1", "Secret Sharing (2-of-3 threshold)");
     println!(
         "  secret: {:?} ({} bytes)",
@@ -461,6 +471,7 @@ fn run_local_share(owner_key_file: &Path, requester_pubkey_file: &Path) -> Resul
     let result = key_store::LocalShareResult {
         secret_id: secret_id.clone(),
         owner_public_key_hex: hex::encode(&owner_pk.key_data),
+        requester_public_key_hex: requester_pubkey_hex.to_string(),
         capsule_bytes_hex: hex::encode(&capsule.capsule_bytes),
         capsule_ciphertext_hex: hex::encode(&capsule_ciphertext),
         encrypted_shares: encrypted_shares
@@ -493,10 +504,7 @@ fn run_local_share(owner_key_file: &Path, requester_pubkey_file: &Path) -> Resul
     Ok(secret_id)
 }
 
-fn run_local_reencrypt(
-    secret_id: &str,
-    share_result_file: &Option<PathBuf>,
-) -> Result<()> {
+fn run_local_reencrypt(secret_id: &str, share_result_file: &Option<PathBuf>) -> Result<()> {
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
     use cosmwasm_std::Binary;
 
@@ -551,8 +559,7 @@ fn run_local_reencrypt(
         )
         .map_err(|e| anyhow::anyhow!("Holder {i} instantiate failed: {e}"))?;
 
-        let kfrag_bytes =
-            hex::decode(&kfrag_info.serialized_hex).context("Invalid kFrag hex")?;
+        let kfrag_bytes = hex::decode(&kfrag_info.serialized_hex).context("Invalid kFrag hex")?;
         let kfrag_binary = Binary::from(kfrag_bytes);
 
         contract::contract::execute(
@@ -588,9 +595,8 @@ fn run_local_reencrypt(
         )
         .map_err(|e| anyhow::anyhow!("Holder {i} GetCFrag query failed: {e}"))?;
 
-        let cfrag_response: contract::GetCFragResponse =
-            cosmwasm_std::from_json(query_result)
-                .map_err(|e| anyhow::anyhow!("Holder {i} cFrag response parse failed: {e}"))?;
+        let cfrag_response: contract::GetCFragResponse = cosmwasm_std::from_json(query_result)
+            .map_err(|e| anyhow::anyhow!("Holder {i} cFrag response parse failed: {e}"))?;
 
         let stored_cfrag: contract::StoredCFrag =
             bincode::deserialize(cfrag_response.cfrag.as_slice())
@@ -656,26 +662,19 @@ fn run_local_recover(
         .unwrap_or_else(|| key_store::default_local_share_path(secret_id));
     let share_result = key_store::load_local_share_result(&share_path)
         .with_context(|| format!("Failed to load local share from {}", share_path.display()))?;
-    println!(
-        "  {} Local share result loaded",
-        "OK".green()
-    );
+    println!("  {} Local share result loaded", "OK".green());
 
     let reencrypt_path = reencrypt_result_file
         .clone()
         .unwrap_or_else(|| key_store::default_local_reencrypt_path(secret_id));
-    let reencrypt_result = key_store::load_local_reencrypt_result(&reencrypt_path).with_context(
-        || {
+    let reencrypt_result =
+        key_store::load_local_reencrypt_result(&reencrypt_path).with_context(|| {
             format!(
                 "Failed to load local reencrypt from {}",
                 reencrypt_path.display()
             )
-        },
-    )?;
-    println!(
-        "  {} Local reencrypt result loaded",
-        "OK".green()
-    );
+        })?;
+    println!("  {} Local reencrypt result loaded", "OK".green());
 
     let (requester_sk, _) = key_store::load_keypair(requester_key_file).with_context(|| {
         format!(
@@ -683,10 +682,7 @@ fn run_local_recover(
             requester_key_file.display()
         )
     })?;
-    println!(
-        "  {} Requester key loaded",
-        "OK".green()
-    );
+    println!("  {} Requester key loaded", "OK".green());
 
     let owner_pk_bytes =
         hex::decode(&share_result.owner_public_key_hex).context("Invalid owner PK hex")?;
@@ -705,8 +701,7 @@ fn run_local_recover(
         .cfrags
         .iter()
         .map(|cf| {
-            let cfrag_bytes =
-                hex::decode(&cf.capsule_fragment_hex).expect("Invalid cFrag hex");
+            let cfrag_bytes = hex::decode(&cf.capsule_fragment_hex).expect("Invalid cFrag hex");
             CFragData::new(cfrag_bytes, cf.holder_id.clone())
         })
         .collect();
@@ -754,23 +749,16 @@ fn run_local_recover(
         &String::from_utf8_lossy(&recovered_secret),
     );
 
-    let original_matches = recovered_secret == b"Hello FORMIX - Threshold PRE Demo";
-    if original_matches {
-        println!(
-            "\n  {}",
-            "SUCCESS: Secret matches original!".green().bold()
-        );
-    }
+    println!("\n  {}", "SUCCESS: Secret recovered!".green().bold());
 
     Ok(())
 }
 
-fn run_local_all(owner_key_file: &Path, requester_key_file: &Path) -> Result<()> {
+fn run_local_all(owner_key_file: &Path, requester_key_file: &Path, plaintext: &[u8]) -> Result<()> {
     use formix::usecase::core::crypto::{CryptoService, CryptoServiceImpl};
 
     let crypto = CryptoServiceImpl::new();
 
-    // Keygen if key files don't exist
     if !owner_key_file.exists() {
         print_phase("KEYGEN", "Generating owner key pair");
         let (sk, pk) = crypto
@@ -791,7 +779,15 @@ fn run_local_all(owner_key_file: &Path, requester_key_file: &Path) -> Result<()>
         print_result("saved to", &requester_key_file.display().to_string());
     }
 
-    let secret_id = run_local_share(owner_key_file, requester_key_file)?;
+    let requester_pk = key_store::load_public_key(requester_key_file).with_context(|| {
+        format!(
+            "Failed to load requester PK from {}",
+            requester_key_file.display()
+        )
+    })?;
+    let requester_pubkey_hex = hex::encode(&requester_pk.key_data);
+
+    let secret_id = run_local_share(owner_key_file, &requester_pubkey_hex, plaintext)?;
 
     run_local_reencrypt(&secret_id, &None)?;
 
@@ -817,7 +813,8 @@ async fn main() -> Result<()> {
     if cli.local {
         let owner_key_file = PathBuf::from(".formix-demo/owner.json");
         let requester_key_file = PathBuf::from(".formix-demo/requester.json");
-        run_local_all(&owner_key_file, &requester_key_file)?;
+        let default_plaintext = b"Hello FORMIX - Threshold PRE Demo";
+        run_local_all(&owner_key_file, &requester_key_file, default_plaintext)?;
     } else {
         let command = cli
             .command
@@ -827,9 +824,10 @@ async fn main() -> Result<()> {
             Commands::Local { command: local_cmd } => match local_cmd {
                 LocalCommands::Share {
                     owner_key_file,
-                    requester_pubkey_file,
+                    requester_pubkey,
+                    plaintext,
                 } => {
-                    run_local_share(&owner_key_file, &requester_pubkey_file)?;
+                    run_local_share(&owner_key_file, &requester_pubkey, plaintext.as_bytes())?;
                 }
                 LocalCommands::Reencrypt {
                     secret_id,
@@ -853,8 +851,9 @@ async fn main() -> Result<()> {
                 LocalCommands::All {
                     owner_key_file,
                     requester_key_file,
+                    plaintext,
                 } => {
-                    run_local_all(&owner_key_file, &requester_key_file)?;
+                    run_local_all(&owner_key_file, &requester_key_file, plaintext.as_bytes())?;
                 }
             },
             _ => {
@@ -878,13 +877,8 @@ async fn main() -> Result<()> {
                         requester_key_file,
                         share_result_file,
                     } => {
-                        run_recover(
-                            &client,
-                            &secret_id,
-                            &requester_key_file,
-                            &share_result_file,
-                        )
-                        .await?
+                        run_recover(&client, &secret_id, &requester_key_file, &share_result_file)
+                            .await?
                     }
                     Commands::Local { .. } => unreachable!(),
                 }

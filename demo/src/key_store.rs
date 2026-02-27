@@ -114,6 +114,7 @@ pub struct LocalEncryptedShare {
 pub struct LocalShareResult {
     pub secret_id: String,
     pub owner_public_key_hex: String,
+    pub requester_public_key_hex: String,
     pub capsule_bytes_hex: String,
     pub capsule_ciphertext_hex: String,
     pub encrypted_shares: Vec<LocalEncryptedShare>,
