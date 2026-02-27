@@ -2,6 +2,8 @@
 //!
 //! Converts validated raw parameters into UseCase layer DTOs.
 
+use zeroize::Zeroizing;
+
 use crate::domain::value_objects::SecretId;
 use crate::usecase::core::crypto::{PublicKey, SecretKey};
 
@@ -37,7 +39,7 @@ impl ShareExtractor {
     #[allow(clippy::too_many_arguments)]
     pub fn extract(
         &self,
-        secret: Vec<u8>,
+        secret: Zeroizing<Vec<u8>>,
         owner_secret_key: SecretKey,
         owner_public_key: PublicKey,
         requester_public_key: PublicKey,

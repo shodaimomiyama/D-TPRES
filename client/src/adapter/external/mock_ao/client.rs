@@ -15,9 +15,8 @@ use async_trait::async_trait;
 
 use crate::adapter::errors::AOCommunicationError;
 use crate::adapter::external::ao::{
-    AOClient, AOEvent, AOResponse, Binary, BlobMeta, CFragEntry, CapsuleInfo, CapsuleStatus,
-    ExecuteMsg, GetCFragResponse, GetCFragsBySecretResponse, ListCapsulesByKFragResponse, QueryMsg,
-    ValidateMessage,
+    AOClient, AOEvent, AOResponse, Binary, BlobMeta, CapsuleInfo, CapsuleStatus, ExecuteMsg,
+    GetCFragResponse, ListCapsulesByKFragResponse, QueryMsg, ValidateMessage,
 };
 
 /// Configuration for MockAOClient behavior
@@ -44,8 +43,6 @@ pub struct MockAOClient {
     cfrag_storage: RwLock<HashMap<String, HashMap<String, Vec<u8>>>>,
     /// Capsule storage using type alias for readability
     capsule_storage: RwLock<CapsuleStorage>,
-    /// Storage: process_id -> (secret_id -> Vec<CFragEntry>)
-    cfrag_by_secret: RwLock<HashMap<String, HashMap<String, Vec<CFragEntry>>>>,
     /// Configuration
     #[allow(dead_code)]
     config: MockConfig,
@@ -60,7 +57,6 @@ impl MockAOClient {
             kfrag_storage: RwLock::new(HashMap::new()),
             cfrag_storage: RwLock::new(HashMap::new()),
             capsule_storage: RwLock::new(HashMap::new()),
-            cfrag_by_secret: RwLock::new(HashMap::new()),
             config: MockConfig::default(),
             error_injection: RwLock::new(None),
         }
@@ -72,7 +68,6 @@ impl MockAOClient {
             kfrag_storage: RwLock::new(HashMap::new()),
             cfrag_storage: RwLock::new(HashMap::new()),
             capsule_storage: RwLock::new(HashMap::new()),
-            cfrag_by_secret: RwLock::new(HashMap::new()),
             config,
             error_injection: RwLock::new(None),
         }
@@ -139,25 +134,9 @@ impl MockAOClient {
         let mut kfrag_storage = self.kfrag_storage.write().unwrap();
         let mut cfrag_storage = self.cfrag_storage.write().unwrap();
         let mut capsule_storage = self.capsule_storage.write().unwrap();
-        let mut cfrag_by_secret = self.cfrag_by_secret.write().unwrap();
         kfrag_storage.clear();
         cfrag_storage.clear();
         capsule_storage.clear();
-        cfrag_by_secret.clear();
-    }
-
-    /// Set cFrags for a secret on a specific process (for testing)
-    pub fn set_cfrags_for_secret(
-        &self,
-        process_id: &str,
-        secret_id: &str,
-        cfrags: Vec<CFragEntry>,
-    ) {
-        let mut storage = self.cfrag_by_secret.write().unwrap();
-        storage
-            .entry(process_id.to_string())
-            .or_default()
-            .insert(secret_id.to_string(), cfrags);
     }
 
     /// Check if an error should be returned
@@ -404,18 +383,6 @@ impl AOClient for MockAOClient {
                         .collect(),
                     next_start_after: last_capsule_id,
                 };
-                let json = serde_json::to_vec(&response)
-                    .map_err(|e| AOCommunicationError::serialization_error(e.to_string()))?;
-                Ok(Binary::from(json))
-            }
-            QueryMsg::GetCFragsBySecret { secret_id } => {
-                let storage = self.cfrag_by_secret.read().unwrap();
-                let cfrags = storage
-                    .get(process_id)
-                    .and_then(|secrets| secrets.get(secret_id))
-                    .cloned()
-                    .unwrap_or_default();
-                let response = GetCFragsBySecretResponse { cfrags };
                 let json = serde_json::to_vec(&response)
                     .map_err(|e| AOCommunicationError::serialization_error(e.to_string()))?;
                 Ok(Binary::from(json))

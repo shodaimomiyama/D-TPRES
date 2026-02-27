@@ -65,6 +65,11 @@ pub use di::{ActionsContainer, DefaultActionsContainer};
 pub use error::{ActionError, ActionResult};
 pub use options::{RecoverOptions, ShareOptions};
 
+#[cfg(feature = "production-ao")]
+pub use client::{DeployConfig, GatewayConfig, ProductionFormixClient};
+#[cfg(feature = "production-ao")]
+pub use di::{ProductionActionsContainer, ProductionStorageService};
+
 use zeroize::Zeroizing;
 
 use crate::domain::value_objects::SecretId;
@@ -115,7 +120,7 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
     #[allow(clippy::too_many_arguments)]
     pub async fn share(
         &self,
-        secret: Vec<u8>,
+        secret: Zeroizing<Vec<u8>>,
         threshold: u8,
         total_shares: u8,
         owner_secret_key: SecretKey,
@@ -124,9 +129,6 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
         owner_process_id: String,
         options: Option<ShareOptions>,
     ) -> ActionResult<SecretSharingResult> {
-        // Wrap secret in Zeroizing to ensure cleanup on early returns
-        let mut secret = Zeroizing::new(secret);
-
         // Step 1: Validate parameters via Controller layer
         self.controller().share_validator().validate(
             &secret,
@@ -138,10 +140,9 @@ impl<C: CoreCryptoService, S: StorageService> ActionsContainer<C, S> {
         )?;
 
         // Step 2: Extract DTO via Controller layer
-        // Take ownership from Zeroizing wrapper (leaves empty vec, which is a no-op for zeroize)
         let metadata = options.and_then(|o| o.metadata);
         let request = self.controller().share_extractor().extract(
-            std::mem::take(&mut *secret),
+            secret,
             owner_secret_key,
             owner_public_key,
             requester_public_key,

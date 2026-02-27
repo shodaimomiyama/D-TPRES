@@ -648,6 +648,7 @@ dependencies = [
  "dotenvy",
  "generic-array",
  "getrandom 0.2.17",
+ "log",
  "rand 0.8.5",
  "reqwest",
  "rsa",

@@ -3,7 +3,7 @@
 //! Defines request and result types for SecretSharingWorkflowService
 //! and SecretRecoveryWorkflowService.
 
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 use crate::domain::value_objects::SecretId;
 use crate::usecase::core::crypto::{PublicKey, SecretKey};
@@ -15,12 +15,13 @@ use crate::usecase::core::crypto::{PublicKey, SecretKey};
 /// Phase 1 execution request for secret sharing
 ///
 /// Contains all parameters needed to split and distribute a secret.
-/// Sensitive data (secret, owner_secret_key) is zeroized on drop.
+/// Sensitive data (secret, owner_secret_key) is zeroized on drop via Zeroizing wrapper.
 #[derive(Debug)]
 #[allow(clippy::exhaustive_structs)]
 pub struct SecretSharingRequest {
-    /// Secret data to be split (will be zeroized on drop)
-    pub secret: Vec<u8>,
+    /// Secret data to be split. Wrapped in `Zeroizing` so the bytes are
+    /// securely overwritten when this request is dropped, even on panic.
+    pub secret: Zeroizing<Vec<u8>>,
     /// Owner's secret key for PRE (generated via CryptoService::generate_keypair)
     pub owner_secret_key: SecretKey,
     /// Owner's public key for PRE
@@ -35,12 +36,6 @@ pub struct SecretSharingRequest {
     pub owner_process_id: String,
     /// Optional metadata for the secret
     pub metadata: Option<SecretMetadata>,
-}
-
-impl Drop for SecretSharingRequest {
-    fn drop(&mut self) {
-        self.secret.zeroize();
-    }
 }
 
 /// Optional metadata for a secret

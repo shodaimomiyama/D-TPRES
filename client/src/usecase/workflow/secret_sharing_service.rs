@@ -78,7 +78,7 @@ pub trait SecretSharingWorkflowService: Send + Sync {
     /// # Errors
     /// * `WorkflowError::ResourceNotFound` - Secret not found
     /// * `WorkflowError::StorageError` - Storage query failed
-    fn get_secret_status(&self, secret_id: &SecretId) -> WorkflowResult<SecretStatus>;
+    async fn get_secret_status(&self, secret_id: &SecretId) -> WorkflowResult<SecretStatus>;
 }
 
 // ============================================================================
@@ -247,23 +247,28 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
             .verifying_key_bytes()
             .map_err(WorkflowError::from)?;
 
+        // Step 5: Generate secret_id before kFrag sending (binds kFrags to this secret)
+        let secret_id = SecretId::generate();
+
         // Step 5-6: Generate re-encryption key and create kFrags
         let kfrags = self.generate_kfrags(&request)?;
         let kfrag_count = kfrags.len() as u8;
 
         // Step 7: Send kFrags to Owner-Process via AO
+        // kfrag_id format: {secret_id}_{index}
         self.storage_service
-            .send_kfrags_to_contract(&kfrags, &request.owner_process_id)
+            .send_kfrags_to_contract(&kfrags, &request.owner_process_id, secret_id.as_str())
             .await
             .map_err(WorkflowError::from)?;
 
         // Step 8: Store CapsulePayload (capsule + ciphertext + verifying_pk) on Arweave
-        let secret_id = SecretId::generate();
 
         let payload = CapsulePayload {
             capsule_bytes: capsule.capsule_bytes.clone(),
             ciphertext,
             verifying_pk: verifying_pk_bytes,
+            threshold_k: request.threshold,
+            threshold_n: request.total_shares,
         };
         let payload_bytes = bincode::serialize(&payload)
             .map_err(|_| WorkflowError::crypto("Failed to serialize CapsulePayload"))?;
@@ -291,6 +296,7 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
                     },
                 ],
             )
+            .await
             .map_err(WorkflowError::from)?;
 
         // Step 9: Store encrypted shares on Arweave
@@ -326,6 +332,7 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
         let batch_result = self
             .storage_service
             .batch_store(share_items)
+            .await
             .map_err(WorkflowError::from)?;
         if !batch_result.failed.is_empty() {
             let failed_count = batch_result.failed.len();
@@ -408,7 +415,7 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
         })
     }
 
-    fn get_secret_status(&self, secret_id: &SecretId) -> WorkflowResult<SecretStatus> {
+    async fn get_secret_status(&self, secret_id: &SecretId) -> WorkflowResult<SecretStatus> {
         let params = QueryParams {
             tags: vec![
                 Tag {
@@ -427,6 +434,7 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
         let results = self
             .storage_service
             .query_by_tags(params)
+            .await
             .map_err(WorkflowError::from)?;
 
         if results.is_empty() {

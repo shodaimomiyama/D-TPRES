@@ -133,6 +133,42 @@ fn handle_typed_message(action: MessageAction, data: MessageData) -> Result<AORe
 ## 3. プロセス状態管理
 
 ### 3.1 状態構造の定義
+
+プロセスロールと状態フェーズの列挙型を以下の通り定義します。`is_valid_transition`で許可される遷移と整合していること。
+
+```rust
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub enum ProcessRole {
+    Owner,
+    Holder,
+    Requester,
+}
+
+/// 全プロセスロールが共有する状態フェーズ
+/// 遷移は `is_valid_transition` で管理される。
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub enum CryptoPhase {
+    /// 全ロールの初期状態
+    Initialized,
+    /// Owner のみ: キーペア生成中
+    KeyGeneration,
+    /// Owner / Holder: 待機状態（次のアクション待ち）
+    Ready,
+    /// Owner のみ: 秘密分散実行中
+    SecretSplitting,
+    /// Owner のみ: kFrag 生成中
+    KFragGeneration,
+    /// Holder のみ: 再暗号化実行中
+    Reencrypting,
+    /// Requester のみ: アクセス要求中
+    RequestingAccess,
+    /// Requester のみ: cFrag 収集中
+    CollectingCFrags,
+    /// Requester のみ: 処理完了
+    Completed,
+}
+```
+
 ```rust
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProcessState {
@@ -204,7 +240,8 @@ impl ProcessState {
         match (&self.role, &self.phase, new_phase) {
             // Owner-Process transitions
             (ProcessRole::Owner, Initialized, KeyGeneration) => true,
-            (ProcessRole::Owner, KeyGeneration, SecretSplitting) => true,
+            (ProcessRole::Owner, KeyGeneration, Ready) => true,
+            (ProcessRole::Owner, Ready, SecretSplitting) => true,
             (ProcessRole::Owner, SecretSplitting, KFragGeneration) => true,
             
             // Holder-Process transitions

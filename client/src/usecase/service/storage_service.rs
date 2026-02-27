@@ -18,20 +18,24 @@ use crate::usecase::core::storage::{
 /// Service-layer StorageService trait combining Arweave and Contract operations
 #[async_trait]
 pub trait StorageService: Send + Sync {
-    // Arweave operations (sync, delegated to ArweaveStorageService)
-    fn store_data(&self, content: &[u8], tags: Vec<Tag>) -> ServiceResult<String>;
-    fn retrieve_data(&self, transaction_id: &str) -> ServiceResult<ArweaveTransaction>;
-    fn query_by_tags(&self, params: QueryParams) -> ServiceResult<Vec<ArweaveTransaction>>;
-    fn check_transaction_status(&self, transaction_id: &str) -> ServiceResult<TransactionStatus>;
-    fn batch_store(&self, items: Vec<(Vec<u8>, Vec<Tag>)>) -> ServiceResult<BatchResult>;
-    fn exists(&self, transaction_id: &str) -> ServiceResult<bool>;
-    fn update_tags(&self, transaction_id: &str, new_tags: Vec<Tag>) -> ServiceResult<String>;
+    // Arweave operations (async, delegated to ArweaveStorageService)
+    async fn store_data(&self, content: &[u8], tags: Vec<Tag>) -> ServiceResult<String>;
+    async fn retrieve_data(&self, transaction_id: &str) -> ServiceResult<ArweaveTransaction>;
+    async fn query_by_tags(&self, params: QueryParams) -> ServiceResult<Vec<ArweaveTransaction>>;
+    async fn check_transaction_status(
+        &self,
+        transaction_id: &str,
+    ) -> ServiceResult<TransactionStatus>;
+    async fn batch_store(&self, items: Vec<(Vec<u8>, Vec<Tag>)>) -> ServiceResult<BatchResult>;
+    async fn exists(&self, transaction_id: &str) -> ServiceResult<bool>;
+    async fn update_tags(&self, transaction_id: &str, new_tags: Vec<Tag>) -> ServiceResult<String>;
 
     // Contract operations (async, delegated to ContractStorage)
     async fn send_kfrags_to_contract(
         &self,
         kfrags: &[KeyFragment],
         contract_id: &str,
+        secret_id: &str,
     ) -> ServiceResult<()>;
 
     async fn delegate_capsule(
@@ -45,10 +49,12 @@ pub trait StorageService: Send + Sync {
     async fn retrieve_cfrags(
         &self,
         secret_id: &str,
-        requester_process_id: &str,
+        total_shares: u8,
+        capsule_id: &str,
+        process_id: &str,
     ) -> ServiceResult<Vec<CFragData>>;
 
-    fn retrieve_encrypted_shares(&self, secret_id: &str) -> ServiceResult<Vec<Vec<u8>>>;
+    async fn retrieve_encrypted_shares(&self, secret_id: &str) -> ServiceResult<Vec<Vec<u8>>>;
 }
 
 /// StorageService implementation composing Arweave + Contract sub-services
@@ -65,40 +71,46 @@ impl<S: ArweaveStorageService, CT: ContractStorage> StorageServiceImpl<S, CT> {
 
 #[async_trait]
 impl<S: ArweaveStorageService, CT: ContractStorage> StorageService for StorageServiceImpl<S, CT> {
-    fn store_data(&self, content: &[u8], tags: Vec<Tag>) -> ServiceResult<String> {
-        self.arweave.store_data(content, tags)
+    async fn store_data(&self, content: &[u8], tags: Vec<Tag>) -> ServiceResult<String> {
+        self.arweave.store_data(content, tags).await
     }
 
-    fn retrieve_data(&self, transaction_id: &str) -> ServiceResult<ArweaveTransaction> {
-        self.arweave.retrieve_data(transaction_id)
+    async fn retrieve_data(&self, transaction_id: &str) -> ServiceResult<ArweaveTransaction> {
+        self.arweave.retrieve_data(transaction_id).await
     }
 
-    fn query_by_tags(&self, params: QueryParams) -> ServiceResult<Vec<ArweaveTransaction>> {
-        self.arweave.query_by_tags(params)
+    async fn query_by_tags(&self, params: QueryParams) -> ServiceResult<Vec<ArweaveTransaction>> {
+        self.arweave.query_by_tags(params).await
     }
 
-    fn check_transaction_status(&self, transaction_id: &str) -> ServiceResult<TransactionStatus> {
-        self.arweave.check_transaction_status(transaction_id)
+    async fn check_transaction_status(
+        &self,
+        transaction_id: &str,
+    ) -> ServiceResult<TransactionStatus> {
+        self.arweave.check_transaction_status(transaction_id).await
     }
 
-    fn batch_store(&self, items: Vec<(Vec<u8>, Vec<Tag>)>) -> ServiceResult<BatchResult> {
-        self.arweave.batch_store(items)
+    async fn batch_store(&self, items: Vec<(Vec<u8>, Vec<Tag>)>) -> ServiceResult<BatchResult> {
+        self.arweave.batch_store(items).await
     }
 
-    fn exists(&self, transaction_id: &str) -> ServiceResult<bool> {
-        self.arweave.exists(transaction_id)
+    async fn exists(&self, transaction_id: &str) -> ServiceResult<bool> {
+        self.arweave.exists(transaction_id).await
     }
 
-    fn update_tags(&self, transaction_id: &str, new_tags: Vec<Tag>) -> ServiceResult<String> {
-        self.arweave.update_tags(transaction_id, new_tags)
+    async fn update_tags(&self, transaction_id: &str, new_tags: Vec<Tag>) -> ServiceResult<String> {
+        self.arweave.update_tags(transaction_id, new_tags).await
     }
 
     async fn send_kfrags_to_contract(
         &self,
         kfrags: &[KeyFragment],
         contract_id: &str,
+        secret_id: &str,
     ) -> ServiceResult<()> {
-        self.contract.send_kfrags(kfrags, contract_id).await
+        self.contract
+            .send_kfrags(kfrags, contract_id, secret_id)
+            .await
     }
 
     async fn delegate_capsule(
@@ -116,14 +128,16 @@ impl<S: ArweaveStorageService, CT: ContractStorage> StorageService for StorageSe
     async fn retrieve_cfrags(
         &self,
         secret_id: &str,
-        requester_process_id: &str,
+        total_shares: u8,
+        capsule_id: &str,
+        process_id: &str,
     ) -> ServiceResult<Vec<CFragData>> {
         self.contract
-            .retrieve_cfrags(secret_id, requester_process_id)
+            .retrieve_cfrags(secret_id, total_shares, capsule_id, process_id)
             .await
     }
 
-    fn retrieve_encrypted_shares(&self, secret_id: &str) -> ServiceResult<Vec<Vec<u8>>> {
+    async fn retrieve_encrypted_shares(&self, secret_id: &str) -> ServiceResult<Vec<Vec<u8>>> {
         let params = QueryParams {
             tags: vec![
                 Tag {
@@ -139,7 +153,7 @@ impl<S: ArweaveStorageService, CT: ContractStorage> StorageService for StorageSe
             sort_by: Some(SortBy::Id(SortOrder::Ascending)),
         };
 
-        let transactions = self.arweave.query_by_tags(params)?;
+        let transactions = self.arweave.query_by_tags(params).await?;
         Ok(transactions.into_iter().map(|tx| tx.data).collect())
     }
 }
