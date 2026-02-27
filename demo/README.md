@@ -51,7 +51,7 @@ cargo run --release -- keygen --role requester
 cargo run --release -- keygen --role owner
 
 # Step 2: requester の公開鍵 hex を取得
-REQUESTER_PK=$(jq -r .public_key_hex .formix-demo/requester.json)
+REQUESTER_PK=$(jq -r .public_key_hex .formix-demo/requester/requester.json)
 
 # Step 3: Phase 1 — ローカル秘密分割（requester 公開鍵を hex で指定）
 cargo run --release -- local share --requester-pubkey $REQUESTER_PK
@@ -70,7 +70,7 @@ Make ターゲットも使用可能です:
 ```bash
 make demo-keygen ROLE=owner
 make demo-keygen ROLE=requester
-make demo-local-share REQUESTER_PUBKEY=$(jq -r .public_key_hex .formix-demo/requester.json)
+make demo-local-share REQUESTER_PUBKEY=$(jq -r .public_key_hex .formix-demo/requester/requester.json)
 make demo-local-reencrypt SECRET_ID=<id>
 make demo-local-recover SECRET_ID=<id>
 ```
@@ -87,14 +87,17 @@ make demo-local-recover SECRET_ID=<id>
 
 ### 中間データファイル
 
-各ステップの結果は `.formix-demo/` に保存されます:
+各ステップの結果は `.formix-demo/` にロール別サブディレクトリで保存されます:
 
 ```
 .formix-demo/
-├── owner.json                          # Owner の秘密鍵 + 公開鍵
-├── requester.json                      # Requester の秘密鍵 + 公開鍵
-├── {secret_id}.local-share.json        # Phase 1 出力（capsule, kFrags, encrypted shares）
-└── {secret_id}.local-reencrypt.json    # Phase 2 出力（cFrags）
+├── owner/
+│   ├── owner.json                          # Owner の秘密鍵 + 公開鍵
+│   └── {secret_id}.local-share.json        # Phase 1 出力（capsule, kFrags, encrypted shares）
+├── requester/
+│   └── requester.json                      # Requester の秘密鍵 + 公開鍵
+└── contract/
+    └── {secret_id}.local-reencrypt.json    # Phase 2 出力（cFrags）
 ```
 
 ### 出力例
@@ -204,7 +207,7 @@ cargo run -- keygen --role <owner|requester> [--output <PATH>]
 | オプション | デフォルト | 説明 |
 |-----------|-----------|------|
 | `--role` | (必須) | `owner` または `requester` |
-| `--output` | `.formix-demo/{role}.json` | 出力先ファイルパス |
+| `--output` | `.formix-demo/{role}/{role}.json` | 出力先ファイルパス |
 
 ### `share` - Phase 1: 秘密分割（Production）
 
@@ -227,7 +230,7 @@ cargo run -- local share --requester-pubkey <HEX> [--owner-key-file <PATH>] [--p
 | オプション | デフォルト | 説明 |
 |-----------|-----------|------|
 | `--requester-pubkey` | (必須) | Requester の公開鍵（hex 文字列） |
-| `--owner-key-file` | `.formix-demo/owner.json` | Owner 鍵ファイルのパス |
+| `--owner-key-file` | `.formix-demo/owner/owner.json` | Owner 鍵ファイルのパス |
 | `--plaintext` | `Hello FORMIX - Threshold PRE Demo` | 分割する秘密テキスト |
 
 ### `local reencrypt` - Phase 2: コントラクト再暗号化
@@ -250,8 +253,8 @@ cargo run -- local all [--owner-key-file <PATH>] [--requester-key-file <PATH>] [
 
 | オプション | デフォルト | 説明 |
 |-----------|-----------|------|
-| `--owner-key-file` | `.formix-demo/owner.json` | Owner 鍵ファイルのパス |
-| `--requester-key-file` | `.formix-demo/requester.json` | Requester 鍵ファイルのパス |
+| `--owner-key-file` | `.formix-demo/owner/owner.json` | Owner 鍵ファイルのパス |
+| `--requester-key-file` | `.formix-demo/requester/requester.json` | Requester 鍵ファイルのパス |
 | `--plaintext` | `Hello FORMIX - Threshold PRE Demo` | 分割する秘密テキスト |
 
 ## CLI オプション
@@ -301,7 +304,7 @@ Commands:
 先に `keygen --role owner` を実行して鍵ファイルを生成してください。
 
 **"Invalid requester public key hex"**
-`--requester-pubkey` に渡した hex 文字列が正しいか確認してください。`jq -r .public_key_hex .formix-demo/requester.json` で取得できます。
+`--requester-pubkey` に渡した hex 文字列が正しいか確認してください。`jq -r .public_key_hex .formix-demo/requester/requester.json` で取得できます。
 
 **"Failed to load local share from ..."**
 先に `local share` を実行してください。`--secret-id` が正しいことを確認してください。

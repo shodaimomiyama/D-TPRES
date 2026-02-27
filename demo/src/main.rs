@@ -58,11 +58,11 @@ enum Commands {
     /// Split a secret using 2-of-3 threshold PRE and store on Arweave
     Share {
         /// Path to owner key file
-        #[arg(long, default_value = ".formix-demo/owner.json")]
+        #[arg(long, default_value = ".formix-demo/owner/owner.json")]
         owner_key_file: PathBuf,
 
         /// Path to requester public key file
-        #[arg(long, default_value = ".formix-demo/requester.json")]
+        #[arg(long, default_value = ".formix-demo/requester/requester.json")]
         requester_pubkey_file: PathBuf,
     },
     /// Recover the secret from Arweave using threshold cFrags
@@ -72,7 +72,7 @@ enum Commands {
         secret_id: String,
 
         /// Path to requester key file
-        #[arg(long, default_value = ".formix-demo/requester.json")]
+        #[arg(long, default_value = ".formix-demo/requester/requester.json")]
         requester_key_file: PathBuf,
 
         /// Path to share result file (default: .formix-demo/{secret_id}.json)
@@ -91,7 +91,7 @@ enum LocalCommands {
     /// Phase 1: split secret and save intermediate data
     Share {
         /// Path to owner key file
-        #[arg(long, default_value = ".formix-demo/owner.json")]
+        #[arg(long, default_value = ".formix-demo/owner/owner.json")]
         owner_key_file: PathBuf,
 
         /// Requester public key as hex string
@@ -119,7 +119,7 @@ enum LocalCommands {
         secret_id: String,
 
         /// Path to requester key file
-        #[arg(long, default_value = ".formix-demo/requester.json")]
+        #[arg(long, default_value = ".formix-demo/requester/requester.json")]
         requester_key_file: PathBuf,
 
         /// Path to local share result file
@@ -133,11 +133,11 @@ enum LocalCommands {
     /// Run all local steps: keygen -> share -> reencrypt -> recover
     All {
         /// Path to owner key file
-        #[arg(long, default_value = ".formix-demo/owner.json")]
+        #[arg(long, default_value = ".formix-demo/owner/owner.json")]
         owner_key_file: PathBuf,
 
         /// Path to requester key file
-        #[arg(long, default_value = ".formix-demo/requester.json")]
+        #[arg(long, default_value = ".formix-demo/requester/requester.json")]
         requester_key_file: PathBuf,
 
         /// Plaintext secret to share
@@ -811,8 +811,8 @@ async fn main() -> Result<()> {
     println!("{}", "=".repeat(60).dimmed());
 
     if cli.local {
-        let owner_key_file = PathBuf::from(".formix-demo/owner.json");
-        let requester_key_file = PathBuf::from(".formix-demo/requester.json");
+        let owner_key_file = PathBuf::from(".formix-demo/owner/owner.json");
+        let requester_key_file = PathBuf::from(".formix-demo/requester/requester.json");
         let default_plaintext = b"Hello FORMIX - Threshold PRE Demo";
         run_local_all(&owner_key_file, &requester_key_file, default_plaintext)?;
     } else {

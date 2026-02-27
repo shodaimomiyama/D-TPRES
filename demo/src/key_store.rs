@@ -37,11 +37,11 @@ fn default_dir() -> PathBuf {
 }
 
 pub fn default_key_path(role: &str) -> PathBuf {
-    default_dir().join(format!("{role}.json"))
+    default_dir().join(role).join(format!("{role}.json"))
 }
 
 pub fn default_share_result_path(secret_id: &str) -> PathBuf {
-    default_dir().join(format!("{secret_id}.json"))
+    default_dir().join("owner").join(format!("{secret_id}.json"))
 }
 
 pub fn save_keypair(role: &str, sk: &SecretKey, pk: &PublicKey, path: &Path) -> Result<()> {
@@ -139,11 +139,11 @@ pub struct LocalReencryptResult {
 }
 
 pub fn default_local_share_path(secret_id: &str) -> PathBuf {
-    default_dir().join(format!("{secret_id}.local-share.json"))
+    default_dir().join("owner").join(format!("{secret_id}.local-share.json"))
 }
 
 pub fn default_local_reencrypt_path(secret_id: &str) -> PathBuf {
-    default_dir().join(format!("{secret_id}.local-reencrypt.json"))
+    default_dir().join("contract").join(format!("{secret_id}.local-reencrypt.json"))
 }
 
 pub fn save_local_share_result(result: &LocalShareResult, path: &Path) -> Result<()> {
