@@ -105,8 +105,11 @@ pub struct PublicKey {
 
 impl PublicKey {
     #[cfg(feature = "key-export")]
-    pub fn from_bytes(data: Vec<u8>) -> Self {
-        Self { key_data: data }
+    pub fn from_bytes(data: Vec<u8>) -> Result<Self, &'static str> {
+        if data.is_empty() {
+            return Err("Public key data cannot be empty");
+        }
+        Ok(Self { key_data: data })
     }
 }
 
@@ -129,8 +132,11 @@ impl SecretKey {
     }
 
     #[cfg(feature = "key-export")]
-    pub fn from_bytes(data: Vec<u8>) -> Self {
-        Self { key_data: data }
+    pub fn from_bytes(data: Vec<u8>) -> Result<Self, &'static str> {
+        if data.len() != constants::KEY_SIZE_BYTES {
+            return Err("Secret key must be exactly 32 bytes");
+        }
+        Ok(Self { key_data: data })
     }
 
     /// Create an empty SecretKey for testing purposes only

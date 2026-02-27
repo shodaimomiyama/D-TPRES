@@ -249,7 +249,8 @@ async fn run_recover(
 
     let owner_pk_bytes =
         hex::decode(&share_result.owner_public_key_hex).context("Invalid owner public key hex")?;
-    let owner_pk = formix::service::core::crypto::PublicKey::from_bytes(owner_pk_bytes);
+    let owner_pk = formix::service::core::crypto::PublicKey::from_bytes(owner_pk_bytes)
+        .map_err(|e| anyhow::anyhow!(e))?;
 
     println!();
     println!("  {} Executing recover workflow...", ">>".blue());

@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
@@ -55,7 +56,22 @@ pub fn save_keypair(role: &str, sk: &SecretKey, pk: &PublicKey, path: &Path) -> 
     };
 
     let json = serde_json::to_string_pretty(&key_file)?;
-    fs::write(path, json).context("Failed to write key file")?;
+    write_restricted(path, json.as_bytes()).context("Failed to write key file")?;
+    Ok(())
+}
+
+fn write_restricted(path: &Path, data: &[u8]) -> Result<()> {
+    let mut opts = fs::OpenOptions::new();
+    opts.write(true).create(true).truncate(true);
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+
+    let mut file = opts.open(path)?;
+    file.write_all(data)?;
     Ok(())
 }
 
@@ -67,10 +83,9 @@ pub fn load_keypair(path: &Path) -> Result<(SecretKey, PublicKey)> {
     let sk_bytes = hex::decode(&key_file.secret_key_hex).context("Invalid secret key hex")?;
     let pk_bytes = hex::decode(&key_file.public_key_hex).context("Invalid public key hex")?;
 
-    Ok((
-        SecretKey::from_bytes(sk_bytes),
-        PublicKey::from_bytes(pk_bytes),
-    ))
+    let sk = SecretKey::from_bytes(sk_bytes).map_err(|e| anyhow::anyhow!(e))?;
+    let pk = PublicKey::from_bytes(pk_bytes).map_err(|e| anyhow::anyhow!(e))?;
+    Ok((sk, pk))
 }
 
 pub fn load_public_key(path: &Path) -> Result<PublicKey> {
@@ -79,7 +94,7 @@ pub fn load_public_key(path: &Path) -> Result<PublicKey> {
     let key_file: KeyFile = serde_json::from_str(&json)?;
 
     let pk_bytes = hex::decode(&key_file.public_key_hex).context("Invalid public key hex")?;
-    Ok(PublicKey::from_bytes(pk_bytes))
+    PublicKey::from_bytes(pk_bytes).map_err(|e| anyhow::anyhow!(e))
 }
 
 pub fn save_share_result(result: &ShareResult, path: &Path) -> Result<()> {

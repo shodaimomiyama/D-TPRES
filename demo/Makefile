@@ -33,8 +33,9 @@ spawn: ## Spawn an AO process (returns process_id)
 build: ## Build the demo binary (release)
 	cargo build --release
 
-demo-keygen: build ## Run keygen subcommand
-	cargo run --release -- keygen
+demo-keygen: build ## Run keygen subcommand (ROLE=owner|requester required)
+	@test -n "$(ROLE)" || (echo "Error: ROLE is required (owner|requester)" && exit 1)
+	cargo run --release -- keygen --role $(ROLE)
 
 demo-share: build ## Run share subcommand (Phase 1)
 	cargo run --release -- share
@@ -48,6 +49,7 @@ demo-all: build ## Run full demo flow (keygen + share)
 	@echo "=========================================="
 	@echo " FORMIX Full Demo Flow"
 	@echo "=========================================="
-	cargo run --release -- keygen
+	cargo run --release -- keygen --role requester
+	cargo run --release -- keygen --role owner
 	@echo ""
 	cargo run --release -- share
