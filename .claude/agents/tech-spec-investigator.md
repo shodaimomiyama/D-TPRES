@@ -72,8 +72,8 @@ Your recommendations should include:
 - **WebAssembly Compatibility**: Always verify that recommended technologies work in WASM environments
 - **Stateless Execution**: Ensure solutions work with AO's stateless message-driven architecture
 - **Security First**: Prioritize libraries with strong security track records, especially for cryptographic operations
-- **Rust Edition 2024**: Verify compatibility with Rust 1.86.0 and edition 2024 features
-- **No Async/Await**: Remember that AO environment doesn't support async operations
+- **Rust Edition**: Codebase uses two editions — `client/` uses edition 2024 with Rust 1.86.0 (pinned via `client/rust-toolchain.toml`); `ao/contracts/` uses edition 2021. Verify compatibility accordingly
+- **No Async/Await (AO only)**: AO environment doesn't support async operations; however, `client/` requires async for network I/O
 
 **Quality Assurance:**
 

@@ -3,6 +3,9 @@ name = "formix"
 version = "0.1.0"
 edition = "2021"
 
+description = "Decentralized threshold proxy re-encryption library for Arweave and AO Network"
+license = "MIT"
+
 [dependencies]
 zeroize = { version = "1.8", features = ["derive"] }
 shamirsecretsharing = "0.1"
@@ -20,6 +23,7 @@ cw-storage-plus = "0.13.4"
 thiserror = "1"
 async-trait = "0.1"
 base64 = "0.22"
+log = "0.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

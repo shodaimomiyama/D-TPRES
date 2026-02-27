@@ -83,6 +83,17 @@ pub mod tag_values {
     pub const ENTITY_CFRAG: &str = "CFrag";
 }
 
+/// A query result containing full transaction metadata (tx_id, tags, timestamp).
+#[derive(Debug, Clone)]
+pub struct QueryResult {
+    /// Arweave transaction ID
+    pub tx_id: String,
+    /// Tags attached to the transaction
+    pub tags: Vec<Tag>,
+    /// Block timestamp in seconds (0 if unavailable/not yet confirmed)
+    pub timestamp: u64,
+}
+
 /// Arweave client trait for abstracting Arweave operations
 ///
 /// This trait defines the interface for Arweave storage operations.
@@ -107,6 +118,12 @@ pub trait ArweaveClient: Send + Sync {
     ///
     /// Returns a list of matching transaction IDs.
     async fn query(&self, tags: Vec<Tag>) -> Result<Vec<String>, AdapterError>;
+
+    /// Query transactions with full metadata (tags + timestamp).
+    ///
+    /// Returns a list of [`QueryResult`] entries each containing the tx_id,
+    /// the tags attached at upload time, and the block timestamp.
+    async fn query_with_meta(&self, tags: Vec<Tag>) -> Result<Vec<QueryResult>, AdapterError>;
 }
 
 /// Arweave client trait for abstracting Arweave operations (WASM version)
@@ -128,6 +145,12 @@ pub trait ArweaveClient {
     ///
     /// Returns a list of matching transaction IDs.
     async fn query(&self, tags: Vec<Tag>) -> Result<Vec<String>, AdapterError>;
+
+    /// Query transactions with full metadata (tags + timestamp).
+    ///
+    /// Returns a list of [`QueryResult`] entries each containing the tx_id,
+    /// the tags attached at upload time, and the block timestamp.
+    async fn query_with_meta(&self, tags: Vec<Tag>) -> Result<Vec<QueryResult>, AdapterError>;
 }
 
 /// Helper functions for creating common tags
@@ -167,5 +190,132 @@ pub mod tag_helpers {
     /// Create kfrag ID tag
     pub fn kfrag_id_tag(kfrag_id: &str) -> Tag {
         Tag::new(tag_names::KFRAG_ID, kfrag_id)
+    }
+}
+
+/// Mock Arweave client module for testing
+#[cfg(test)]
+pub mod mock {
+    use super::{AdapterError, ArweaveClient, QueryResult, Tag};
+    use async_trait::async_trait;
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::RwLock;
+
+    struct StoredEntry {
+        data: Vec<u8>,
+        tags: Vec<Tag>,
+    }
+
+    pub struct MockArweaveClient {
+        storage: RwLock<HashMap<String, StoredEntry>>,
+        tx_counter: AtomicU64,
+    }
+
+    impl MockArweaveClient {
+        pub fn new() -> Self {
+            Self {
+                storage: RwLock::new(HashMap::new()),
+                tx_counter: AtomicU64::new(0),
+            }
+        }
+
+        fn generate_tx_id(&self) -> String {
+            let id = self.tx_counter.fetch_add(1, Ordering::SeqCst);
+            format!("mock_tx_{id}")
+        }
+
+        fn tags_match(entry_tags: &[Tag], query_tags: &[Tag]) -> bool {
+            query_tags.iter().all(|query_tag| {
+                entry_tags.iter().any(|entry_tag| {
+                    entry_tag.name == query_tag.name && entry_tag.value == query_tag.value
+                })
+            })
+        }
+
+        pub fn clear(&self) {
+            let mut storage = self.storage.write().unwrap();
+            storage.clear();
+        }
+
+        pub fn len(&self) -> usize {
+            let storage = self.storage.read().unwrap();
+            storage.len()
+        }
+
+        pub fn is_empty(&self) -> bool {
+            self.len() == 0
+        }
+    }
+
+    impl Default for MockArweaveClient {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    #[async_trait]
+    impl ArweaveClient for MockArweaveClient {
+        async fn get(&self, tx_id: &str) -> Result<Option<Vec<u8>>, AdapterError> {
+            let storage = self.storage.read().unwrap();
+            Ok(storage.get(tx_id).map(|entry| entry.data.clone()))
+        }
+
+        async fn post(&self, data: &[u8], tags: Vec<Tag>) -> Result<String, AdapterError> {
+            let tx_id = self.generate_tx_id();
+            let entry = StoredEntry {
+                data: data.to_vec(),
+                tags,
+            };
+
+            let mut storage = self.storage.write().unwrap();
+            storage.insert(tx_id.clone(), entry);
+
+            Ok(tx_id)
+        }
+
+        async fn query(&self, tags: Vec<Tag>) -> Result<Vec<String>, AdapterError> {
+            let storage = self.storage.read().unwrap();
+            let mut matching_ids: Vec<String> = storage
+                .iter()
+                .filter(|(_, entry)| Self::tags_match(&entry.tags, &tags))
+                .map(|(tx_id, _)| tx_id.clone())
+                .collect();
+
+            matching_ids.sort_by(|a, b| {
+                let extract_num = |s: &str| {
+                    s.strip_prefix("mock_tx_")
+                        .and_then(|n| n.parse::<u64>().ok())
+                        .unwrap_or(0)
+                };
+                extract_num(a).cmp(&extract_num(b))
+            });
+
+            Ok(matching_ids)
+        }
+
+        async fn query_with_meta(&self, tags: Vec<Tag>) -> Result<Vec<QueryResult>, AdapterError> {
+            let storage = self.storage.read().unwrap();
+            let mut results: Vec<QueryResult> = storage
+                .iter()
+                .filter(|(_, entry)| Self::tags_match(&entry.tags, &tags))
+                .map(|(tx_id, entry)| QueryResult {
+                    tx_id: tx_id.clone(),
+                    tags: entry.tags.clone(),
+                    timestamp: 0,
+                })
+                .collect();
+
+            results.sort_by(|a, b| {
+                let extract_num = |s: &str| {
+                    s.strip_prefix("mock_tx_")
+                        .and_then(|n| n.parse::<u64>().ok())
+                        .unwrap_or(0)
+                };
+                extract_num(&a.tx_id).cmp(&extract_num(&b.tx_id))
+            });
+
+            Ok(results)
+        }
     }
 }

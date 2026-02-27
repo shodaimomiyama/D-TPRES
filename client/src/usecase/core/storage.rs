@@ -9,6 +9,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use crate::service::error::{ServiceError, ServiceResult};
@@ -99,27 +100,31 @@ pub struct BatchResult {
 }
 
 /// ArweaveStorageService trait
+#[async_trait]
 pub trait ArweaveStorageService: Send + Sync {
     /// データをArweaveに保存
-    fn store_data(&self, data: &[u8], tags: Vec<Tag>) -> ServiceResult<String>;
+    async fn store_data(&self, data: &[u8], tags: Vec<Tag>) -> ServiceResult<String>;
 
     /// トランザクションIDでデータを取得
-    fn retrieve_data(&self, transaction_id: &str) -> ServiceResult<ArweaveTransaction>;
+    async fn retrieve_data(&self, transaction_id: &str) -> ServiceResult<ArweaveTransaction>;
 
     /// タグベースでデータをクエリ
-    fn query_by_tags(&self, params: QueryParams) -> ServiceResult<Vec<ArweaveTransaction>>;
+    async fn query_by_tags(&self, params: QueryParams) -> ServiceResult<Vec<ArweaveTransaction>>;
 
     /// トランザクションステータスを確認
-    fn check_transaction_status(&self, transaction_id: &str) -> ServiceResult<TransactionStatus>;
+    async fn check_transaction_status(
+        &self,
+        transaction_id: &str,
+    ) -> ServiceResult<TransactionStatus>;
 
     /// バッチでデータを保存
-    fn batch_store(&self, items: Vec<(Vec<u8>, Vec<Tag>)>) -> ServiceResult<BatchResult>;
+    async fn batch_store(&self, items: Vec<(Vec<u8>, Vec<Tag>)>) -> ServiceResult<BatchResult>;
 
     /// データの存在確認
-    fn exists(&self, transaction_id: &str) -> ServiceResult<bool>;
+    async fn exists(&self, transaction_id: &str) -> ServiceResult<bool>;
 
     /// タグを更新（新しいトランザクションとして作成）
-    fn update_tags(&self, transaction_id: &str, new_tags: Vec<Tag>) -> ServiceResult<String>;
+    async fn update_tags(&self, transaction_id: &str, new_tags: Vec<Tag>) -> ServiceResult<String>;
 }
 
 /// ArweaveStorageService実装
@@ -188,8 +193,9 @@ impl ArweaveStorageServiceImpl {
     }
 }
 
+#[async_trait]
 impl ArweaveStorageService for ArweaveStorageServiceImpl {
-    fn store_data(&self, payload: &[u8], tags: Vec<Tag>) -> ServiceResult<String> {
+    async fn store_data(&self, payload: &[u8], tags: Vec<Tag>) -> ServiceResult<String> {
         // 入力検証
         self.validate_data_size(payload)?;
         self.validate_tags(&tags)?;
@@ -215,7 +221,7 @@ impl ArweaveStorageService for ArweaveStorageServiceImpl {
         Ok(tx_id)
     }
 
-    fn retrieve_data(&self, transaction_id: &str) -> ServiceResult<ArweaveTransaction> {
+    async fn retrieve_data(&self, transaction_id: &str) -> ServiceResult<ArweaveTransaction> {
         // 入力検証
         if transaction_id.is_empty() {
             return Err(ServiceError::validation_error(
@@ -234,7 +240,7 @@ impl ArweaveStorageService for ArweaveStorageServiceImpl {
             })
     }
 
-    fn query_by_tags(&self, params: QueryParams) -> ServiceResult<Vec<ArweaveTransaction>> {
+    async fn query_by_tags(&self, params: QueryParams) -> ServiceResult<Vec<ArweaveTransaction>> {
         // 入力検証
         if params.tags.is_empty() {
             return Err(ServiceError::validation_error(
@@ -282,7 +288,10 @@ impl ArweaveStorageService for ArweaveStorageServiceImpl {
         Ok(results)
     }
 
-    fn check_transaction_status(&self, transaction_id: &str) -> ServiceResult<TransactionStatus> {
+    async fn check_transaction_status(
+        &self,
+        transaction_id: &str,
+    ) -> ServiceResult<TransactionStatus> {
         // 入力検証
         if transaction_id.is_empty() {
             return Err(ServiceError::validation_error(
@@ -298,7 +307,7 @@ impl ArweaveStorageService for ArweaveStorageServiceImpl {
         }
     }
 
-    fn batch_store(&self, items: Vec<(Vec<u8>, Vec<Tag>)>) -> ServiceResult<BatchResult> {
+    async fn batch_store(&self, items: Vec<(Vec<u8>, Vec<Tag>)>) -> ServiceResult<BatchResult> {
         // 入力検証
         if items.is_empty() {
             return Ok(BatchResult {
@@ -319,7 +328,7 @@ impl ArweaveStorageService for ArweaveStorageServiceImpl {
         let mut failed = Vec::new();
 
         for (index, (item_payload, tags)) in items.into_iter().enumerate() {
-            match self.store_data(&item_payload, tags) {
+            match self.store_data(&item_payload, tags).await {
                 Ok(tx_id) => successful.push(tx_id),
                 Err(e) => failed.push((index.to_string(), e.to_string())),
             }
@@ -328,7 +337,7 @@ impl ArweaveStorageService for ArweaveStorageServiceImpl {
         Ok(BatchResult { successful, failed })
     }
 
-    fn exists(&self, transaction_id: &str) -> ServiceResult<bool> {
+    async fn exists(&self, transaction_id: &str) -> ServiceResult<bool> {
         // 入力検証
         if transaction_id.is_empty() {
             return Err(ServiceError::validation_error(
@@ -339,15 +348,15 @@ impl ArweaveStorageService for ArweaveStorageServiceImpl {
         Ok(self.cache.read().unwrap().contains_key(transaction_id))
     }
 
-    fn update_tags(&self, transaction_id: &str, new_tags: Vec<Tag>) -> ServiceResult<String> {
+    async fn update_tags(&self, transaction_id: &str, new_tags: Vec<Tag>) -> ServiceResult<String> {
         // 入力検証
         self.validate_tags(&new_tags)?;
 
         // 既存のトランザクションを取得
-        let existing_tx = self.retrieve_data(transaction_id)?;
+        let existing_tx = self.retrieve_data(transaction_id).await?;
 
         // 新しいトランザクションとして保存（Arweaveは不変）
-        let new_tx_id = self.store_data(&existing_tx.data, new_tags)?;
+        let new_tx_id = self.store_data(&existing_tx.data, new_tags).await?;
 
         Ok(new_tx_id)
     }
