@@ -1,6 +1,6 @@
 .PHONY: help setup keygen deploy spawn build demo-keygen demo-share demo-recover demo-all
 
-WALLET ?= wallet.json
+WALLET ?= ./arweave-keyfile.json
 
 help: ## Show this help
 	@echo "FORMIX Demo Targets:"
@@ -19,7 +19,7 @@ help: ## Show this help
 	@echo "    7. make demo-all"
 
 setup: ## Install ao/ dependencies (npm)
-	cd ../ao && npm install
+	cd ../ao && npm install --ignore-scripts
 
 keygen: ## Generate an Arweave wallet via ao/ scripts
 	cd ../ao && npm run keygen -- $(WALLET)
