@@ -24,9 +24,9 @@ pub use config::AOConfig;
 #[cfg(feature = "production-ao")]
 pub use data_item::{ArweaveJWK, DataItemBuilder, DataItemSigner};
 pub use message::{
-    AOAttribute, AOEvent, AOMessageTags, AOResponse, Binary, BlobMeta, CapsuleInfo, CapsuleStatus,
-    ExecuteMsg, GetCFragResponse, ListCapsulesByKFragResponse, MAX_BINARY_SIZE, MAX_ID_LENGTH,
-    QueryMsg, ValidateMessage,
+    AOAttribute, AOEvent, AOMessageTags, AOResponse, Binary, BlobMeta, CFragEntry, CapsuleInfo,
+    CapsuleStatus, ExecuteMsg, GetCFragResponse, GetCFragsBySecretResponse,
+    ListCapsulesByKFragResponse, QueryMsg, ValidateMessage, MAX_BINARY_SIZE, MAX_ID_LENGTH,
 };
 #[cfg(feature = "production-ao")]
 pub use production_client::ProductionAOClient;

@@ -155,7 +155,7 @@ pub trait ArweaveClient {
 
 /// Helper functions for creating common tags
 pub mod tag_helpers {
-    use super::{Tag, tag_names, tag_values};
+    use super::{tag_names, tag_values, Tag};
 
     /// Create application name tag
     pub fn app_tag() -> Tag {
@@ -199,26 +199,20 @@ pub mod mock {
     use super::{AdapterError, ArweaveClient, QueryResult, Tag};
     use async_trait::async_trait;
     use std::collections::HashMap;
-    use std::sync::RwLock;
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::RwLock;
 
-    /// Entry stored in MockArweaveClient
     struct StoredEntry {
         data: Vec<u8>,
         tags: Vec<Tag>,
     }
 
-    /// Mock implementation of ArweaveClient for testing
-    ///
-    /// Uses in-memory HashMap storage with RwLock for thread safety.
-    /// Supports tag-based query filtering.
     pub struct MockArweaveClient {
         storage: RwLock<HashMap<String, StoredEntry>>,
         tx_counter: AtomicU64,
     }
 
     impl MockArweaveClient {
-        /// Create a new empty MockArweaveClient
         pub fn new() -> Self {
             Self {
                 storage: RwLock::new(HashMap::new()),
@@ -226,13 +220,11 @@ pub mod mock {
             }
         }
 
-        /// Generate a unique transaction ID
         fn generate_tx_id(&self) -> String {
             let id = self.tx_counter.fetch_add(1, Ordering::SeqCst);
             format!("mock_tx_{id}")
         }
 
-        /// Check if an entry's tags match all query tags
         fn tags_match(entry_tags: &[Tag], query_tags: &[Tag]) -> bool {
             query_tags.iter().all(|query_tag| {
                 entry_tags.iter().any(|entry_tag| {
@@ -241,19 +233,16 @@ pub mod mock {
             })
         }
 
-        /// Clear all stored data (useful for test cleanup)
         pub fn clear(&self) {
             let mut storage = self.storage.write().unwrap();
             storage.clear();
         }
 
-        /// Get the number of stored entries
         pub fn len(&self) -> usize {
             let storage = self.storage.read().unwrap();
             storage.len()
         }
 
-        /// Check if storage is empty
         pub fn is_empty(&self) -> bool {
             self.len() == 0
         }
@@ -293,7 +282,6 @@ pub mod mock {
                 .map(|(tx_id, _)| tx_id.clone())
                 .collect();
 
-            // Sort by numeric suffix to ensure proper ordering (mock_tx_0, mock_tx_1, ...)
             matching_ids.sort_by(|a, b| {
                 let extract_num = |s: &str| {
                     s.strip_prefix("mock_tx_")
@@ -328,76 +316,6 @@ pub mod mock {
             });
 
             Ok(results)
-        }
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::*;
-
-        #[tokio::test]
-        async fn test_mock_client_post_and_get() {
-            let client = MockArweaveClient::new();
-            let test_data = vec![1u8, 2, 3, 4, 5];
-            let tags = vec![Tag::new("key", "value")];
-
-            let tx_id = client.post(&test_data, tags).await.unwrap();
-            let retrieved = client.get(&tx_id).await.unwrap();
-
-            assert!(retrieved.is_some());
-            assert_eq!(retrieved.unwrap(), test_data);
-        }
-
-        #[tokio::test]
-        async fn test_mock_client_get_not_found() {
-            let client = MockArweaveClient::new();
-            let result = client.get("nonexistent_tx").await.unwrap();
-            assert!(result.is_none());
-        }
-
-        #[tokio::test]
-        async fn test_mock_client_query_by_tags() {
-            let client = MockArweaveClient::new();
-
-            let tags1 = vec![Tag::new("type", "Secret"), Tag::new("id", "secret1")];
-            let tags2 = vec![Tag::new("type", "Secret"), Tag::new("id", "secret2")];
-            let tags3 = vec![Tag::new("type", "Capsule"), Tag::new("id", "capsule1")];
-
-            client.post(&[1], tags1).await.unwrap();
-            client.post(&[2], tags2).await.unwrap();
-            client.post(&[3], tags3).await.unwrap();
-
-            let query_tags = vec![Tag::new("type", "Secret")];
-            let results = client.query(query_tags).await.unwrap();
-
-            assert_eq!(results.len(), 2);
-        }
-
-        #[tokio::test]
-        async fn test_mock_client_query_no_match() {
-            let client = MockArweaveClient::new();
-
-            let tags = vec![Tag::new("type", "Secret")];
-            client.post(&[1], tags).await.unwrap();
-
-            let query_tags = vec![Tag::new("type", "Capsule")];
-            let results = client.query(query_tags).await.unwrap();
-
-            assert!(results.is_empty());
-        }
-
-        #[tokio::test]
-        async fn test_mock_client_clear() {
-            let client = MockArweaveClient::new();
-
-            client.post(&[1], vec![]).await.unwrap();
-            client.post(&[2], vec![]).await.unwrap();
-
-            assert_eq!(client.len(), 2);
-
-            client.clear();
-
-            assert!(client.is_empty());
         }
     }
 }

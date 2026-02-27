@@ -23,8 +23,8 @@ type TestStorageService =
     ServiceStorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<MockAOClient>>;
 
 /// Helper to create test service with real CryptoService
-fn create_integration_service()
--> SecretSharingWorkflowServiceImpl<TestCryptoService, TestStorageService> {
+fn create_integration_service(
+) -> SecretSharingWorkflowServiceImpl<TestCryptoService, TestStorageService> {
     let core_crypto = Arc::new(CoreCryptoServiceImpl::new());
     let crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
     let mock_ao = Arc::new(MockAOClient::new());
