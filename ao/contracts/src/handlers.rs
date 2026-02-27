@@ -595,26 +595,26 @@ fn retry_reencryption(
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct StoredKeyFrag {
-    id: u8,
-    key_data: Vec<u8>,
-    verification_data: Vec<u8>,
+pub struct StoredKeyFrag {
+    pub id: u8,
+    pub key_data: Vec<u8>,
+    pub verification_data: Vec<u8>,
     #[serde(default)]
-    precursor: Vec<u8>,
+    pub precursor: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct StoredCFrag {
-    fragment_id: u8,
-    capsule_fragment: Vec<u8>,
-    proof: Vec<u8>,
+pub struct StoredCFrag {
+    pub fragment_id: u8,
+    pub capsule_fragment: Vec<u8>,
+    pub proof: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-struct VerificationData {
-    verifying_pk: Vec<u8>,
-    delegating_pk: Vec<u8>,
-    receiving_pk: Vec<u8>,
+pub struct VerificationData {
+    pub verifying_pk: Vec<u8>,
+    pub delegating_pk: Vec<u8>,
+    pub receiving_pk: Vec<u8>,
 }
 
 fn perform_reencryption(

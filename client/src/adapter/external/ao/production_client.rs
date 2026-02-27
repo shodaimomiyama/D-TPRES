@@ -33,7 +33,11 @@ impl ProductionAOClient {
         })
     }
 
-    async fn post_to_mu(&self, item_bytes: &[u8]) -> Result<String, AOCommunicationError> {
+    async fn post_to_mu(
+        &self,
+        process_id: &str,
+        item_bytes: &[u8],
+    ) -> Result<String, AOCommunicationError> {
         let url = self.config.mu_url();
         let response = self
             .http_client
@@ -48,7 +52,7 @@ impl ProductionAOClient {
         if !status.is_success() {
             let body_text = response.text().await.unwrap_or_default();
             return Err(AOCommunicationError::ExecutionError {
-                process_id: String::new(),
+                process_id: process_id.to_string(),
                 details: format!("MU returned status {status}: {body_text}"),
             });
         }
@@ -259,8 +263,7 @@ impl ProductionAOClient {
                 details: format!("{operation} connection failed: {err}"),
             }
         } else {
-            AOCommunicationError::ExecutionError {
-                process_id: String::new(),
+            AOCommunicationError::ConnectionError {
                 details: format!("{operation} failed: {err}"),
             }
         }
@@ -276,7 +279,7 @@ impl AOClient for ProductionAOClient {
     ) -> Result<AOResponse, AOCommunicationError> {
         let item = DataItemBuilder::build_execute(process_id, &msg)?;
         let signed_bytes = self.signer.sign(&item)?;
-        let message_id = self.post_to_mu(&signed_bytes).await?;
+        let message_id = self.post_to_mu(process_id, &signed_bytes).await?;
         let result_json = self.fetch_cu_result(process_id, &message_id).await?;
         Self::parse_cu_result(process_id, &result_json, Some(message_id))
     }

@@ -5,21 +5,15 @@ const { wallet, module_id, scheduler, input } = require("yargs")(
 const { readFileSync } = require("fs")
 const { resolve } = require("path")
 const { CWAO } = require("cwao")
-const { mkdirs, keygen } = require("./utils")
-
-const dir = resolve(__dirname, "../.cwao")
-const dir_ac = resolve(__dirname, "../.cwao/accounts")
-const dirs = [dir, dir_ac]
 
 const deploy = async ({ module_id, input, scheduler, wallet }) => {
-  await mkdirs(dirs)
-  const _wallet = await keygen(wallet, dir_ac)
+  const _wallet = JSON.parse(readFileSync(resolve(wallet), "utf8"))
   const cwao = new CWAO({
     wallet: _wallet,
     arweave: { host: "arweave.net", port: 443, protocol: "https" },
     mu: "https://mu.ao-testnet.xyz",
     su: "https://su.ao-testnet.xyz",
-    cu: "http://localhost:1987",
+    cu: "https://cu.ao-testnet.xyz",
   })
   console.log(input)
   const { error, id } = await cwao.instantiate({

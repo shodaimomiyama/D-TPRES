@@ -97,6 +97,84 @@ pub fn load_public_key(path: &Path) -> Result<PublicKey> {
     PublicKey::from_bytes(pk_bytes).map_err(|e| anyhow::anyhow!(e))
 }
 
+// Phase 1 local output
+#[derive(Serialize, Deserialize)]
+pub struct LocalKFragInfo {
+    pub id: u8,
+    pub serialized_hex: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LocalEncryptedShare {
+    pub index: u8,
+    pub ciphertext_hex: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LocalShareResult {
+    pub secret_id: String,
+    pub owner_public_key_hex: String,
+    pub capsule_bytes_hex: String,
+    pub capsule_ciphertext_hex: String,
+    pub encrypted_shares: Vec<LocalEncryptedShare>,
+    pub kfrags: Vec<LocalKFragInfo>,
+    pub verifying_pk_hex: String,
+    pub threshold_k: u8,
+    pub total_n: u8,
+}
+
+// Phase 2 local output
+#[derive(Serialize, Deserialize)]
+pub struct LocalCFragInfo {
+    pub fragment_id: u8,
+    pub capsule_fragment_hex: String,
+    pub holder_id: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct LocalReencryptResult {
+    pub secret_id: String,
+    pub cfrags: Vec<LocalCFragInfo>,
+}
+
+pub fn default_local_share_path(secret_id: &str) -> PathBuf {
+    default_dir().join(format!("{secret_id}.local-share.json"))
+}
+
+pub fn default_local_reencrypt_path(secret_id: &str) -> PathBuf {
+    default_dir().join(format!("{secret_id}.local-reencrypt.json"))
+}
+
+pub fn save_local_share_result(result: &LocalShareResult, path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        ensure_dir(parent)?;
+    }
+    let json = serde_json::to_string_pretty(result)?;
+    fs::write(path, json).context("Failed to write local share result")?;
+    Ok(())
+}
+
+pub fn load_local_share_result(path: &Path) -> Result<LocalShareResult> {
+    let json =
+        fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
+    serde_json::from_str(&json).context("Invalid local share result format")
+}
+
+pub fn save_local_reencrypt_result(result: &LocalReencryptResult, path: &Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        ensure_dir(parent)?;
+    }
+    let json = serde_json::to_string_pretty(result)?;
+    fs::write(path, json).context("Failed to write local reencrypt result")?;
+    Ok(())
+}
+
+pub fn load_local_reencrypt_result(path: &Path) -> Result<LocalReencryptResult> {
+    let json =
+        fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
+    serde_json::from_str(&json).context("Invalid local reencrypt result format")
+}
+
 pub fn save_share_result(result: &ShareResult, path: &Path) -> Result<()> {
     if let Some(parent) = path.parent() {
         ensure_dir(parent)?;
