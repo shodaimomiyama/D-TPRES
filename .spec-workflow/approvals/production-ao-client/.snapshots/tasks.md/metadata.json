@@ -1,0 +1,14 @@
+{
+  "filePath": ".spec-workflow/specs/production-ao-client/tasks.md",
+  "currentVersion": 1,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2026-01-30T09:15:26.199Z",
+      "trigger": "initial",
+      "approvalId": "approval_1769764526194_f6w86tfxf",
+      "approvalTitle": "Tasks: ProductionAOClient（12タスク、ArLocal + AO Mainnet E2E含む）"
+    }
+  ]
+}

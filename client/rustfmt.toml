@@ -1,0 +1,34 @@
+# FORMIX rustfmt configuration
+# Cryptographic WASM project with security focus
+
+# Edition and basic settings (stable)
+edition = "2021"
+max_width = 100
+tab_spaces = 4
+newline_style = "Unix"
+hard_tabs = false
+
+# Import management (stable)
+reorder_imports = true
+reorder_modules = true
+
+# Code organization (stable)
+use_field_init_shorthand = true
+use_try_shorthand = true
+fn_params_layout = "Tall"
+
+# Misc (stable)
+remove_nested_parens = true
+short_array_element_width_threshold = 10
+
+# Note: Many useful options are unstable and require nightly Rust
+# To use them, add `unstable_features = true` and use nightly toolchain
+# 
+# Unstable features that would benefit this project:
+# - group_imports = "StdExternalCrate"  # Group std/external/internal imports
+# - imports_granularity = "Crate"       # Group imports by crate
+# - wrap_comments = true                # Wrap long comments
+# - normalize_comments = true           # Consistent comment formatting
+# - struct_lit_single_line = false     # Multi-line struct literals
+# - trailing_comma = "Vertical"         # Trailing commas in vertical lists
+# - blank_lines_upper_bound = 1        # Limit blank lines

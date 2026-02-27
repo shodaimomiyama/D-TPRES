@@ -1,0 +1,6 @@
+FROM ghcr.io/oraios/serena:latest
+
+# 作業ディレクトリの設定
+WORKDIR /workspace
+
+# 必要に応じて追加の設定を記述

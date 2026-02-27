@@ -1,0 +1,45 @@
+# FORMIX Clippy Configuration
+# Cryptographic project with strict security requirements for AO/WASM environment
+
+# MSRV (Minimum Supported Rust Version)
+msrv = "1.72"
+
+# Basic configuration
+avoid-breaking-exported-api = false
+warn-on-all-wildcard-imports = true
+
+# Disallowed names (prevent generic/unclear names)
+disallowed-names = ["foo", "bar", "baz", "toto", "tata", "titi", "dummy", "tmp", "temp", "test", "data"]
+
+# Complexity thresholds
+cognitive-complexity-threshold = 30
+too-many-arguments-threshold = 7
+too-many-lines-threshold = 400
+type-complexity-threshold = 250
+
+# Nesting depth limit (important for readability and AO constraints)
+excessive-nesting-threshold = 5
+
+# Size limits
+trivial-copy-size-limit = 8
+large-error-threshold = 128
+
+# Style preferences
+enum-variant-name-threshold = 3
+single-char-binding-names-threshold = 4
+
+# Allow certain patterns in tests only
+allow-expect-in-tests = true
+allow-unwrap-in-tests = true
+allow-panic-in-tests = true
+allow-dbg-in-tests = true
+
+# Module and type naming
+upper-case-acronyms-aggressive = false
+
+# Documentation
+missing-docs-in-crate-items = true
+
+# Enforce safety patterns for cryptographic code
+vec-box-size-threshold = 4096
+future-size-threshold = 128

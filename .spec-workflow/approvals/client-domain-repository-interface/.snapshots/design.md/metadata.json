@@ -1,0 +1,46 @@
+{
+  "filePath": ".spec-workflow/specs/client-domain-repository-interface/design.md",
+  "currentVersion": 5,
+  "snapshots": [
+    {
+      "version": 1,
+      "filename": "snapshot-001.json",
+      "timestamp": "2025-12-24T10:17:37.697Z",
+      "trigger": "initial",
+      "approvalId": "approval_1766571457689_f48tje6wn",
+      "approvalTitle": "Design: Client Domain Repository Interface"
+    },
+    {
+      "version": 2,
+      "filename": "snapshot-002.json",
+      "timestamp": "2025-12-24T10:30:37.501Z",
+      "trigger": "revision_requested",
+      "approvalId": "approval_1766571457689_f48tje6wn",
+      "approvalTitle": "Design: Client Domain Repository Interface"
+    },
+    {
+      "version": 3,
+      "filename": "snapshot-003.json",
+      "timestamp": "2025-12-24T11:25:40.500Z",
+      "trigger": "revision_requested",
+      "approvalId": "approval_1766573893669_jcar8r5ul",
+      "approvalTitle": "Design Document (Revised) - Client Domain Repository Interface"
+    },
+    {
+      "version": 4,
+      "filename": "snapshot-004.json",
+      "timestamp": "2025-12-24T11:41:58.638Z",
+      "trigger": "revision_requested",
+      "approvalId": "approval_1766576193848_728fwok24",
+      "approvalTitle": "Design Document - 6層構成への修正（Adapter層・Repository層分離）"
+    },
+    {
+      "version": 5,
+      "filename": "snapshot-005.json",
+      "timestamp": "2025-12-24T23:42:03.474Z",
+      "trigger": "approved",
+      "approvalId": "approval_1766576674942_lxt4imfnb",
+      "approvalTitle": "Design Document - ファイル命名規則修正（*_interface.rs）"
+    }
+  ]
+}
