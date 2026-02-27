@@ -6,6 +6,7 @@ use formix::adapter::external::mock_ao::MockAOClient;
 use formix::usecase::core::contract_storage::ContractStorageImpl;
 use formix::usecase::core::storage::ArweaveStorageServiceImpl;
 use formix::usecase::dto::SecretMetadata;
+use zeroize::Zeroizing;
 
 fn create_test_container() -> DefaultActionsContainer {
     let mock_ao = Arc::new(MockAOClient::new());
@@ -22,7 +23,7 @@ async fn test_share_valid_params() {
 
     let result = container
         .share(
-            b"test secret data".to_vec(),
+            Zeroizing::new(b"test secret data".to_vec()),
             3,
             5,
             owner_sk,
@@ -47,7 +48,7 @@ async fn test_share_empty_secret() {
 
     let result = container
         .share(
-            vec![],
+            Zeroizing::new(vec![]),
             3,
             5,
             owner_sk,
@@ -75,7 +76,7 @@ async fn test_share_zero_threshold() {
 
     let result = container
         .share(
-            b"test secret".to_vec(),
+            Zeroizing::new(b"test secret".to_vec()),
             0,
             5,
             owner_sk,
@@ -103,7 +104,7 @@ async fn test_share_threshold_exceeds_total() {
 
     let result = container
         .share(
-            b"test secret".to_vec(),
+            Zeroizing::new(b"test secret".to_vec()),
             6,
             5,
             owner_sk,
@@ -131,7 +132,7 @@ async fn test_share_result_has_valid_secret_id() {
 
     let result = container
         .share(
-            b"test secret".to_vec(),
+            Zeroizing::new(b"test secret".to_vec()),
             3,
             5,
             owner_sk,
@@ -154,7 +155,7 @@ async fn test_share_result_kfrag_count_matches() {
 
     let result = container
         .share(
-            b"test secret".to_vec(),
+            Zeroizing::new(b"test secret".to_vec()),
             3,
             7,
             owner_sk,
@@ -185,7 +186,7 @@ async fn test_share_with_metadata() {
 
     let result = container
         .share(
-            b"test secret".to_vec(),
+            Zeroizing::new(b"test secret".to_vec()),
             3,
             5,
             owner_sk,
@@ -211,7 +212,7 @@ async fn test_share_various_threshold_combinations() {
 
         let result = container
             .share(
-                b"test secret".to_vec(),
+                Zeroizing::new(b"test secret".to_vec()),
                 threshold,
                 total,
                 owner_sk,
@@ -348,7 +349,7 @@ async fn test_generate_keypair_usable_with_share() {
 
     let result = container
         .share(
-            b"test secret".to_vec(),
+            Zeroizing::new(b"test secret".to_vec()),
             3,
             5,
             owner_sk,
