@@ -1,8 +1,12 @@
 /target
+demo/target/
 
 **/tmp_pr_description.md
 
 .env
+demo/.env
+demo/deploy.json
+demo/wallet.json
 
 .serena/
 

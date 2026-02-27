@@ -13,6 +13,7 @@ use formix::usecase::service::{
     CryptoServiceImpl as ServiceCryptoServiceImpl, StorageServiceImpl as ServiceStorageServiceImpl,
 };
 use formix::usecase::workflow::{SecretSharingWorkflowService, SecretSharingWorkflowServiceImpl};
+use zeroize::Zeroizing;
 
 type TestCryptoService = ServiceCryptoServiceImpl<CoreCryptoServiceImpl>;
 type TestStorageService =
@@ -34,7 +35,7 @@ fn create_test_request(crypto: &CoreCryptoServiceImpl) -> SecretSharingRequest {
     let (_requester_sk, requester_pk) = crypto.generate_keypair().unwrap();
 
     SecretSharingRequest {
-        secret: b"Test secret data for sharing".to_vec(),
+        secret: Zeroizing::new(b"Test secret data for sharing".to_vec()),
         owner_secret_key: owner_sk,
         owner_public_key: owner_pk,
         requester_public_key: requester_pk,
@@ -71,7 +72,7 @@ async fn test_phase1_complete_flow() {
     let original_secret = b"This is a very important secret message!".to_vec();
 
     let mut request = create_test_request(&crypto);
-    request.secret = original_secret.clone();
+    request.secret = Zeroizing::new(original_secret.clone());
     request.threshold = 3;
     request.total_shares = 5;
 
@@ -107,7 +108,7 @@ async fn test_phase1_max_secret_size() {
     let mut request = create_test_request(&crypto);
 
     // 63 bytes - DATA_SIZE is 64, 1 byte for length prefix
-    request.secret = vec![0xAB; 63];
+    request.secret = Zeroizing::new(vec![0xAB; 63]);
 
     let result = service.execute_secret_sharing(request).await;
     assert!(result.is_ok());
@@ -118,18 +119,18 @@ async fn test_execute_secret_sharing_validation_fails() {
     let service = create_test_service();
     let crypto = CoreCryptoServiceImpl::new();
     let mut request = create_test_request(&crypto);
-    request.secret = vec![];
+    request.secret = Zeroizing::new(vec![]);
 
     let result = service.execute_secret_sharing(request).await;
     assert!(matches!(result, Err(WorkflowError::ValidationError(_))));
 }
 
-#[test]
-fn test_get_secret_status_not_implemented() {
+#[tokio::test]
+async fn test_get_secret_status_not_implemented() {
     let service = create_test_service();
     let secret_id = SecretId::generate();
 
-    let result = service.get_secret_status(&secret_id);
+    let result = service.get_secret_status(&secret_id).await;
     assert!(matches!(result, Err(WorkflowError::ResourceNotFound(_))));
 
     if let Err(WorkflowError::ResourceNotFound(msg)) = result {
