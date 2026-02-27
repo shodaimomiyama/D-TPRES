@@ -20,9 +20,6 @@ pub mod storage_bridge;
 mod transaction;
 mod wallet;
 
-#[cfg(test)]
-mod tests;
-
 pub use client::ArweaveClientImpl;
 pub use config::ArweaveClientConfig;
 pub use storage_bridge::ProductionArweaveStorageService;

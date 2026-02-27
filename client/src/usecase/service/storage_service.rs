@@ -38,7 +38,13 @@ pub trait StorageService: Send + Sync {
         secret_id: &str,
     ) -> ServiceResult<()>;
 
-    async fn delegate_capsule(&self, capsule_data: &[u8], contract_id: &str) -> ServiceResult<()>;
+    async fn delegate_capsule(
+        &self,
+        capsule_data: &[u8],
+        contract_id: &str,
+        kfrag_id: &str,
+        capsule_id: &str,
+    ) -> ServiceResult<()>;
 
     async fn retrieve_cfrags(
         &self,
@@ -107,9 +113,15 @@ impl<S: ArweaveStorageService, CT: ContractStorage> StorageService for StorageSe
             .await
     }
 
-    async fn delegate_capsule(&self, capsule_data: &[u8], contract_id: &str) -> ServiceResult<()> {
+    async fn delegate_capsule(
+        &self,
+        capsule_data: &[u8],
+        contract_id: &str,
+        kfrag_id: &str,
+        capsule_id: &str,
+    ) -> ServiceResult<()> {
         self.contract
-            .delegate_capsule(capsule_data, contract_id)
+            .delegate_capsule(capsule_data, contract_id, kfrag_id, capsule_id)
             .await
     }
 

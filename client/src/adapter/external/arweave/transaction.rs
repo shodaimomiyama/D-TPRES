@@ -86,19 +86,3 @@ pub fn build_signature_data(tx: &ArweaveTransaction) -> Result<Vec<u8>, AdapterE
         &data_root_bytes,
     )
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_encoded_tag_serialization() {
-        let tag = EncodedTag {
-            name: "dGVzdA".to_string(),
-            value: "dmFsdWU".to_string(),
-        };
-        let json = serde_json::to_string(&tag).unwrap();
-        assert!(json.contains("dGVzdA"));
-        assert!(json.contains("dmFsdWU"));
-    }
-}

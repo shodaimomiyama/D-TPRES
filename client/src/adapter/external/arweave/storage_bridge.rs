@@ -7,7 +7,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::adapter::repository_impl::{ArweaveClient, QueryResult as AdapterQueryResult, Tag as AdapterTag};
+use crate::adapter::repository_impl::{
+    ArweaveClient, QueryResult as AdapterQueryResult, Tag as AdapterTag,
+};
 use crate::service::error::ServiceError;
 use crate::usecase::core::storage::{
     ArweaveStorageService, ArweaveTransaction, BatchResult, QueryParams, SortBy, SortOrder, Tag,
@@ -105,7 +107,12 @@ impl<C: ArweaveClient> ArweaveStorageService for ProductionArweaveStorageService
 
         let mut transactions = Vec::new();
         for meta in &meta_results {
-            if let Some(content) = self.client.get(&meta.tx_id).await.map_err(map_adapter_error)? {
+            if let Some(content) = self
+                .client
+                .get(&meta.tx_id)
+                .await
+                .map_err(map_adapter_error)?
+            {
                 let tags: Vec<Tag> = meta
                     .tags
                     .iter()

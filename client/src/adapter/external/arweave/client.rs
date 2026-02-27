@@ -10,7 +10,7 @@ use serde::Deserialize;
 
 use super::config::ArweaveClientConfig;
 use super::merkle::compute_data_root;
-use super::transaction::{ArweaveTransaction, EncodedTag, build_signature_data};
+use super::transaction::{build_signature_data, ArweaveTransaction, EncodedTag};
 
 // =============================================================================
 // GraphQL Response Types
@@ -87,13 +87,13 @@ pub(crate) struct GraphQLError {
 
 /// Encode bytes to Base64URL format (no padding)
 pub fn base64url_encode(bytes: &[u8]) -> String {
-    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
 /// Decode Base64URL format to bytes
 pub fn base64url_decode(encoded: &str) -> Result<Vec<u8>, base64::DecodeError> {
-    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
     URL_SAFE_NO_PAD.decode(encoded)
 }
 
@@ -746,11 +746,7 @@ impl ArweaveClient for ArweaveClientImpl {
                     .iter()
                     .map(|t| Tag::new(t.name.clone(), t.value.clone()))
                     .collect();
-                let timestamp = node
-                    .block
-                    .as_ref()
-                    .and_then(|b| b.timestamp)
-                    .unwrap_or(0);
+                let timestamp = node.block.as_ref().and_then(|b| b.timestamp).unwrap_or(0);
                 all_results.push(QueryResult {
                     tx_id: node.id.clone(),
                     tags: adapter_tags,

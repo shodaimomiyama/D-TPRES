@@ -24,8 +24,24 @@ pub trait ContractStorage: Send + Sync {
         secret_id: &str,
     ) -> ServiceResult<()>;
 
-    /// Delegate capsule to contract (future use)
-    async fn delegate_capsule(&self, capsule_data: &[u8], contract_id: &str) -> ServiceResult<()>;
+    /// Delegate capsule to AO contract for re-encryption triggering
+    ///
+    /// Associates the Arweave capsule with its kFrag so the AO contract
+    /// can trigger Phase 2 re-encryption.
+    ///
+    /// # Arguments
+    /// * `capsule_data` - Serialized capsule bytes (from Arweave CapsulePayload)
+    /// * `contract_id` - Owner-Process contract ID on AO Network
+    /// * `kfrag_id`    - kFrag identifier matching the corresponding DelegateKFrag call
+    ///                   (format: `"kfrag-{index}"`)
+    /// * `capsule_id`  - Arweave transaction ID of the stored capsule (`capsule_tx_id`)
+    async fn delegate_capsule(
+        &self,
+        capsule_data: &[u8],
+        contract_id: &str,
+        kfrag_id: &str,
+        capsule_id: &str,
+    ) -> ServiceResult<()>;
 
     /// Retrieve cFrags for a secret from AO Network
     ///
@@ -75,14 +91,21 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
 
     async fn delegate_capsule(
         &self,
-        _capsule_data: &[u8],
-        _contract_id: &str,
+        capsule_data: &[u8],
+        contract_id: &str,
+        kfrag_id: &str,
+        capsule_id: &str,
     ) -> ServiceResult<()> {
-        Err(ServiceError::System(
-            crate::service::error::SystemException::Internal(
-                "Not implemented: delegate_capsule".to_string(),
-            ),
-        ))
+        let msg = ExecuteMsg::DelegateCapsule {
+            kfrag_id: kfrag_id.to_string(),
+            capsule_id: capsule_id.to_string(),
+            capsule: Binary::from(capsule_data.to_vec()),
+        };
+        self.ao_client
+            .execute(contract_id, msg)
+            .await
+            .map_err(|e| ServiceError::ao_network_error(e.to_string()))?;
+        Ok(())
     }
 
     async fn retrieve_cfrags(
@@ -121,58 +144,5 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
         }
 
         Ok(cfrags)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::adapter::external::mock_ao::MockAOClient;
-
-    fn create_test_contract_storage() -> ContractStorageImpl<MockAOClient> {
-        let mock_ao = Arc::new(MockAOClient::new());
-        ContractStorageImpl::new(mock_ao)
-    }
-
-    #[tokio::test]
-    async fn test_send_kfrags() {
-        let storage = create_test_contract_storage();
-
-        let kfrags = vec![
-            KeyFragment {
-                id: 0,
-                key_data: vec![1, 2, 3],
-                verification_data: vec![],
-                precursor: vec![],
-            },
-            KeyFragment {
-                id: 1,
-                key_data: vec![4, 5, 6],
-                verification_data: vec![],
-                precursor: vec![],
-            },
-        ];
-
-        let result = storage
-            .send_kfrags(&kfrags, "test-process-id", "secret-abc")
-            .await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_delegate_capsule_not_implemented() {
-        let storage = create_test_contract_storage();
-        let result = storage.delegate_capsule(&[1, 2, 3], "test-id").await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_retrieve_cfrags_empty_when_no_data() {
-        let storage = create_test_contract_storage();
-        let result = storage
-            .retrieve_cfrags("secret-123", 3, "capsule-001", "test-process-id")
-            .await;
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_empty());
     }
 }

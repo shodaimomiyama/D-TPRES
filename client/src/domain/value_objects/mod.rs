@@ -11,4 +11,4 @@ mod symmetric_key;
 pub use ids::{CFragId, CapsuleId, KFragId, SecretId, ShareCollectionId};
 pub use key_pair::KeyPair;
 pub use secret_data::SecretData;
-pub use symmetric_key::{SYMMETRIC_KEY_SIZE, SymmetricKey};
+pub use symmetric_key::{SymmetricKey, SYMMETRIC_KEY_SIZE};

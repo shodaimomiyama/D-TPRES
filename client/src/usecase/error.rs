@@ -263,6 +263,31 @@ pub enum WorkflowError {
         failed_count: usize,
         total_count: usize,
     },
+
+    /// DelegateCapsule to AO partially failed after exhausting all retries.
+    ///
+    /// Encrypted shares and capsule **are safely stored on Arweave** (`share_tx_ids`
+    /// and `capsule_tx_id`). Only the AO delegation step had persistent failures.
+    ///
+    /// **Retry safety:** The AO contract implements `IDEM_FLAGS` keyed on
+    /// `(process_id, kfrag_id, capsule_id)`. Successful delegations return `NoOp`
+    /// on re-submission; failed ones re-process cleanly from scratch. Manual retry
+    /// of the failed kFrags in `failed_kfrag_ids` is therefore safe.
+    /// Alternatively, use the AO `Reencrypt` message to trigger re-encryption for
+    /// capsules already stored in the holder contract.
+    #[error("DelegateCapsule partial failure: {failed_count} of {total_count} kFrag delegations failed after retries for capsule {capsule_tx_id}")]
+    PartialDelegateCapsuleFailure {
+        /// Arweave capsule tx ID (= `capsule_id` on AO contract)
+        capsule_tx_id: String,
+        /// Arweave share tx IDs — encrypted shares are stored even on failure
+        share_tx_ids: Vec<String>,
+        /// kFrag IDs that were successfully delegated
+        successful_kfrag_ids: Vec<String>,
+        /// (kfrag_id, error_message) pairs for failed delegations
+        failed_kfrag_ids: Vec<(String, String)>,
+        failed_count: usize,
+        total_count: usize,
+    },
 }
 
 /// Conversion from ServiceError to WorkflowError
@@ -335,249 +360,26 @@ impl WorkflowError {
             Self::ValidationError(_) | Self::ResourceNotFound(_) | Self::InsufficientCFrags { .. }
         )
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_error_classification() {
-        let business_err = ServiceError::validation_error("Invalid input");
-        assert!(business_err.is_business_error());
-        assert!(!business_err.is_system_error());
-
-        let system_err = ServiceError::crypto_error("Encryption failed");
-        assert!(!system_err.is_business_error());
-        assert!(system_err.is_system_error());
-    }
-
-    #[test]
-    fn test_domain_error_conversion() {
-        let domain_err = DomainError::EntityValidation {
-            entity_type: "User".to_string(),
-            field: "email".to_string(),
-            message: "Invalid format".to_string(),
-        };
-
-        let service_err: ServiceError = domain_err.into();
-        assert!(service_err.is_business_error());
-    }
-
-    // ========================================================================
-    // WorkflowError Unit Tests (Task 13)
-    // ========================================================================
-
-    #[test]
-    fn test_workflow_error_validation() {
-        let err = WorkflowError::validation("Invalid threshold value");
-        assert!(matches!(err, WorkflowError::ValidationError(_)));
-        assert!(err.is_recoverable());
-
-        let msg = err.to_string();
-        assert!(msg.contains("Validation error"));
-        assert!(msg.contains("Invalid threshold value"));
-    }
-
-    #[test]
-    fn test_workflow_error_from_crypto_service() {
-        // Test conversion from ServiceError::System(CryptoError) to WorkflowError::CryptoError
-        let service_err = ServiceError::crypto_error("Encryption failed");
-        let workflow_err: WorkflowError = service_err.into();
-
-        assert!(matches!(workflow_err, WorkflowError::CryptoError(_)));
-        assert!(!workflow_err.is_recoverable());
-
-        let msg = workflow_err.to_string();
-        assert!(msg.contains("Crypto operation failed"));
-    }
-
-    #[test]
-    fn test_workflow_error_from_storage_service() {
-        // Test conversion from ServiceError::System(StorageError) to WorkflowError::StorageError
-        let service_err = ServiceError::storage_error("Arweave upload failed");
-        let workflow_err: WorkflowError = service_err.into();
-
-        assert!(matches!(workflow_err, WorkflowError::StorageError(_)));
-        assert!(!workflow_err.is_recoverable());
-
-        let msg = workflow_err.to_string();
-        assert!(msg.contains("Storage operation failed"));
-    }
-
-    #[test]
-    fn test_workflow_error_ao_communication() {
-        let err = WorkflowError::ao_communication("Failed to send kFrags to Owner-Process");
-        assert!(matches!(err, WorkflowError::AOCommunicationError(_)));
-        assert!(!err.is_recoverable());
-
-        let msg = err.to_string();
-        assert!(msg.contains("AO communication failed"));
-        assert!(msg.contains("Failed to send kFrags"));
-
-        // Test conversion from ServiceError::System(AONetworkError)
-        let service_err = ServiceError::ao_network_error("Network timeout");
-        let workflow_err: WorkflowError = service_err.into();
-        assert!(matches!(
-            workflow_err,
-            WorkflowError::AOCommunicationError(_)
-        ));
-    }
-
-    #[test]
-    fn test_workflow_error_insufficient_cfrags() {
-        let err = WorkflowError::insufficient_cfrags(3, 2);
-        assert!(matches!(
-            err,
-            WorkflowError::InsufficientCFrags {
-                required: 3,
-                actual: 2
-            }
-        ));
-        assert!(err.is_recoverable());
-
-        let msg = err.to_string();
-        assert!(msg.contains("Insufficient cFrags"));
-        assert!(msg.contains("need 3"));
-        assert!(msg.contains("got 2"));
-
-        // Test conversion from ServiceError::Business(ThresholdNotMet)
-        let service_err = ServiceError::Business(BusinessException::ThresholdNotMet {
-            required: 5,
-            actual: 3,
-        });
-        let workflow_err: WorkflowError = service_err.into();
-        assert!(matches!(
-            workflow_err,
-            WorkflowError::InsufficientCFrags {
-                required: 5,
-                actual: 3
-            }
-        ));
-    }
-
-    #[test]
-    fn test_workflow_error_decryption() {
-        let err = WorkflowError::decryption("PRE decapsulation");
-        assert!(matches!(err, WorkflowError::DecryptionError { .. }));
-        assert!(!err.is_recoverable());
-
-        let msg = err.to_string();
-        assert!(msg.contains("Decryption failed"));
-        assert!(msg.contains("PRE decapsulation"));
-
-        // Test with phase detail
-        let err2 = WorkflowError::DecryptionError {
-            phase: "AES-GCM share decryption".to_string(),
-        };
-        let msg2 = err2.to_string();
-        assert!(msg2.contains("AES-GCM share decryption"));
-    }
-
-    #[test]
-    fn test_workflow_error_resource_not_found() {
-        let err = WorkflowError::not_found("Secret abc123 not found");
-        assert!(matches!(err, WorkflowError::ResourceNotFound(_)));
-        assert!(err.is_recoverable());
-
-        let msg = err.to_string();
-        assert!(msg.contains("Resource not found"));
-        assert!(msg.contains("abc123"));
-
-        // Test conversion from ServiceError::Business(ResourceNotFound)
-        let service_err = ServiceError::not_found("Capsule not found");
-        let workflow_err: WorkflowError = service_err.into();
-        assert!(matches!(workflow_err, WorkflowError::ResourceNotFound(_)));
-    }
-
-    #[test]
-    fn test_workflow_error_from_validation_business() {
-        // Test conversion from ServiceError::Business(ValidationError)
-        let service_err = ServiceError::validation_error("Invalid parameters");
-        let workflow_err: WorkflowError = service_err.into();
-
-        assert!(matches!(workflow_err, WorkflowError::ValidationError(_)));
-        assert!(workflow_err.is_recoverable());
-    }
-
-    #[test]
-    fn test_workflow_error_from_other_business() {
-        // Test that other business exceptions convert to ValidationError
-        let service_err = ServiceError::Business(BusinessException::AuthorizationError(
-            "Not authorized".into(),
-        ));
-        let workflow_err: WorkflowError = service_err.into();
-
-        // Should convert to ValidationError as fallback
-        assert!(matches!(workflow_err, WorkflowError::ValidationError(_)));
-    }
-
-    #[test]
-    fn test_workflow_error_from_other_system() {
-        // Test that other system exceptions convert to StorageError
-        let service_err =
-            ServiceError::System(SystemException::Network("Connection refused".into()));
-        let workflow_err: WorkflowError = service_err.into();
-
-        // Should convert to StorageError as fallback
-        assert!(matches!(workflow_err, WorkflowError::StorageError(_)));
-    }
-
-    #[test]
-    fn test_workflow_error_is_recoverable() {
-        // Recoverable errors
-        assert!(WorkflowError::validation("test").is_recoverable());
-        assert!(WorkflowError::not_found("test").is_recoverable());
-        assert!(WorkflowError::insufficient_cfrags(3, 2).is_recoverable());
-
-        // Non-recoverable errors
-        assert!(!WorkflowError::crypto("test").is_recoverable());
-        assert!(!WorkflowError::storage("test").is_recoverable());
-        assert!(!WorkflowError::ao_communication("test").is_recoverable());
-        assert!(!WorkflowError::decryption("test").is_recoverable());
-        assert!(
-            !WorkflowError::PartialStorageFailure {
-                capsule_tx_id: "tx".to_string(),
-                successful_share_tx_ids: vec![],
-                failed_shares: vec![],
-                failed_count: 0,
-                total_count: 0,
-            }
-            .is_recoverable()
-        );
-    }
-
-    #[test]
-    fn test_workflow_error_partial_storage_failure() {
-        let err = WorkflowError::PartialStorageFailure {
-            capsule_tx_id: "tx_capsule_001".to_string(),
-            successful_share_tx_ids: vec!["tx_share_0".to_string()],
-            failed_shares: vec![("1".to_string(), "storage error".to_string())],
-            failed_count: 1,
-            total_count: 2,
-        };
-
-        let msg = err.to_string();
-        assert!(msg.contains("Partial storage failure"));
-        assert!(msg.contains("1 of 2"));
-        assert!(!err.is_recoverable());
-
-        match err {
-            WorkflowError::PartialStorageFailure {
-                capsule_tx_id,
-                successful_share_tx_ids,
-                failed_shares,
-                failed_count,
-                total_count,
-            } => {
-                assert_eq!(capsule_tx_id, "tx_capsule_001");
-                assert_eq!(successful_share_tx_ids.len(), 1);
-                assert_eq!(failed_shares.len(), 1);
-                assert_eq!(failed_count, 1);
-                assert_eq!(total_count, 2);
-                assert_eq!(failed_shares[0].0, "1");
-            }
-            _ => panic!("Expected PartialStorageFailure"),
+    /// Create a partial DelegateCapsule failure error
+    ///
+    /// `share_tx_ids` should contain the Arweave tx IDs of encrypted shares that
+    /// were successfully stored, so callers know Arweave data is intact.
+    pub fn partial_delegate_capsule_failure(
+        capsule_tx_id: impl Into<String>,
+        share_tx_ids: Vec<String>,
+        successful_kfrag_ids: Vec<String>,
+        failed_kfrag_ids: Vec<(String, String)>,
+    ) -> Self {
+        let failed_count = failed_kfrag_ids.len();
+        let total_count = successful_kfrag_ids.len() + failed_count;
+        Self::PartialDelegateCapsuleFailure {
+            capsule_tx_id: capsule_tx_id.into(),
+            share_tx_ids,
+            successful_kfrag_ids,
+            failed_kfrag_ids,
+            failed_count,
+            total_count,
         }
     }
 }

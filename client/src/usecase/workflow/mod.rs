@@ -8,8 +8,8 @@ pub mod secret_recovery_service;
 pub mod secret_sharing_service;
 
 pub use container::{
-    DefaultWorkflowServiceContainer, WorkflowServiceContainer, create_secret_recovery_service,
-    create_secret_sharing_service, create_workflow_services,
+    create_secret_recovery_service, create_secret_sharing_service, create_workflow_services,
+    DefaultWorkflowServiceContainer, WorkflowServiceContainer,
 };
 pub use secret_recovery_service::{
     SecretRecoveryWorkflowService, SecretRecoveryWorkflowServiceImpl,
