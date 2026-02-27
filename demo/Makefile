@@ -18,17 +18,17 @@ help: ## Show this help
 	@echo "    6. cp deploy.example.json deploy.json && fill in IDs"
 	@echo "    7. make demo-all"
 
-setup: ## Install ao/ dependencies (yarn)
-	cd ../ao && yarn install
+setup: ## Install ao/ dependencies (npm)
+	cd ../ao && npm install
 
 keygen: ## Generate an Arweave wallet via ao/ scripts
-	cd ../ao && yarn keygen $(WALLET)
+	cd ../ao && npm run keygen -- $(WALLET)
 
 deploy: ## Deploy WASM module to Arweave (returns module_id)
-	cd ../ao && yarn deploy --wallet $(WALLET)
+	cd ../ao && npm run deploy -- --wallet $(WALLET)
 
 spawn: ## Spawn an AO process (returns process_id)
-	cd ../ao && yarn instantiate --wallet $(WALLET)
+	cd ../ao && npm run instantiate -- --wallet $(WALLET)
 
 build: ## Build the demo binary (release)
 	cargo build --release
