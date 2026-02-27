@@ -1,0 +1,16 @@
+[package]
+name = "formix-demo"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "formix-demo"
+path = "src/main.rs"
+
+[dependencies]
+formix = { path = "../client", features = ["production-ao"] }
+clap = { version = "4", features = ["derive"] }
+colored = "2"
+anyhow = "1"
+dotenvy = "0.15"
+tokio = { version = "1", features = ["rt", "macros"] }
