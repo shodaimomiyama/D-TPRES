@@ -633,6 +633,9 @@ dependencies = [
  "colored",
  "dotenvy",
  "formix",
+ "hex",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 

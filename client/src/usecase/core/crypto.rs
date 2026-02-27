@@ -103,6 +103,13 @@ pub struct PublicKey {
     pub key_data: Vec<u8>,
 }
 
+impl PublicKey {
+    #[cfg(feature = "key-export")]
+    pub fn from_bytes(data: Vec<u8>) -> Self {
+        Self { key_data: data }
+    }
+}
+
 /// 秘密鍵（使用後にゼロ化される）
 #[non_exhaustive]
 #[derive(Debug, Zeroize, ZeroizeOnDrop)]
@@ -114,6 +121,16 @@ impl SecretKey {
     /// Check if the key data is empty
     pub fn is_empty(&self) -> bool {
         self.key_data.is_empty()
+    }
+
+    #[cfg(feature = "key-export")]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.key_data
+    }
+
+    #[cfg(feature = "key-export")]
+    pub fn from_bytes(data: Vec<u8>) -> Self {
+        Self { key_data: data }
     }
 
     /// Create an empty SecretKey for testing purposes only
