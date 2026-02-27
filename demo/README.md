@@ -10,14 +10,16 @@ sequenceDiagram
     participant Net as AO Network / Arweave
     participant Requester
 
-    Owner->>Net: 1. generate_keypair()
-    Owner->>Net: 2. share(secret, k=2, n=3)
+    Note over Requester: 1. keygen --role requester
+    Note over Owner: 2. keygen --role owner
+    Note over Owner: (requester.json の PK を参照)
+    Owner->>Net: 3. share (owner_sk + requester_pk)
     Note right of Net: Shamir 分割 + Umbral カプセル
     Owner->>Net: capsule を Arweave に保存
     Owner->>Net: shares を Arweave に保存
     Note right of Net: kFrags を Owner-Process へ
 
-    Requester->>Net: 3. recover(secret_id)
+    Requester->>Net: 4. recover --secret-id <ID>
     Note right of Net: cFrags 収集、カプセル復号
     Net-->>Requester: 復元された秘密
     Note right of Net: Shamir 再構成
@@ -75,10 +77,32 @@ cp deploy.example.json deploy.json
 
 `deploy.json` を編集し、Step 4・5 で取得した `module_id` と `process_id` を記入してください。
 
-### Step 7: デモの実行
+### Step 7: デモの実行（E2E フロー）
 
 ```bash
-make demo-all
+# 1. Requester の鍵ペアを生成・保存
+cargo run -- keygen --role requester
+
+# 2. Owner の鍵ペアを生成・保存
+cargo run -- keygen --role owner
+
+# 3. 秘密を分割して Arweave に保存（owner_sk + requester_pk を使用）
+cargo run -- share
+
+# 4. 秘密を復元（requester_sk + owner_pk を使用）
+cargo run -- recover --secret-id <SECRET_ID>
+# → "Hello FORMIX - Threshold PRE Demo" が復元されます
+```
+
+## 鍵ファイルの構造
+
+鍵と結果は `.formix-demo/` ディレクトリに保存されます。
+
+```
+.formix-demo/
+├── owner.json         # Owner の秘密鍵 + 公開鍵
+├── requester.json     # Requester の秘密鍵 + 公開鍵
+└── {secret_id}.json   # share コマンドの結果（owner_pk, tx_ids 等）
 ```
 
 ## サブコマンド
@@ -86,34 +110,48 @@ make demo-all
 ### `keygen` - PRE 鍵ペア生成
 
 ```bash
-cargo run -- keygen
+cargo run -- keygen --role <owner|requester> [--output <PATH>]
 ```
 
-Owner と Requester の Umbral PRE 鍵ペアを生成します。鍵はメモリ上のみ（エフェメラル）で、公開鍵が hex 表示されます。
+指定されたロール（owner または requester）の Umbral PRE 鍵ペアを生成し、ファイルに永続化します。
+
+| オプション | デフォルト | 説明 |
+|-----------|-----------|------|
+| `--role` | (必須) | `owner` または `requester` |
+| `--output` | `.formix-demo/{role}.json` | 出力先ファイルパス |
 
 ### `share` - Phase 1: 秘密分割
 
 ```bash
-cargo run -- share
+cargo run -- share [--owner-key-file <PATH>] [--requester-pubkey-file <PATH>]
 ```
 
-1. Owner + Requester 鍵ペアを生成
-2. デモ用秘密データ（`"Hello FORMIX - Threshold PRE Demo"`）を Shamir 秘密分散で分割（k=2, n=3）
-3. 対称鍵の Umbral PRE カプセルを作成
-4. kFrags を AO 上の Owner-Process に送信
-5. カプセルと暗号化シェアを Arweave に保存
-6. 復元に使用する `secret_id` を出力
+1. `owner.json` から Owner 秘密鍵を読込
+2. `requester.json` から Requester 公開鍵を読込
+3. デモ用秘密データを Shamir 秘密分散で分割（k=2, n=3）
+4. Umbral PRE カプセルを作成し Arweave に保存
+5. 結果を `.formix-demo/{secret_id}.json` に保存
+
+| オプション | デフォルト | 説明 |
+|-----------|-----------|------|
+| `--owner-key-file` | `.formix-demo/owner.json` | Owner 鍵ファイルのパス |
+| `--requester-pubkey-file` | `.formix-demo/requester.json` | Requester 公開鍵ファイルのパス |
 
 ### `recover` - Phase 3: 秘密復元
 
 ```bash
-cargo run -- recover --secret-id <SECRET_ID>
+cargo run -- recover --secret-id <SECRET_ID> [--requester-key-file <PATH>] [--share-result-file <PATH>]
 ```
 
-1. Requester + Owner 鍵ペアを生成
-2. AO Network から cFrags を収集
-3. カプセルを復号し、Shamir 補間で秘密を再構成
-4. 復元された平文を出力
+1. `requester.json` から Requester 秘密鍵を読込
+2. `{secret_id}.json` から Owner 公開鍵を読込
+3. AO Network から cFrags を収集、復号し秘密を再構成
+
+| オプション | デフォルト | 説明 |
+|-----------|-----------|------|
+| `--secret-id` | (必須) | share コマンドが出力した秘密ID |
+| `--requester-key-file` | `.formix-demo/requester.json` | Requester 鍵ファイルのパス |
+| `--share-result-file` | `.formix-demo/{secret_id}.json` | share 結果ファイルのパス |
 
 ## CLI オプション
 
@@ -125,7 +163,7 @@ Options:
   --wallet <PATH>   Arweave JWK ウォレットのパス（ARWEAVE_WALLET_PATH を上書き）
 
 Commands:
-  keygen   Owner と Requester の鍵ペアを生成
+  keygen   鍵ペアを生成してファイルに保存
   share    2-of-3 閾値 PRE で秘密を分割
   recover  Arweave から秘密を復元
 ```
@@ -138,17 +176,27 @@ Commands:
 **"Wallet path not provided"**
 `.env` で `ARWEAVE_WALLET_PATH` を設定するか、`--wallet <path>` で指定してください。
 
+**"Failed to load owner key from ..."**
+先に `keygen --role owner` を実行して鍵ファイルを生成してください。
+
+**"Failed to load requester PK from ..."**
+先に `keygen --role requester` を実行して鍵ファイルを生成してください。
+
+**"Failed to load share result from ..."**
+先に `share` コマンドを実行してください。`--secret-id` が正しいことを確認してください。
+
 **"Failed to create AO client"**
 `deploy.json` の `module_id` と `process_id` が正しいこと、AO ゲートウェイに接続可能であることを確認してください。
 
 **`formix` クレートのビルドエラー**
-`cd ../client && make check` で原因を確認してください。デモは `production-ao` フィーチャーフラグに依存しています。
+`cd ../client && make check` で原因を確認してください。デモは `production-ao` と `key-export` フィーチャーフラグに依存しています。
 
 ## アーキテクチャ
 
 ```mermaid
 graph TD
     CLI[formix-demo CLI]
+    KS[KeyStore<br/>.formix-demo/]
     Client[ProductionFormixClient<br/>from_deploy_file]
     Share[ShareBuilder<br/>type-state]
     Recover[RecoverBuilder<br/>type-state]
@@ -159,6 +207,7 @@ graph TD
     AR2[Arweave Storage]
     AO2[AO Network]
 
+    CLI --> KS
     CLI --> Client
     Client --> Share
     Client --> Recover
