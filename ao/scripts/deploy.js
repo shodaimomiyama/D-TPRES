@@ -1,37 +1,116 @@
-const { wallet, module_path } = require("yargs")(
-  process.argv.slice(2),
-).demandOption(["wallet"]).argv
+/**
+ * FORMIX AO Contract Deployment - HyperBEAM (~wasm64@1.0)
+ *
+ * Replaces ao_cwao/scripts/deploy.js which used cwao (legacy).
+ * Uses @permaweb/aoconnect for HyperBEAM-compatible deployment.
+ *
+ * Usage:
+ *   node scripts/deploy.js --wallet <path-to-jwk.json>
+ *
+ * TODO: Verify wasm32 vs wasm64 target with the HyperBEAM node being used.
+ */
 
-const { readFileSync } = require("fs")
-const { resolve } = require("path")
-const { CWAO } = require("cwao")
-const { mkdirs, keygen } = require("./utils")
+import { readFileSync } from "fs"
+import { resolve, dirname } from "path"
+import { fileURLToPath } from "url"
+import { createDataItemSigner, spawn, message, result } from "@permaweb/aoconnect"
+import Arweave from "arweave"
 
-const dir = resolve(__dirname, "../.cwao")
-const dir_ac = resolve(__dirname, "../.cwao/accounts")
-const dirs = [dir, dir_ac]
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
-const getModule = async (
-  module_path = "../contracts/target/wasm32-unknown-unknown/release/contract.wasm",
-) => {
-  const mpath =
-    module_path[0] !== "/" ? resolve(__dirname, module_path) : module_path
-  return readFileSync(mpath)
-}
+// ─── Configuration ────────────────────────────────────────────────────────────
+// TODO: Replace with production HyperBEAM node URL
+const AO_NODE_URL = process.env.AO_NODE_URL || "https://cu.ao-testnet.xyz"
 
-const deploy = async ({ module_path, wallet }) => {
-  await mkdirs(dirs)
-  const _wallet = await keygen(wallet, dir_ac)
-  const wasm = await getModule(module_path)
-  const cwao = new CWAO({
-    wallet: _wallet,
-    arweave: { host: "arweave.net", port: 443, protocol: "https" },
-    mu: "https://mu.ao-testnet.xyz",
-    su: "https://su.ao-testnet.xyz",
-    cu: "http://localhost:1987",
+// HyperBEAM process scheduler URL
+const SCHEDULER_URL = process.env.AO_SCHEDULER_URL || "https://su.ao-testnet.xyz"
+
+const WASM_PATH = resolve(
+  __dirname,
+  "../contracts/target/wasm32-unknown-unknown/release/formix_contract.wasm"
+)
+
+// ─── Deploy ───────────────────────────────────────────────────────────────────
+async function deploy({ walletPath }) {
+  console.log("Loading wallet...")
+  const wallet = JSON.parse(readFileSync(walletPath, "utf-8"))
+  const signer = createDataItemSigner(wallet)
+
+  console.log("Loading WASM binary:", WASM_PATH)
+  const wasmBinary = readFileSync(WASM_PATH)
+  console.log(`WASM size: ${wasmBinary.length} bytes`)
+
+  // Upload WASM binary to Arweave first
+  console.log("Uploading WASM to Arweave...")
+  const arweave = Arweave.init({ host: "arweave.net", port: 443, protocol: "https" })
+  const tx = await arweave.createTransaction({ data: wasmBinary }, wallet)
+  tx.addTag("Content-Type", "application/wasm")
+  tx.addTag("App-Name", "FORMIX")
+  tx.addTag("Contract-Type", "formix-ao-native")
+  await arweave.transactions.sign(tx, wallet)
+  const uploadResult = await arweave.transactions.post(tx)
+  console.log("WASM uploaded, tx ID:", tx.id)
+
+  if (uploadResult.status !== 200) {
+    throw new Error(`Arweave upload failed: ${uploadResult.status}`)
+  }
+
+  // Spawn AO process with WASM module
+  console.log("Spawning AO process...")
+  const processId = await spawn({
+    module: tx.id,  // Arweave TX ID of the WASM binary
+    scheduler: SCHEDULER_URL,
+    signer,
+    tags: [
+      { name: "App-Name", value: "FORMIX" },
+      { name: "Contract-Version", value: "2.0.0-hyperbeam" },
+      // wasm64 device specification
+      // TODO: Verify exact tag name with HyperBEAM docs
+      { name: "Execution-Device", value: "wasm64@1.0" },
+    ],
   })
-  const mod_id = await cwao.deploy(wasm)
-  console.log(`Module deployed: ${mod_id}`)
+
+  console.log("Process spawned:", processId)
+  console.log("Waiting for process to be ready...")
+
+  // Wait a few seconds for the process to initialize
+  await new Promise(r => setTimeout(r, 3000))
+
+  // Test with a simple ping
+  console.log("Testing process...")
+  const msgId = await message({
+    process: processId,
+    signer,
+    tags: [{ name: "Action", value: "Ping" }],
+  })
+
+  const testResult = await result({ process: processId, message: msgId })
+  console.log("Test result:", testResult)
+
+  return {
+    processId,
+    wasmTxId: tx.id,
+  }
 }
 
-deploy({ module_path, wallet })
+// ─── CLI ──────────────────────────────────────────────────────────────────────
+const args = process.argv.slice(2)
+const walletIdx = args.indexOf("--wallet")
+if (walletIdx === -1 || !args[walletIdx + 1]) {
+  console.error("Usage: node scripts/deploy.js --wallet <path-to-jwk.json>")
+  process.exit(1)
+}
+
+deploy({ walletPath: args[walletIdx + 1] })
+  .then(({ processId, wasmTxId }) => {
+    console.log("\n=== Deployment successful ===")
+    console.log("Process ID:", processId)
+    console.log("WASM TX ID:", wasmTxId)
+    console.log("\nAdd to .env:")
+    console.log(`AO_PROCESS_ID=${processId}`)
+    console.log(`AO_WASM_TX_ID=${wasmTxId}`)
+  })
+  .catch(err => {
+    console.error("Deployment failed:", err)
+    process.exit(1)
+  })

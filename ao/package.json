@@ -1,25 +1,18 @@
 {
-  "name": "cwao-workspace",
-  "version": "0.0.1",
-  "main": "index.js",
-  "license": "MIT",
+  "name": "formix-ao-hyperbeam",
+  "version": "0.1.0",
+  "description": "FORMIX AO contract deployment for HyperBEAM",
+  "type": "module",
   "scripts": {
-    "test": "yarn compile && mocha",
-    "compile": "cd contracts && cargo wasm",
-    "start": "node scripts/start.js",
-    "keygen": "node scripts/keygen.js",
+    "build": "cd contracts && cargo build --target wasm32-unknown-unknown --release",
     "deploy": "node scripts/deploy.js",
-    "setSU": "node scripts/setSU.js",
-    "instantiate": "node scripts/instantiate.js"
+    "test": "node scripts/test.js"
   },
   "dependencies": {
-    "arlocal": "^1.1.66",
-    "arweave": "^1.14.4",
-    "base64url": "^3.0.1",
-    "bech32": "^2.0.0",
-    "chai": "^4.3.10",
-    "cwao": "^0.5.3",
-    "cwao-units": "^0.3.4",
-    "mocha": "^10.2.0"
+    "@permaweb/aoconnect": "^0.0.93",
+    "arweave": "^1.14.4"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
