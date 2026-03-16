@@ -117,13 +117,16 @@ impl ProductionAOClient {
     }
 
     /// Parse AO-native response from CU result.
+    ///
     /// The new contract returns `{ "ok": bool, "data": {...}, "error": "..." }`.
+    /// `ok: false` or any unparseable Output.data is treated as an error —
+    /// never silently promoted to success.
     fn parse_cu_result(
         process_id: &str,
         json: &serde_json::Value,
         message_id: Option<String>,
     ) -> Result<AONativeResponse, AOCommunicationError> {
-        // First check for AO-level error (process not found, etc.)
+        // AO-level error (process not found, scheduler rejection, etc.)
         if let Some(error) = json.get("Error") {
             if !error.is_null() {
                 return Err(AOCommunicationError::ExecutionError {
@@ -133,24 +136,38 @@ impl ProductionAOClient {
             }
         }
 
-        // Try to extract Output.data as AO-native JSON response
+        // Extract Output.data (contract response JSON string)
         let output = json.get("Output");
         if let Some(obj) = output {
-            // AO Output.data contains our JSON response string
             if let Some(data_str) = obj.get("data").and_then(|d| d.as_str()) {
-                // Try to parse as AONativeResponse
-                if let Ok(mut native_resp) = serde_json::from_str::<AONativeResponse>(data_str) {
-                    native_resp.message_id = message_id;
-                    return Ok(native_resp);
+                // Must parse as AONativeResponse; if the contract returned well-formed JSON,
+                // this always succeeds. Non-JSON output is a contract bug → surface as error.
+                let mut native_resp =
+                    serde_json::from_str::<AONativeResponse>(data_str).map_err(|e| {
+                        AOCommunicationError::DeserializationError {
+                            details: format!(
+                                "Contract Output.data is not a valid AONativeResponse: {e}; \
+                                 raw output: {data_str}"
+                            ),
+                        }
+                    })?;
+
+                // ok: false means the contract reported a logical error
+                if !native_resp.ok {
+                    let reason = native_resp
+                        .error
+                        .unwrap_or_else(|| "contract returned ok:false".to_string());
+                    return Err(AOCommunicationError::ExecutionError {
+                        process_id: process_id.to_string(),
+                        details: reason,
+                    });
                 }
-                // Fallback: treat as raw data
-                return Ok(AONativeResponse {
-                    ok: true,
-                    data: Some(serde_json::Value::String(data_str.to_string())),
-                    error: None,
-                    message_id,
-                });
+
+                native_resp.message_id = message_id;
+                return Ok(native_resp);
             }
+
+            // Output is a JSON object/array (not a string) — wrap it
             if obj.is_object() || obj.is_array() {
                 return Ok(AONativeResponse {
                     ok: true,
@@ -161,6 +178,7 @@ impl ProductionAOClient {
             }
         }
 
+        // No Output block — treat as empty success (e.g. MU acknowledgment only)
         Ok(AONativeResponse { ok: true, data: None, error: None, message_id })
     }
 

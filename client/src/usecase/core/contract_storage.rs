@@ -54,11 +54,22 @@ pub struct ContractStorageImpl<A: AOClient> {
 }
 
 impl<A: AOClient> ContractStorageImpl<A> {
+    /// Create a new ContractStorageImpl.
+    ///
+    /// # DI wiring note
+    /// This constructor signature differs from the old `ContractStorageImpl::new(ao_client)`.
+    /// `holder_process_id` was added for the HyperBEAM two-process model (Owner + Holder).
+    ///
+    /// **TODO**: Update `di.rs` (dependency injection wiring) to pass `holder_process_id`.
+    /// For single-process setups (Owner == Holder), use `new_single_process()` instead.
+    ///
+    /// Tracked in: PR #83 todo list.
     pub fn new(ao_client: Arc<A>, holder_process_id: impl Into<String>) -> Self {
         Self { ao_client, holder_process_id: holder_process_id.into() }
     }
 
     /// Convenience constructor for single-process setups (holder = owner).
+    /// Holder process ID defaults to the contract_id passed at call time.
     pub fn new_single_process(ao_client: Arc<A>) -> Self {
         Self { ao_client, holder_process_id: String::new() }
     }
@@ -75,10 +86,18 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
         for kfrag in kfrags {
             let kfrag_id = format!("{secret_id}_{}", kfrag.id);
             let msg = AOExecuteMsg::delegate_kfrag(&kfrag_id, kfrag.key_data.clone());
-            self.ao_client
+            let resp = self.ao_client
                 .execute(contract_id, msg)
                 .await
                 .map_err(|e| ServiceError::ao_network_error(e.to_string()))?;
+
+            // Guard: transport succeeded but contract returned logical error
+            if !resp.ok {
+                let reason = resp.error.unwrap_or_else(|| "DelegateKFrag returned ok:false".into());
+                return Err(ServiceError::ao_network_error(format!(
+                    "kfrag_id={kfrag_id}: {reason}"
+                )));
+            }
         }
         Ok(())
     }
@@ -98,10 +117,19 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
         };
 
         let msg = AOExecuteMsg::delegate_capsule(kfrag_id, capsule_id, capsule_data.to_vec(), holder);
-        self.ao_client
+        let resp = self.ao_client
             .execute(contract_id, msg)
             .await
             .map_err(|e| ServiceError::ao_network_error(e.to_string()))?;
+
+        // Guard: transport succeeded but contract returned logical error
+        if !resp.ok {
+            let reason = resp.error.unwrap_or_else(|| "DelegateCapsule returned ok:false".into());
+            return Err(ServiceError::ao_network_error(format!(
+                "kfrag_id={kfrag_id}, capsule_id={capsule_id}: {reason}"
+            )));
+        }
+
         Ok(())
     }
 

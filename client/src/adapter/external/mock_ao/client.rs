@@ -114,11 +114,30 @@ fn data_str<'a>(data: &'a serde_json::Value, field: &str) -> Result<&'a str, AOC
         AOCommunicationError::ValidationError { details: format!("missing field: {field}") }
     })
 }
-/// Extract bytes from `msg.data[field]` (JSON array of u8 values).
+/// Extract bytes from `msg.data[field]` (JSON array of u8 values, 0..=255).
+/// Returns an error if the field is missing, not an array, or contains out-of-range values.
 fn data_bytes(data: &serde_json::Value, field: &str) -> Result<Vec<u8>, AOCommunicationError> {
-    data.get(field).and_then(|v| v.as_array()).map(|arr| {
-        arr.iter().filter_map(|v| v.as_u64()).map(|n| n as u8).collect()
-    }).ok_or_else(|| AOCommunicationError::ValidationError { details: format!("missing bytes field: {field}") })
+    let arr = data
+        .get(field)
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| AOCommunicationError::ValidationError {
+            details: format!("missing or non-array field: {field}"),
+        })?;
+
+    arr.iter()
+        .enumerate()
+        .map(|(i, v)| {
+            let n = v.as_u64().ok_or_else(|| AOCommunicationError::ValidationError {
+                details: format!("field {field}[{i}] is not a number"),
+            })?;
+            if n > 255 {
+                return Err(AOCommunicationError::ValidationError {
+                    details: format!("field {field}[{i}] = {n} is out of u8 range (0..=255)"),
+                });
+            }
+            Ok(n as u8)
+        })
+        .collect()
 }
 
 #[async_trait]
@@ -210,12 +229,34 @@ impl AOClient for MockAOClient {
             }
             "ListCapsulesByKFrag" => {
                 let kfrag_id = data_str(d, "kfrag_id")?;
+                // Optional pagination params
+                let start_after = d.get("start_after").and_then(|v| v.as_str());
+                let limit = d.get("limit").and_then(|v| v.as_u64()).unwrap_or(100) as usize;
+
                 let s = self.capsule_storage.read().unwrap();
-                let capsule_ids: Vec<String> = s.get(process_id)
-                    .map(|m| m.iter().filter(|(_, (kid, _))| kid == kfrag_id).map(|(cid, _)| cid.clone()).collect())
+                let mut capsule_ids: Vec<String> = s.get(process_id)
+                    .map(|m| m.iter()
+                        .filter(|(_, (kid, _))| kid.as_str() == kfrag_id)
+                        .map(|(cid, _)| cid.clone())
+                        .collect())
                     .unwrap_or_default();
-                let json = serde_json::to_vec(&serde_json::json!({ "kfrag_id": kfrag_id, "capsule_ids": capsule_ids }))
-                    .map_err(|e| AOCommunicationError::SerializationError { details: e.to_string() })?;
+
+                // Deterministic order + pagination (matches production contract behaviour)
+                capsule_ids.sort();
+                if let Some(start) = start_after {
+                    capsule_ids.retain(|id| id.as_str() > start);
+                }
+                capsule_ids.truncate(limit);
+                let next_start_after = capsule_ids.last().cloned();
+
+                // Response format mirrors the production contract:
+                // { kfrag_id, capsule_ids, next_start_after }
+                let json = serde_json::to_vec(&serde_json::json!({
+                    "kfrag_id": kfrag_id,
+                    "capsule_ids": capsule_ids,
+                    "next_start_after": next_start_after,
+                }))
+                .map_err(|e| AOCommunicationError::SerializationError { details: e.to_string() })?;
                 Ok(Binary::from(json))
             }
             other => Err(AOCommunicationError::ExecutionError {
