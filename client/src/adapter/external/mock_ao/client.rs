@@ -1,7 +1,7 @@
 //! Mock AO Network client (updated for HyperBEAM-native message types)
 //!
 //! Implements `AOClient` from `ao/` using `AOExecuteMsg`/`AOQueryMsg`/`AONativeResponse`.
-//! All business logic dispatches on `msg.action` string instead of enum variants.
+//! All business logic dispatches on `msg.action()` string instead of enum variants.
 
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::disallowed_names)]
@@ -133,8 +133,8 @@ impl AOClient for MockAOClient {
             return Err(AOCommunicationError::ValidationError { details: "empty process ID".into() });
         }
 
-        let d = &msg.data;
-        match msg.action.as_str() {
+        let d = msg.data();
+        match msg.action() {
             "DelegateKFrag" => {
                 let kfrag_id = data_str(d, "kfrag_id")?;
                 let kfrag = data_bytes(d, "kfrag")?;
@@ -188,8 +188,8 @@ impl AOClient for MockAOClient {
             return Err(AOCommunicationError::ValidationError { details: "empty process ID".into() });
         }
 
-        let d = &msg.data;
-        match msg.action.as_str() {
+        let d = msg.data();
+        match msg.action() {
             "GetCFrag" => {
                 let kfrag_id = data_str(d, "kfrag_id")?;
                 let capsule_id = data_str(d, "capsule_id")?;
@@ -208,7 +208,7 @@ impl AOClient for MockAOClient {
                     .map_err(|e| AOCommunicationError::SerializationError { details: e.to_string() })?;
                 Ok(Binary::from(json))
             }
-            "ListCapsules" => {
+            "ListCapsulesByKFrag" => {
                 let kfrag_id = data_str(d, "kfrag_id")?;
                 let s = self.capsule_storage.read().unwrap();
                 let capsule_ids: Vec<String> = s.get(process_id)
@@ -235,6 +235,6 @@ impl AOClient for MockAOClient {
             return Err(AOCommunicationError::ValidationError { details: "empty process ID".into() });
         }
         // Dry-run: simulate without side-effects
-        Ok(AONativeResponse::success(serde_json::json!({ "dry_run": true, "action": msg.action })))
+        Ok(AONativeResponse::success(serde_json::json!({ "dry_run": true, "action": msg.action() })))
     }
 }

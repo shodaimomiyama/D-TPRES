@@ -48,10 +48,22 @@ mod base64_serde {
 
 /// Execute message for state-changing operations (HyperBEAM format).
 /// Serializes as: `{ "action": "DelegateKFrag", "data": { ... } }`
+///
+/// `action` and `data` are private to prevent callers from bypassing the builder methods
+/// with arbitrary strings. Always construct via the associated builder functions
+/// (`AOExecuteMsg::delegate_kfrag`, `AOExecuteMsg::delegate_capsule`, etc.).
+/// `serde` can still deserialize the struct from wire JSON.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AOExecuteMsg {
-    pub action: String,
-    pub data: serde_json::Value,
+    action: String,
+    data: serde_json::Value,
+}
+
+impl AOExecuteMsg {
+    /// The action name (e.g. `"DelegateKFrag"`). Used internally by DataItemBuilder.
+    pub fn action(&self) -> &str { &self.action }
+    /// The payload data.
+    pub fn data(&self) -> &serde_json::Value { &self.data }
 }
 
 impl AOExecuteMsg {
@@ -100,10 +112,19 @@ impl AOExecuteMsg {
 
 /// Query message for read-only operations (HyperBEAM format).
 /// Serializes as: `{ "action": "GetCFrag", "data": { ... } }`
+///
+/// Same privacy rationale as `AOExecuteMsg` — use the builder methods.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AOQueryMsg {
-    pub action: String,
-    pub data: serde_json::Value,
+    action: String,
+    data: serde_json::Value,
+}
+
+impl AOQueryMsg {
+    /// The action name (e.g. `"GetCFrag"`). Used internally by DataItemBuilder.
+    pub fn action(&self) -> &str { &self.action }
+    /// The payload data.
+    pub fn data(&self) -> &serde_json::Value { &self.data }
 }
 
 impl AOQueryMsg {
@@ -119,13 +140,16 @@ impl AOQueryMsg {
     }
 
     /// List Capsules associated with a kFrag (with optional pagination).
+    ///
+    /// Action name: `"ListCapsulesByKFrag"` — must match the contract handler.
+    /// See `ao/contracts/src/handlers.rs` for the authoritative list.
     pub fn list_capsules_by_kfrag(
         kfrag_id: impl Into<String>,
         start_after: Option<String>,
         limit: Option<u32>,
     ) -> Self {
         Self {
-            action: "ListCapsules".to_string(),
+            action: "ListCapsulesByKFrag".to_string(),
             data: serde_json::json!({
                 "kfrag_id": kfrag_id.into(),
                 "start_after": start_after,
