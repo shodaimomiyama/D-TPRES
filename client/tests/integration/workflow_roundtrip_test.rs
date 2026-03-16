@@ -398,7 +398,7 @@ async fn test_roundtrip_workflow_services_integration() {
     let service_crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
     let mock_ao = Arc::new(MockAOClient::new());
     let arweave = Arc::new(ArweaveStorageServiceImpl::default());
-    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
     let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
     let sharing_service = SecretSharingWorkflowServiceImpl::new(service_crypto, storage);
 

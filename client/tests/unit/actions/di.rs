@@ -77,7 +77,7 @@ fn test_container_with_dependencies() {
 
     let mock_ao = Arc::new(MockAOClient::new());
     let arweave = Arc::new(ArweaveStorageServiceImpl::default());
-    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
     let storage_service = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
 
     let controller = ControllerContainer::new(Arc::clone(&crypto_service));

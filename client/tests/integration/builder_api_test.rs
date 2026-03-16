@@ -12,7 +12,7 @@ use formix::usecase::dto::SecretMetadata;
 fn default_client() -> FormixClient {
     let mock_ao = Arc::new(MockAOClient::new());
     let arweave = Arc::new(ArweaveStorageServiceImpl::default());
-    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
     FormixClient::with_storage(
         "test_process".to_string(),
         "test_wallet".to_string(),
