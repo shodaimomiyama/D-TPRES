@@ -1,15 +1,14 @@
-//! AO Network client module
+//! AO Network client module (HyperBEAM-native)
 //!
-//! Provides production implementation of AOClient trait
-//! for AO Network communication.
+//! Replaces `ao_cwao/` which used CosmWasm-style messages on the legacy AO testnet.
+//! This module targets HyperBEAM (~wasm64@1.0) with AO-native message format.
 //!
 //! ## Module Structure
-//!
-//! - `client` - AOClient trait definition
-//! - `config` - AO Network connection configuration
-//! - `message` - Message types for AO communication
+//! - `client` - AOClient trait (updated for HyperBEAM message types)
+//! - `config` - AO Network connection config (HyperBEAM endpoints)
+//! - `message` - AO-native message types (AOExecuteMsg, AOQueryMsg, AONativeResponse)
 //! - `data_item` - ANS-104 DataItem builder and signer (production feature)
-//! - `production_client` - Production AOClient implementation (production feature)
+//! - `production_client` - ProductionAOClient impl (production feature)
 
 mod client;
 mod config;
@@ -24,9 +23,8 @@ pub use config::AOConfig;
 #[cfg(feature = "production-ao")]
 pub use data_item::{ArweaveJWK, DataItemBuilder, DataItemSigner};
 pub use message::{
-    AOAttribute, AOEvent, AOMessageTags, AOResponse, Binary, BlobMeta, CFragEntry, CapsuleInfo,
-    CapsuleStatus, ExecuteMsg, GetCFragResponse, GetCFragsBySecretResponse,
-    ListCapsulesByKFragResponse, QueryMsg, ValidateMessage, MAX_BINARY_SIZE, MAX_ID_LENGTH,
+    AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary, GetCFragResponse,
+    MAX_BINARY_SIZE, MAX_ID_LENGTH, validate_id, validate_binary,
 };
 #[cfg(feature = "production-ao")]
 pub use production_client::ProductionAOClient;

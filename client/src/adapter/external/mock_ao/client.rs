@@ -1,7 +1,7 @@
-//! Mock AO Network client implementation
+//! Mock AO Network client (updated for HyperBEAM-native message types)
 //!
-//! Provides MockAOClient for testing and development without
-//! actual AO Network connection.
+//! Implements `AOClient` from `ao/` using `AOExecuteMsg`/`AOQueryMsg`/`AONativeResponse`.
+//! All business logic dispatches on `msg.action` string instead of enum variants.
 
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::disallowed_names)]
@@ -15,43 +15,31 @@ use async_trait::async_trait;
 
 use crate::adapter::errors::AOCommunicationError;
 use crate::adapter::external::ao::{
-    AOClient, AOEvent, AOResponse, Binary, BlobMeta, CapsuleInfo, CapsuleStatus, ExecuteMsg,
-    GetCFragResponse, ListCapsulesByKFragResponse, QueryMsg, ValidateMessage,
+    AOClient, AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary, GetCFragResponse,
 };
 
 /// Configuration for MockAOClient behavior
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct MockConfig {
-    /// Simulated network delay in milliseconds (not applied in current impl)
     pub delay_ms: Option<u64>,
-    /// Random failure rate (0.0 to 1.0) - not implemented in current version
     pub fail_rate: Option<f64>,
 }
 
-/// Type alias for capsule storage: process_id -> (capsule_id -> (kfrag_id, capsule_data))
+/// Type alias: process_id -> (capsule_id -> (kfrag_id, capsule_data))
 type CapsuleStorage = HashMap<String, HashMap<String, (String, Vec<u8>)>>;
 
-/// Mock AO Client for testing and development
-///
-/// Stores kFrags and cFrags in memory, allowing testing without
-/// actual AO Network connection.
+/// Mock AO Client for testing and development.
 pub struct MockAOClient {
-    /// Storage: process_id -> (kfrag_id -> kfrag_data)
     kfrag_storage: RwLock<HashMap<String, HashMap<String, Vec<u8>>>>,
-    /// Storage: process_id -> (key -> cfrag_data) where key = "{kfrag_id}:{capsule_id}"
     cfrag_storage: RwLock<HashMap<String, HashMap<String, Vec<u8>>>>,
-    /// Capsule storage using type alias for readability
     capsule_storage: RwLock<CapsuleStorage>,
-    /// Configuration
     #[allow(dead_code)]
     config: MockConfig,
-    /// Error to inject on next operation
     error_injection: RwLock<Option<AOCommunicationError>>,
 }
 
 impl MockAOClient {
-    /// Create a new MockAOClient with default configuration
     pub fn new() -> Self {
         Self {
             kfrag_storage: RwLock::new(HashMap::new()),
@@ -61,8 +49,6 @@ impl MockAOClient {
             error_injection: RwLock::new(None),
         }
     }
-
-    /// Create a new MockAOClient with custom configuration
     pub fn with_config(config: MockConfig) -> Self {
         Self {
             kfrag_storage: RwLock::new(HashMap::new()),
@@ -73,161 +59,66 @@ impl MockAOClient {
         }
     }
 
-    /// Inject an error to be returned on the next operation
     pub fn inject_error(&self, error: AOCommunicationError) {
-        let mut injection = self.error_injection.write().unwrap();
-        *injection = Some(error);
+        *self.error_injection.write().unwrap() = Some(error);
     }
-
-    /// Clear any injected error
     pub fn clear_error(&self) {
-        let mut injection = self.error_injection.write().unwrap();
-        *injection = None;
+        *self.error_injection.write().unwrap() = None;
     }
 
-    /// Get all stored kFrags for a process
     pub fn get_stored_kfrags(&self, process_id: &str) -> Vec<(String, Vec<u8>)> {
-        let storage = self.kfrag_storage.read().unwrap();
-        storage
-            .get(process_id)
-            .map(|kfrags| {
-                kfrags
-                    .iter()
-                    .map(|(id, data)| (id.clone(), data.clone()))
-                    .collect()
-            })
-            .unwrap_or_default()
+        let s = self.kfrag_storage.read().unwrap();
+        s.get(process_id).map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect()).unwrap_or_default()
     }
-
-    /// Get all stored cFrags for a process
     pub fn get_stored_cfrags(&self, process_id: &str) -> Vec<(String, Vec<u8>)> {
-        let storage = self.cfrag_storage.read().unwrap();
-        storage
-            .get(process_id)
-            .map(|cfrags| {
-                cfrags
-                    .iter()
-                    .map(|(id, data)| (id.clone(), data.clone()))
-                    .collect()
-            })
-            .unwrap_or_default()
+        let s = self.cfrag_storage.read().unwrap();
+        s.get(process_id).map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect()).unwrap_or_default()
     }
-
-    /// Get all stored capsules for a process
     pub fn get_stored_capsules(&self, process_id: &str) -> Vec<(String, String, Vec<u8>)> {
-        let storage = self.capsule_storage.read().unwrap();
-        storage
-            .get(process_id)
-            .map(|capsules| {
-                capsules
-                    .iter()
-                    .map(|(capsule_id, (kfrag_id, data))| {
-                        (capsule_id.clone(), kfrag_id.clone(), data.clone())
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
+        let s = self.capsule_storage.read().unwrap();
+        s.get(process_id).map(|m| m.iter().map(|(cid, (kid, d))| (cid.clone(), kid.clone(), d.clone())).collect()).unwrap_or_default()
     }
-
-    /// Clear all storage
     pub fn clear(&self) {
-        let mut kfrag_storage = self.kfrag_storage.write().unwrap();
-        let mut cfrag_storage = self.cfrag_storage.write().unwrap();
-        let mut capsule_storage = self.capsule_storage.write().unwrap();
-        kfrag_storage.clear();
-        cfrag_storage.clear();
-        capsule_storage.clear();
+        self.kfrag_storage.write().unwrap().clear();
+        self.cfrag_storage.write().unwrap().clear();
+        self.capsule_storage.write().unwrap().clear();
     }
 
-    /// Check if an error should be returned
     fn check_error_injection(&self) -> Option<AOCommunicationError> {
-        let mut injection = self.error_injection.write().unwrap();
-        injection.take()
+        self.error_injection.write().unwrap().take()
     }
-
-    /// Store a kFrag
-    fn store_kfrag(&self, process_id: &str, kfrag_id: &str, kfrag_data: Vec<u8>) {
-        let mut storage = self.kfrag_storage.write().unwrap();
-        storage
-            .entry(process_id.to_string())
-            .or_default()
-            .insert(kfrag_id.to_string(), kfrag_data);
+    fn store_kfrag(&self, process_id: &str, kfrag_id: &str, data: Vec<u8>) {
+        self.kfrag_storage.write().unwrap().entry(process_id.to_string()).or_default().insert(kfrag_id.to_string(), data);
     }
-
-    /// Store a capsule
-    fn store_capsule(
-        &self,
-        process_id: &str,
-        kfrag_id: &str,
-        capsule_id: &str,
-        capsule_data: Vec<u8>,
-    ) {
-        let mut storage = self.capsule_storage.write().unwrap();
-        storage
-            .entry(process_id.to_string())
-            .or_default()
-            .insert(capsule_id.to_string(), (kfrag_id.to_string(), capsule_data));
+    fn store_capsule(&self, process_id: &str, kfrag_id: &str, capsule_id: &str, data: Vec<u8>) {
+        self.capsule_storage.write().unwrap().entry(process_id.to_string()).or_default().insert(capsule_id.to_string(), (kfrag_id.to_string(), data));
     }
-
-    /// Store a cFrag (result of reencryption)
-    fn store_cfrag(&self, process_id: &str, kfrag_id: &str, capsule_id: &str, cfrag_data: Vec<u8>) {
+    fn store_cfrag(&self, process_id: &str, kfrag_id: &str, capsule_id: &str, data: Vec<u8>) {
         let key = format!("{kfrag_id}:{capsule_id}");
-        let mut storage = self.cfrag_storage.write().unwrap();
-        storage
-            .entry(process_id.to_string())
-            .or_default()
-            .insert(key, cfrag_data);
+        self.cfrag_storage.write().unwrap().entry(process_id.to_string()).or_default().insert(key, data);
     }
-
-    /// Get a cFrag
     fn get_cfrag(&self, process_id: &str, kfrag_id: &str, capsule_id: &str) -> Option<Vec<u8>> {
         let key = format!("{kfrag_id}:{capsule_id}");
-        let storage = self.cfrag_storage.read().unwrap();
-        storage
-            .get(process_id)
-            .and_then(|cfrags| cfrags.get(&key).cloned())
-    }
-
-    /// List capsules by kFrag ID
-    fn list_capsules_by_kfrag(
-        &self,
-        process_id: &str,
-        kfrag_id: &str,
-        start_after: Option<&str>,
-        limit: Option<u32>,
-    ) -> Vec<(String, CapsuleStatus)> {
-        let storage = self.capsule_storage.read().unwrap();
-        let capsules = match storage.get(process_id) {
-            Some(c) => c,
-            None => return vec![],
-        };
-
-        let mut result: Vec<_> = capsules
-            .iter()
-            .filter(|(_, (kid, _))| kid == kfrag_id)
-            .map(|(capsule_id, _)| capsule_id.clone())
-            .collect();
-
-        result.sort();
-
-        if let Some(start) = start_after {
-            result.retain(|id| id.as_str() > start);
-        }
-
-        let limit = limit.unwrap_or(100) as usize;
-        result.truncate(limit);
-
-        result
-            .into_iter()
-            .map(|id| (id, CapsuleStatus::Pending))
-            .collect()
+        let s = self.cfrag_storage.read().unwrap();
+        s.get(process_id).and_then(|m| m.get(&key).cloned())
     }
 }
 
 impl Default for MockAOClient {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
+}
+
+/// Extract a string field from `msg.data` JSON.
+fn data_str<'a>(data: &'a serde_json::Value, field: &str) -> Result<&'a str, AOCommunicationError> {
+    data.get(field).and_then(|v| v.as_str()).ok_or_else(|| {
+        AOCommunicationError::ValidationError { details: format!("missing field: {field}") }
+    })
+}
+/// Extract bytes from `msg.data[field]` (JSON array of u8 values).
+fn data_bytes(data: &serde_json::Value, field: &str) -> Result<Vec<u8>, AOCommunicationError> {
+    data.get(field).and_then(|v| v.as_array()).map(|arr| {
+        arr.iter().filter_map(|v| v.as_u64()).map(|n| n as u8).collect()
+    }).ok_or_else(|| AOCommunicationError::ValidationError { details: format!("missing bytes field: {field}") })
 }
 
 #[async_trait]
@@ -235,189 +126,115 @@ impl AOClient for MockAOClient {
     async fn execute(
         &self,
         process_id: &str,
-        msg: ExecuteMsg,
-    ) -> Result<AOResponse, AOCommunicationError> {
-        if let Some(err) = self.check_error_injection() {
-            return Err(err);
-        }
-
-        if let Err(e) = msg.validate() {
-            return Err(AOCommunicationError::validation_error(e));
-        }
-
+        msg: AOExecuteMsg,
+    ) -> Result<AONativeResponse, AOCommunicationError> {
+        if let Some(err) = self.check_error_injection() { return Err(err); }
         if process_id.is_empty() {
-            return Err(AOCommunicationError::invalid_process_id("empty process ID"));
+            return Err(AOCommunicationError::ValidationError { details: "empty process ID".into() });
         }
 
-        let event = match &msg {
-            ExecuteMsg::DelegateKFrag { kfrag_id, kfrag } => {
-                self.store_kfrag(process_id, kfrag_id, kfrag.as_slice().to_vec());
-                AOEvent::with_attributes(
-                    "delegate_kfrag",
-                    vec![("kfrag_id", kfrag_id.as_str()), ("process_id", process_id)],
-                )
+        let d = &msg.data;
+        match msg.action.as_str() {
+            "DelegateKFrag" => {
+                let kfrag_id = data_str(d, "kfrag_id")?;
+                let kfrag = data_bytes(d, "kfrag")?;
+                self.store_kfrag(process_id, kfrag_id, kfrag);
+                Ok(AONativeResponse::success(serde_json::json!({ "kfrag_id": kfrag_id, "delegated": true })))
             }
-            ExecuteMsg::DelegateCapsule {
-                kfrag_id,
-                capsule_id,
-                capsule,
-            } => {
-                self.store_capsule(
-                    process_id,
-                    kfrag_id,
-                    capsule_id,
-                    capsule.as_slice().to_vec(),
-                );
-                AOEvent::with_attributes(
-                    "delegate_capsule",
-                    vec![
-                        ("kfrag_id", kfrag_id.as_str()),
-                        ("capsule_id", capsule_id.as_str()),
-                        ("process_id", process_id),
-                    ],
-                )
+            "DelegateCapsule" => {
+                let kfrag_id = data_str(d, "kfrag_id")?;
+                let capsule_id = data_str(d, "capsule_id")?;
+                let capsule = data_bytes(d, "capsule")?;
+                self.store_capsule(process_id, kfrag_id, capsule_id, capsule);
+                Ok(AONativeResponse::success(serde_json::json!({ "capsule_id": capsule_id, "delegated": true })))
             }
-            ExecuteMsg::SubmitKFrag { kfrag_id, kfrag } => {
-                self.store_kfrag(process_id, kfrag_id, kfrag.as_slice().to_vec());
-                AOEvent::with_attributes(
-                    "submit_kfrag",
-                    vec![("kfrag_id", kfrag_id.as_str()), ("process_id", process_id)],
-                )
+            "SubmitKFrag" => {
+                let kfrag_id = data_str(d, "kfrag_id")?;
+                let kfrag = data_bytes(d, "kfrag")?;
+                self.store_kfrag(process_id, kfrag_id, kfrag);
+                Ok(AONativeResponse::success(serde_json::json!({ "kfrag_id": kfrag_id, "stored": true })))
             }
-            ExecuteMsg::SubmitCapsule {
-                kfrag_id,
-                capsule_id,
-                capsule,
-            } => {
-                self.store_capsule(
-                    process_id,
-                    kfrag_id,
-                    capsule_id,
-                    capsule.as_slice().to_vec(),
-                );
-                AOEvent::with_attributes(
-                    "submit_capsule",
-                    vec![
-                        ("kfrag_id", kfrag_id.as_str()),
-                        ("capsule_id", capsule_id.as_str()),
-                        ("process_id", process_id),
-                    ],
-                )
+            "SubmitCapsule" => {
+                let kfrag_id = data_str(d, "kfrag_id")?;
+                let capsule_id = data_str(d, "capsule_id")?;
+                let capsule = data_bytes(d, "capsule")?;
+                // Simulate re-encryption: store dummy cFrag
+                let dummy_cfrag = format!("cfrag:{kfrag_id}:{capsule_id}").into_bytes();
+                self.store_capsule(process_id, kfrag_id, capsule_id, capsule);
+                self.store_cfrag(process_id, kfrag_id, capsule_id, dummy_cfrag);
+                Ok(AONativeResponse::success(serde_json::json!({ "capsule_id": capsule_id, "cfrag_ready": true })))
             }
-            ExecuteMsg::Reencrypt {
-                kfrag_id,
-                capsule_id,
-            } => {
-                // Simulate reencryption by storing a dummy cFrag
+            "Reencrypt" => {
+                let kfrag_id = data_str(d, "kfrag_id")?;
+                let capsule_id = data_str(d, "capsule_id")?;
                 let dummy_cfrag = format!("cfrag:{kfrag_id}:{capsule_id}").into_bytes();
                 self.store_cfrag(process_id, kfrag_id, capsule_id, dummy_cfrag);
-                AOEvent::with_attributes(
-                    "reencrypt",
-                    vec![
-                        ("kfrag_id", kfrag_id.as_str()),
-                        ("capsule_id", capsule_id.as_str()),
-                        ("process_id", process_id),
-                    ],
-                )
+                Ok(AONativeResponse::success(serde_json::json!({ "capsule_id": capsule_id, "cfrag_ready": true })))
             }
-        };
-
-        Ok(AOResponse::success_with_events(vec![event]))
+            other => Err(AOCommunicationError::ExecutionError {
+                process_id: process_id.to_string(),
+                details: format!("Unknown action: {other}"),
+            }),
+        }
     }
 
-    async fn query(&self, process_id: &str, msg: QueryMsg) -> Result<Binary, AOCommunicationError> {
-        if let Some(err) = self.check_error_injection() {
-            return Err(err);
-        }
-
-        if let Err(e) = msg.validate() {
-            return Err(AOCommunicationError::validation_error(e));
-        }
-
+    async fn query(
+        &self,
+        process_id: &str,
+        msg: AOQueryMsg,
+    ) -> Result<Binary, AOCommunicationError> {
+        if let Some(err) = self.check_error_injection() { return Err(err); }
         if process_id.is_empty() {
-            return Err(AOCommunicationError::invalid_process_id("empty process ID"));
+            return Err(AOCommunicationError::ValidationError { details: "empty process ID".into() });
         }
 
-        match &msg {
-            QueryMsg::GetCFrag {
-                kfrag_id,
-                capsule_id,
-            } => {
-                let cfrag_data = self
-                    .get_cfrag(process_id, kfrag_id, capsule_id)
-                    .ok_or_else(|| {
-                        AOCommunicationError::execution_error(process_id, "CFrag not ready")
-                    })?;
+        let d = &msg.data;
+        match msg.action.as_str() {
+            "GetCFrag" => {
+                let kfrag_id = data_str(d, "kfrag_id")?;
+                let capsule_id = data_str(d, "capsule_id")?;
+                let cfrag_data = self.get_cfrag(process_id, kfrag_id, capsule_id).ok_or_else(|| {
+                    AOCommunicationError::ExecutionError {
+                        process_id: process_id.to_string(),
+                        details: "CFrag not ready".to_string(),
+                    }
+                })?;
                 let response = GetCFragResponse {
-                    cfrag: Binary::from(cfrag_data),
-                    meta: BlobMeta {
-                        size: 0,
-                        created_at: "2024-01-01T00:00:00Z".to_string(),
-                        content_type: Some("application/octet-stream".to_string()),
-                    },
+                    kfrag_id: kfrag_id.to_string(),
+                    capsule_id: capsule_id.to_string(),
+                    cfrag: cfrag_data,
                 };
                 let json = serde_json::to_vec(&response)
-                    .map_err(|e| AOCommunicationError::serialization_error(e.to_string()))?;
+                    .map_err(|e| AOCommunicationError::SerializationError { details: e.to_string() })?;
                 Ok(Binary::from(json))
             }
-            QueryMsg::ListCapsulesByKFrag {
-                kfrag_id,
-                start_after,
-                limit,
-            } => {
-                let capsules = self.list_capsules_by_kfrag(
-                    process_id,
-                    kfrag_id,
-                    start_after.as_deref(),
-                    *limit,
-                );
-                let last_capsule_id = capsules.last().map(|(id, _)| id.clone());
-                let response = ListCapsulesByKFragResponse {
-                    capsules: capsules
-                        .into_iter()
-                        .map(|(id, status)| CapsuleInfo {
-                            capsule_id: id,
-                            status,
-                            updated_ts: "2024-01-01T00:00:00Z".to_string(),
-                        })
-                        .collect(),
-                    next_start_after: last_capsule_id,
-                };
-                let json = serde_json::to_vec(&response)
-                    .map_err(|e| AOCommunicationError::serialization_error(e.to_string()))?;
+            "ListCapsules" => {
+                let kfrag_id = data_str(d, "kfrag_id")?;
+                let s = self.capsule_storage.read().unwrap();
+                let capsule_ids: Vec<String> = s.get(process_id)
+                    .map(|m| m.iter().filter(|(_, (kid, _))| kid == kfrag_id).map(|(cid, _)| cid.clone()).collect())
+                    .unwrap_or_default();
+                let json = serde_json::to_vec(&serde_json::json!({ "kfrag_id": kfrag_id, "capsule_ids": capsule_ids }))
+                    .map_err(|e| AOCommunicationError::SerializationError { details: e.to_string() })?;
                 Ok(Binary::from(json))
             }
+            other => Err(AOCommunicationError::ExecutionError {
+                process_id: process_id.to_string(),
+                details: format!("Unknown query action: {other}"),
+            }),
         }
     }
 
     async fn dry_run(
         &self,
         process_id: &str,
-        msg: ExecuteMsg,
-    ) -> Result<AOResponse, AOCommunicationError> {
-        if let Some(err) = self.check_error_injection() {
-            return Err(err);
-        }
-
-        if let Err(e) = msg.validate() {
-            return Err(AOCommunicationError::validation_error(e));
-        }
-
+        msg: AOExecuteMsg,
+    ) -> Result<AONativeResponse, AOCommunicationError> {
+        if let Some(err) = self.check_error_injection() { return Err(err); }
         if process_id.is_empty() {
-            return Err(AOCommunicationError::invalid_process_id("empty process ID"));
+            return Err(AOCommunicationError::ValidationError { details: "empty process ID".into() });
         }
-
-        // Dry run simulates execution without persisting changes
-        let event_type = match &msg {
-            ExecuteMsg::DelegateKFrag { .. } => "dry_run:delegate_kfrag",
-            ExecuteMsg::DelegateCapsule { .. } => "dry_run:delegate_capsule",
-            ExecuteMsg::SubmitKFrag { .. } => "dry_run:submit_kfrag",
-            ExecuteMsg::SubmitCapsule { .. } => "dry_run:submit_capsule",
-            ExecuteMsg::Reencrypt { .. } => "dry_run:reencrypt",
-        };
-
-        Ok(AOResponse::success_with_events(vec![
-            AOEvent::with_attributes(event_type, vec![("process_id", process_id)]),
-        ]))
+        // Dry-run: simulate without side-effects
+        Ok(AONativeResponse::success(serde_json::json!({ "dry_run": true, "action": msg.action })))
     }
 }

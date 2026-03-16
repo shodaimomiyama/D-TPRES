@@ -1,22 +1,23 @@
-//! ContractStorage - AO contract communication service
+//! ContractStorage - AO contract communication service (HyperBEAM-native)
 //!
-//! Handles AO Network contract interactions, separated from
-//! Arweave immutable storage operations for clean SRP compliance.
+//! Updated for new `ao/` module:
+//! - `ExecuteMsg::*` enum variants → `AOExecuteMsg::*` builder methods
+//! - `QueryMsg::*` → `AOQueryMsg::*` builder methods
+//! - `AOResponse` → `AONativeResponse`
+//! - `GetCFragResponse` parses `{ kfrag_id, capsule_id, cfrag: [u8] }` format
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::adapter::external::ao::{AOClient, Binary, ExecuteMsg, GetCFragResponse, QueryMsg};
+use crate::adapter::external::ao::{AOClient, AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary, GetCFragResponse};
 use crate::service::error::{ServiceError, ServiceResult};
 use crate::usecase::core::crypto::{CFragData, KeyFragment};
 
-/// Contract storage trait for AO Network communication
+/// Contract storage trait for AO Network communication.
 #[async_trait]
 pub trait ContractStorage: Send + Sync {
-    /// Send kFrags to Owner-Process via AO Network
-    ///
-    /// kfrag_id is formatted as `{secret_id}_{index}` to bind kFrags to a secret.
+    /// Send kFrags to Owner-Process via AO Network.
     async fn send_kfrags(
         &self,
         kfrags: &[KeyFragment],
@@ -24,17 +25,7 @@ pub trait ContractStorage: Send + Sync {
         secret_id: &str,
     ) -> ServiceResult<()>;
 
-    /// Delegate capsule to AO contract for re-encryption triggering
-    ///
-    /// Associates the Arweave capsule with its kFrag so the AO contract
-    /// can trigger Phase 2 re-encryption.
-    ///
-    /// # Arguments
-    /// * `capsule_data` - Serialized capsule bytes (from Arweave CapsulePayload)
-    /// * `contract_id` - Owner-Process contract ID on AO Network
-    /// * `kfrag_id`    - kFrag identifier matching the corresponding DelegateKFrag call
-    ///                   (format: `"kfrag-{index}"`)
-    /// * `capsule_id`  - Arweave transaction ID of the stored capsule (`capsule_tx_id`)
+    /// Delegate capsule to AO contract for re-encryption triggering.
     async fn delegate_capsule(
         &self,
         capsule_data: &[u8],
@@ -43,10 +34,7 @@ pub trait ContractStorage: Send + Sync {
         capsule_id: &str,
     ) -> ServiceResult<()>;
 
-    /// Retrieve cFrags for a secret from AO Network
-    ///
-    /// Generates kfrag_ids from `{secret_id}_{0..total_shares}` convention,
-    /// then queries each kfrag's cFrag individually via GetCFrag.
+    /// Retrieve cFrags for a secret from AO Network.
     async fn retrieve_cfrags(
         &self,
         secret_id: &str,
@@ -56,14 +44,23 @@ pub trait ContractStorage: Send + Sync {
     ) -> ServiceResult<Vec<CFragData>>;
 }
 
-/// ContractStorage implementation using AOClient
+/// ContractStorage implementation using AOClient (HyperBEAM-native).
 pub struct ContractStorageImpl<A: AOClient> {
     ao_client: Arc<A>,
+    /// Default holder process ID for DelegateCapsule.
+    /// In HyperBEAM, Owner-Process delegates to a Holder-Process via AO message.
+    /// Set to the same process_id for single-process setups.
+    holder_process_id: String,
 }
 
 impl<A: AOClient> ContractStorageImpl<A> {
-    pub fn new(ao_client: Arc<A>) -> Self {
-        Self { ao_client }
+    pub fn new(ao_client: Arc<A>, holder_process_id: impl Into<String>) -> Self {
+        Self { ao_client, holder_process_id: holder_process_id.into() }
+    }
+
+    /// Convenience constructor for single-process setups (holder = owner).
+    pub fn new_single_process(ao_client: Arc<A>) -> Self {
+        Self { ao_client, holder_process_id: String::new() }
     }
 }
 
@@ -76,16 +73,13 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
         secret_id: &str,
     ) -> ServiceResult<()> {
         for kfrag in kfrags {
-            let msg = ExecuteMsg::DelegateKFrag {
-                kfrag_id: format!("{secret_id}_{}", kfrag.id),
-                kfrag: Binary::from(kfrag.key_data.clone()),
-            };
+            let kfrag_id = format!("{secret_id}_{}", kfrag.id);
+            let msg = AOExecuteMsg::delegate_kfrag(&kfrag_id, kfrag.key_data.clone());
             self.ao_client
                 .execute(contract_id, msg)
                 .await
                 .map_err(|e| ServiceError::ao_network_error(e.to_string()))?;
         }
-
         Ok(())
     }
 
@@ -96,11 +90,14 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
         kfrag_id: &str,
         capsule_id: &str,
     ) -> ServiceResult<()> {
-        let msg = ExecuteMsg::DelegateCapsule {
-            kfrag_id: kfrag_id.to_string(),
-            capsule_id: capsule_id.to_string(),
-            capsule: Binary::from(capsule_data.to_vec()),
+        // holder_process_id defaults to contract_id for single-process setups
+        let holder = if self.holder_process_id.is_empty() {
+            contract_id.to_string()
+        } else {
+            self.holder_process_id.clone()
         };
+
+        let msg = AOExecuteMsg::delegate_capsule(kfrag_id, capsule_id, capsule_data.to_vec(), holder);
         self.ao_client
             .execute(contract_id, msg)
             .await
@@ -119,21 +116,16 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
 
         for i in 0..total_shares {
             let kfrag_id = format!("{secret_id}_{i}");
-            let msg = QueryMsg::GetCFrag {
-                kfrag_id: kfrag_id.clone(),
-                capsule_id: capsule_id.to_string(),
-            };
+            let msg = AOQueryMsg::get_cfrag(&kfrag_id, capsule_id);
 
             match self.ao_client.query(process_id, msg).await {
                 Ok(result) => {
                     let response: GetCFragResponse = serde_json::from_slice(result.as_slice())
-                        .map_err(|e| {
-                            ServiceError::ao_network_error(format!(
-                                "Failed to parse cFrag response for {kfrag_id}: {e}"
-                            ))
-                        })?;
+                        .map_err(|e| ServiceError::ao_network_error(
+                            format!("Failed to parse cFrag for {kfrag_id}: {e}")
+                        ))?;
                     cfrags.push(CFragData {
-                        cfrag_data: response.cfrag.as_slice().to_vec(),
+                        cfrag_data: response.cfrag,
                         holder_id: kfrag_id,
                     });
                 }
