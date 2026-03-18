@@ -141,7 +141,7 @@ impl AOQueryMsg {
 
     /// List Capsules associated with a kFrag (with optional pagination).
     ///
-    /// Action name: `"ListCapsulesByKFrag"` — must match the contract handler.
+    /// Action name: `"ListCapsules"` — must match the contract handler.
     /// See `ao/contracts/src/handlers.rs` for the authoritative list.
     pub fn list_capsules_by_kfrag(
         kfrag_id: impl Into<String>,
@@ -149,7 +149,7 @@ impl AOQueryMsg {
         limit: Option<u32>,
     ) -> Self {
         Self {
-            action: "ListCapsulesByKFrag".to_string(),
+            action: "ListCapsules".to_string(),
             data: serde_json::json!({
                 "kfrag_id": kfrag_id.into(),
                 "start_after": start_after,
@@ -181,6 +181,9 @@ impl AONativeResponse {
     }
     pub fn success_empty() -> Self {
         Self { ok: true, data: None, error: None, message_id: None }
+    }
+    pub fn error_response(reason: impl Into<String>) -> Self {
+        Self { ok: false, data: None, error: Some(reason.into()), message_id: None }
     }
 }
 

@@ -24,6 +24,8 @@ use crate::adapter::external::ao::{
 pub struct MockConfig {
     pub delay_ms: Option<u64>,
     pub fail_rate: Option<f64>,
+    /// If true, next `execute()` call returns `ok: false` response instead of success.
+    pub force_ok_false: bool,
 }
 
 /// Type alias: process_id -> (capsule_id -> (kfrag_id, capsule_data))
@@ -37,6 +39,8 @@ pub struct MockAOClient {
     #[allow(dead_code)]
     config: MockConfig,
     error_injection: RwLock<Option<AOCommunicationError>>,
+    /// When Some, next execute() returns AONativeResponse { ok: false, error: msg }
+    ok_false_injection: RwLock<Option<String>>,
 }
 
 impl MockAOClient {
@@ -47,6 +51,7 @@ impl MockAOClient {
             capsule_storage: RwLock::new(HashMap::new()),
             config: MockConfig::default(),
             error_injection: RwLock::new(None),
+            ok_false_injection: RwLock::new(None),
         }
     }
     pub fn with_config(config: MockConfig) -> Self {
@@ -56,6 +61,7 @@ impl MockAOClient {
             capsule_storage: RwLock::new(HashMap::new()),
             config,
             error_injection: RwLock::new(None),
+            ok_false_injection: RwLock::new(None),
         }
     }
 
@@ -64,6 +70,10 @@ impl MockAOClient {
     }
     pub fn clear_error(&self) {
         *self.error_injection.write().unwrap() = None;
+    }
+    /// Makes the next `execute()` call return `ok: false` with the given reason.
+    pub fn inject_ok_false(&self, reason: impl Into<String>) {
+        *self.ok_false_injection.write().unwrap() = Some(reason.into());
     }
 
     pub fn get_stored_kfrags(&self, process_id: &str) -> Vec<(String, Vec<u8>)> {
@@ -86,6 +96,9 @@ impl MockAOClient {
 
     fn check_error_injection(&self) -> Option<AOCommunicationError> {
         self.error_injection.write().unwrap().take()
+    }
+    fn check_ok_false_injection(&self) -> Option<String> {
+        self.ok_false_injection.write().unwrap().take()
     }
     fn store_kfrag(&self, process_id: &str, kfrag_id: &str, data: Vec<u8>) {
         self.kfrag_storage.write().unwrap().entry(process_id.to_string()).or_default().insert(kfrag_id.to_string(), data);
@@ -148,6 +161,9 @@ impl AOClient for MockAOClient {
         msg: AOExecuteMsg,
     ) -> Result<AONativeResponse, AOCommunicationError> {
         if let Some(err) = self.check_error_injection() { return Err(err); }
+        if let Some(reason) = self.check_ok_false_injection() {
+            return Ok(AONativeResponse::error_response(reason));
+        }
         if process_id.is_empty() {
             return Err(AOCommunicationError::ValidationError { details: "empty process ID".into() });
         }
@@ -227,7 +243,7 @@ impl AOClient for MockAOClient {
                     .map_err(|e| AOCommunicationError::SerializationError { details: e.to_string() })?;
                 Ok(Binary::from(json))
             }
-            "ListCapsulesByKFrag" => {
+            "ListCapsules" => {
                 let kfrag_id = data_str(d, "kfrag_id")?;
                 // Optional pagination params
                 let start_after = d.get("start_after").and_then(|v| v.as_str());
