@@ -211,13 +211,17 @@ fn handle_submit_kfrag(state: &mut ProcessState, msg: AOMessage) -> AOResponse {
         None => return AOResponse::error("Missing kfrag_id"),
     };
     let kfrag_bytes: Vec<u8> = match data["kfrag"].as_array() {
-        Some(arr) => arr
-            .iter()
-            .filter_map(|v| v.as_u64())
-            .map(|n| n as u8)
-            .collect(),
+        Some(arr) => match parse_byte_array(arr) {
+            Ok(bytes) => bytes,
+            Err(e) => return AOResponse::error(e),
+        },
         None => return AOResponse::error("Missing kfrag"),
     };
+
+    // Validate kFrag is deserializable before persisting to prevent bricked state
+    if let Err(e) = bincode::deserialize::<StoredKeyFrag>(&kfrag_bytes) {
+        return AOResponse::error(format!("Invalid kFrag payload: {e}"));
+    }
 
     if state.owner_kfrags.contains_key(&kfrag_id) {
         return AOResponse::success(json!({
@@ -248,11 +252,10 @@ fn handle_submit_capsule(state: &mut ProcessState, msg: AOMessage) -> AOResponse
         None => return AOResponse::error("Missing capsule_id"),
     };
     let capsule_bytes: Vec<u8> = match data["capsule"].as_array() {
-        Some(arr) => arr
-            .iter()
-            .filter_map(|v| v.as_u64())
-            .map(|n| n as u8)
-            .collect(),
+        Some(arr) => match parse_byte_array(arr) {
+            Ok(bytes) => bytes,
+            Err(e) => return AOResponse::error(e),
+        },
         None => return AOResponse::error("Missing capsule"),
     };
 
