@@ -1,5 +1,9 @@
 /target
 demo/target/
+ao/contracts/target/
+ao/contracts/Cargo.lock
+
+**/node_modules/
 
 **/tmp_pr_description.md
 
@@ -8,6 +12,9 @@ demo/.env
 demo/deploy.json
 demo/wallet.json
 ao/wallet.json
+demo/arweave-keyfile.json
+
+ao/logs
 
 .serena/
 

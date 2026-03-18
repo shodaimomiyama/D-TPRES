@@ -39,14 +39,29 @@ pub struct OutgoingMessage {
 
 impl AOResponse {
     pub fn success(data: serde_json::Value) -> Self {
-        Self { ok: true, data: Some(data), error: None, messages: Vec::new() }
+        Self {
+            ok: true,
+            data: Some(data),
+            error: None,
+            messages: Vec::new(),
+        }
     }
 
     pub fn success_with_messages(data: serde_json::Value, messages: Vec<OutgoingMessage>) -> Self {
-        Self { ok: true, data: Some(data), error: None, messages }
+        Self {
+            ok: true,
+            data: Some(data),
+            error: None,
+            messages,
+        }
     }
 
     pub fn error(msg: impl Into<String>) -> Self {
-        Self { ok: false, data: None, error: Some(msg.into()), messages: Vec::new() }
+        Self {
+            ok: false,
+            data: None,
+            error: Some(msg.into()),
+            messages: Vec::new(),
+        }
     }
 }
