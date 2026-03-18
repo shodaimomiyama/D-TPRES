@@ -265,6 +265,12 @@ fn handle_submit_capsule(state: &mut ProcessState, msg: AOMessage) -> AOResponse
         },
     );
 
+    state
+        .kfrag_to_caps
+        .entry(kfrag_id.clone())
+        .or_default()
+        .push(capsule_id.clone());
+
     match perform_reencryption(state, &kfrag_id, &capsule_bytes) {
         Ok(cfrag_bytes) => {
             state.holder_cfrags.insert(cap_key.clone(), cfrag_bytes);
