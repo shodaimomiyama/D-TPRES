@@ -4,7 +4,6 @@ on:
   release:
     types: [published]
   push:
-    branches: [main, master]
     paths-ignore:
       - '**.md'
       - '.github/**'
@@ -12,8 +11,12 @@ on:
 jobs:
   notify-slack:
     runs-on: ubuntu-latest
-    # Skip if commit message contains [skip marketing]
-    if: "!contains(github.event.head_commit.message, '[skip marketing]')"
+    # Only run on default branch push (or any release), skip [skip marketing] commits
+    if: |
+      (github.event_name == 'release') ||
+      (github.event_name == 'push' &&
+       github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+       !contains(github.event.head_commit.message, '[skip marketing]'))
     
     steps:
       - name: Build Slack payload
@@ -36,13 +39,12 @@ jobs:
             TEXT="${TEXT}<@U0AGHF86GLW> リリース投稿ドラフトを作成して（日英バイリンガル）"
             
           elif [ "$EVENT" = "push" ]; then
-            BRANCH="${{ github.ref_name }}"
+            DEFAULT_BRANCH="${{ github.event.repository.default_branch }}"
             COMMIT_MSG="${{ github.event.head_commit.message }}"
             COMMIT_URL="${{ github.event.head_commit.url }}"
-            AUTHOR="${{ github.event.head_commit.author.name }}"
             COMMIT_COUNT="${{ github.event.commits.length }}"
             
-            TEXT="📦 *[${REPO_NAME}] Push to ${BRANCH}*\n"
+            TEXT="📦 *[${REPO_NAME}] Push to ${DEFAULT_BRANCH}*\n"
             TEXT="${TEXT}Commits: ${COMMIT_COUNT}\n"
             TEXT="${TEXT}Latest: ${COMMIT_MSG}\n"
             TEXT="${TEXT}URL: ${COMMIT_URL}\n\n"
