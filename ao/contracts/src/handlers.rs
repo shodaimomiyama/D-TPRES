@@ -7,6 +7,17 @@ use crate::state::{
     VerificationData,
 };
 
+fn parse_byte_array(arr: &[serde_json::Value]) -> Result<Vec<u8>, &'static str> {
+    arr.iter()
+        .map(|v| {
+            v.as_u64()
+                .filter(|&n| n <= 255)
+                .map(|n| n as u8)
+                .ok_or("Byte array contains invalid value (expected 0-255)")
+        })
+        .collect()
+}
+
 pub fn dispatch(state: &mut ProcessState, msg: AOMessage) -> AOResponse {
     if msg.action == "Init" {
         return handle_init(state, msg);
@@ -87,11 +98,10 @@ fn handle_delegate_kfrag(state: &mut ProcessState, msg: AOMessage) -> AOResponse
         None => return AOResponse::error("Missing kfrag_id"),
     };
     let kfrag_bytes = match data["kfrag"].as_array() {
-        Some(arr) => arr
-            .iter()
-            .filter_map(|v| v.as_u64())
-            .map(|n| n as u8)
-            .collect::<Vec<_>>(),
+        Some(arr) => match parse_byte_array(arr) {
+            Ok(bytes) => bytes,
+            Err(e) => return AOResponse::error(e),
+        },
         None => return AOResponse::error("Missing or invalid kfrag bytes"),
     };
     let holder_process_id = match data["holder_process_id"].as_str() {
@@ -141,11 +151,10 @@ fn handle_delegate_capsule(state: &mut ProcessState, msg: AOMessage) -> AORespon
         None => return AOResponse::error("Missing capsule_id"),
     };
     let capsule_bytes = match data["capsule"].as_array() {
-        Some(arr) => arr
-            .iter()
-            .filter_map(|v| v.as_u64())
-            .map(|n| n as u8)
-            .collect::<Vec<_>>(),
+        Some(arr) => match parse_byte_array(arr) {
+            Ok(bytes) => bytes,
+            Err(e) => return AOResponse::error(e),
+        },
         None => return AOResponse::error("Missing capsule bytes"),
     };
 
@@ -323,7 +332,12 @@ fn handle_reencrypt(state: &mut ProcessState, msg: AOMessage) -> AOResponse {
             }
             AOResponse::success(json!({ "capsule_id": capsule_id, "cfrag_ready": true }))
         }
-        Err(e) => AOResponse::error(format!("Reencryption retry failed: {e}")),
+        Err(e) => {
+            if let Some(cap) = state.owner_capsules.get_mut(&cap_key) {
+                cap.status = CapsuleStatus::Error(e.clone());
+            }
+            AOResponse::error(format!("Reencryption retry failed: {e}"))
+        }
     }
 }
 

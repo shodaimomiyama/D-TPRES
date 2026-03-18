@@ -52,8 +52,9 @@ impl ProcessState {
         Self::default()
     }
 
+    // Length-prefixed encoding prevents collisions from IDs containing the delimiter
     pub fn cap_key(kfrag_id: &str, capsule_id: &str) -> String {
-        format!("{}/{}", kfrag_id, capsule_id)
+        format!("{}:{}/{}", kfrag_id.len(), kfrag_id, capsule_id)
     }
 
     pub fn is_initialized(&self) -> bool {
