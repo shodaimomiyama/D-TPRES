@@ -8,6 +8,8 @@ pub enum ProcessRole {
     Owner,
     Holder,
     Requester,
+    /// Single-process mode: allows both Owner and Holder actions.
+    Combined,
 }
 
 /// WASM-memory-resident state, persisted via HyperBEAM memory snapshots.

@@ -23,8 +23,8 @@ pub use config::AOConfig;
 #[cfg(feature = "production-ao")]
 pub use data_item::{ArweaveJWK, DataItemBuilder, DataItemSigner};
 pub use message::{
-    AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary, GetCFragResponse,
-    MAX_BINARY_SIZE, MAX_ID_LENGTH, validate_id, validate_binary,
+    validate_binary, validate_id, AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary,
+    GetCFragResponse, MAX_BINARY_SIZE, MAX_ID_LENGTH,
 };
 #[cfg(feature = "production-ao")]
 pub use production_client::ProductionAOClient;

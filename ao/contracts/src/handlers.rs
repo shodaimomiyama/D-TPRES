@@ -30,13 +30,22 @@ pub fn dispatch(state: &mut ProcessState, msg: AOMessage) -> AOResponse {
     let role = state.role.as_ref().unwrap();
 
     // PRD §4: role-based action routing via process tag / msg.role
+    // Combined role allows all Owner + Holder actions (single-process setups).
     match (role, msg.action.as_str()) {
-        (ProcessRole::Owner, "DelegateKFrag") => handle_delegate_kfrag(state, msg),
-        (ProcessRole::Owner, "DelegateCapsule") => handle_delegate_capsule(state, msg),
+        (ProcessRole::Owner | ProcessRole::Combined, "DelegateKFrag") => {
+            handle_delegate_kfrag(state, msg)
+        }
+        (ProcessRole::Owner | ProcessRole::Combined, "DelegateCapsule") => {
+            handle_delegate_capsule(state, msg)
+        }
 
-        (ProcessRole::Holder, "SubmitKFrag") => handle_submit_kfrag(state, msg),
-        (ProcessRole::Holder, "SubmitCapsule") => handle_submit_capsule(state, msg),
-        (ProcessRole::Holder, "Reencrypt") => handle_reencrypt(state, msg),
+        (ProcessRole::Holder | ProcessRole::Combined, "SubmitKFrag") => {
+            handle_submit_kfrag(state, msg)
+        }
+        (ProcessRole::Holder | ProcessRole::Combined, "SubmitCapsule") => {
+            handle_submit_capsule(state, msg)
+        }
+        (ProcessRole::Holder | ProcessRole::Combined, "Reencrypt") => handle_reencrypt(state, msg),
 
         // Queries — allowed for any initialized role
         (_, "GetCFrag") => handle_get_cfrag(state, msg),
@@ -73,6 +82,7 @@ fn handle_init(state: &mut ProcessState, msg: AOMessage) -> AOResponse {
         "Owner" => ProcessRole::Owner,
         "Holder" => ProcessRole::Holder,
         "Requester" => ProcessRole::Requester,
+        "Combined" => ProcessRole::Combined,
         other => return AOResponse::error(format!("Invalid role: {other}")),
     };
 

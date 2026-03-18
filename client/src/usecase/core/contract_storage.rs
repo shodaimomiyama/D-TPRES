@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::adapter::external::ao::{AOClient, AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary, GetCFragResponse};
+use crate::adapter::external::ao::{AOClient, AOExecuteMsg, AOQueryMsg, GetCFragResponse};
 use crate::service::error::{ServiceError, ServiceResult};
 use crate::usecase::core::crypto::{CFragData, KeyFragment};
 
@@ -65,13 +65,19 @@ impl<A: AOClient> ContractStorageImpl<A> {
     ///
     /// Tracked in: PR #83 todo list.
     pub fn new(ao_client: Arc<A>, holder_process_id: impl Into<String>) -> Self {
-        Self { ao_client, holder_process_id: holder_process_id.into() }
+        Self {
+            ao_client,
+            holder_process_id: holder_process_id.into(),
+        }
     }
 
     /// Convenience constructor for single-process setups (holder = owner).
     /// Holder process ID defaults to the contract_id passed at call time.
     pub fn new_single_process(ao_client: Arc<A>) -> Self {
-        Self { ao_client, holder_process_id: String::new() }
+        Self {
+            ao_client,
+            holder_process_id: String::new(),
+        }
     }
 }
 
@@ -85,15 +91,23 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
     ) -> ServiceResult<()> {
         for kfrag in kfrags {
             let kfrag_id = format!("{secret_id}_{}", kfrag.id);
-            let msg = AOExecuteMsg::delegate_kfrag(&kfrag_id, kfrag.key_data.clone());
-            let resp = self.ao_client
+            let holder = if self.holder_process_id.is_empty() {
+                contract_id.to_string()
+            } else {
+                self.holder_process_id.clone()
+            };
+            let msg = AOExecuteMsg::delegate_kfrag(&kfrag_id, kfrag.key_data.clone(), holder);
+            let resp = self
+                .ao_client
                 .execute(contract_id, msg)
                 .await
                 .map_err(|e| ServiceError::ao_network_error(e.to_string()))?;
 
             // Guard: transport succeeded but contract returned logical error
             if !resp.ok {
-                let reason = resp.error.unwrap_or_else(|| "DelegateKFrag returned ok:false".into());
+                let reason = resp
+                    .error
+                    .unwrap_or_else(|| "DelegateKFrag returned ok:false".into());
                 return Err(ServiceError::ao_network_error(format!(
                     "kfrag_id={kfrag_id}: {reason}"
                 )));
@@ -116,15 +130,19 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
             self.holder_process_id.clone()
         };
 
-        let msg = AOExecuteMsg::delegate_capsule(kfrag_id, capsule_id, capsule_data.to_vec(), holder);
-        let resp = self.ao_client
+        let msg =
+            AOExecuteMsg::delegate_capsule(kfrag_id, capsule_id, capsule_data.to_vec(), holder);
+        let resp = self
+            .ao_client
             .execute(contract_id, msg)
             .await
             .map_err(|e| ServiceError::ao_network_error(e.to_string()))?;
 
         // Guard: transport succeeded but contract returned logical error
         if !resp.ok {
-            let reason = resp.error.unwrap_or_else(|| "DelegateCapsule returned ok:false".into());
+            let reason = resp
+                .error
+                .unwrap_or_else(|| "DelegateCapsule returned ok:false".into());
             return Err(ServiceError::ao_network_error(format!(
                 "kfrag_id={kfrag_id}, capsule_id={capsule_id}: {reason}"
             )));
@@ -149,16 +167,25 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
             match self.ao_client.query(process_id, msg).await {
                 Ok(result) => {
                     let response: GetCFragResponse = serde_json::from_slice(result.as_slice())
-                        .map_err(|e| ServiceError::ao_network_error(
-                            format!("Failed to parse cFrag for {kfrag_id}: {e}")
-                        ))?;
+                        .map_err(|e| {
+                            ServiceError::ao_network_error(format!(
+                                "Failed to parse cFrag for {kfrag_id}: {e}"
+                            ))
+                        })?;
                     cfrags.push(CFragData {
                         cfrag_data: response.cfrag,
                         holder_id: kfrag_id,
                     });
                 }
-                Err(_) => {
-                    // cFrag not yet ready for this kfrag — skip
+                Err(e) => {
+                    let msg = e.to_string();
+                    // "not ready" means cFrag hasn't been generated yet — expected, skip
+                    if msg.contains("not ready") || msg.contains("CFrag not ready") {
+                        continue;
+                    }
+                    return Err(ServiceError::ao_network_error(format!(
+                        "Failed to query cFrag for {kfrag_id}: {msg}"
+                    )));
                 }
             }
         }
@@ -171,13 +198,18 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use super::{ContractStorage, ContractStorageImpl};
     use crate::adapter::external::mock_ao::MockAOClient;
     use crate::usecase::core::crypto::KeyFragment;
-    use super::{ContractStorage, ContractStorageImpl};
+    use std::sync::Arc;
 
     fn make_kfrag(id: u8, data: Vec<u8>) -> KeyFragment {
-        KeyFragment { id, key_data: data }
+        KeyFragment {
+            id,
+            key_data: data,
+            verification_data: vec![],
+            precursor: vec![],
+        }
     }
 
     // ─── send_kfrags ─────────────────────────────────────────────────────────
@@ -188,7 +220,9 @@ mod tests {
         let cs = ContractStorageImpl::new_single_process(Arc::clone(&mock));
 
         let kfrags = vec![make_kfrag(0, vec![1, 2, 3])];
-        cs.send_kfrags(&kfrags, "owner-process", "secret-1").await.unwrap();
+        cs.send_kfrags(&kfrags, "owner-process", "secret-1")
+            .await
+            .unwrap();
 
         let stored = mock.get_stored_kfrags("owner-process");
         assert_eq!(stored.len(), 1, "should store 1 kfrag at contract_id");
@@ -207,7 +241,9 @@ mod tests {
             make_kfrag(1, vec![30, 40]),
             make_kfrag(2, vec![50, 60]),
         ];
-        cs.send_kfrags(&kfrags, "owner-process", "secret-x").await.unwrap();
+        cs.send_kfrags(&kfrags, "owner-process", "secret-x")
+            .await
+            .unwrap();
 
         let stored = mock.get_stored_kfrags("owner-process");
         assert_eq!(stored.len(), 3);
@@ -224,7 +260,10 @@ mod tests {
         let result = cs.send_kfrags(&kfrags, "owner-process", "secret-1").await;
         assert!(result.is_err(), "ok:false should propagate as ServiceError");
         let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("secret-1_0"), "error should include kfrag_id");
+        assert!(
+            err_msg.contains("secret-1_0"),
+            "error should include kfrag_id"
+        );
     }
 
     // ─── delegate_capsule: holder_process_id フォールバック ──────────────────
@@ -241,7 +280,11 @@ mod tests {
 
         // Capsule should be stored at contract_id = "owner-process"
         let stored = mock.get_stored_capsules("owner-process");
-        assert_eq!(stored.len(), 1, "capsule should be at contract_id when holder unset");
+        assert_eq!(
+            stored.len(),
+            1,
+            "capsule should be at contract_id when holder unset"
+        );
         let (cap_id, kfrag_id, data) = &stored[0];
         assert_eq!(cap_id, "cap-001");
         assert_eq!(kfrag_id, "kfrag-0");
@@ -258,18 +301,14 @@ mod tests {
             .await
             .unwrap();
 
-        // Nothing stored at owner-process
+        // Mock routes capsule to holder_process_id from the message data
         assert!(
             mock.get_stored_capsules("owner-process").is_empty(),
             "capsule should NOT be at owner-process when holder_process_id is set"
         );
-        // Capsule should be stored at holder-process (via DelegateCapsule → holder routing)
-        // NOTE: MockAOClient stores at the process_id passed to execute(), which is owner-process.
-        // The holder routing in production is done by the Owner contract emitting an OutgoingMessage.
-        // In mock, we just verify the message data contains the correct holder_process_id.
-        let stored_owner = mock.get_stored_capsules("owner-process");
-        assert_eq!(stored_owner.len(), 1);
-        let (cap_id, _, _) = &stored_owner[0];
+        let stored_holder = mock.get_stored_capsules("holder-process");
+        assert_eq!(stored_holder.len(), 1);
+        let (cap_id, _, _) = &stored_holder[0];
         assert_eq!(cap_id, "cap-001");
     }
 
@@ -341,7 +380,7 @@ mod tests {
     #[test]
     fn delegate_kfrag_action_name_matches_contract() {
         use crate::adapter::external::ao::AOExecuteMsg;
-        let msg = AOExecuteMsg::delegate_kfrag("kfrag-0", vec![1, 2, 3]);
+        let msg = AOExecuteMsg::delegate_kfrag("kfrag-0", vec![1, 2, 3], "holder-0");
         assert_eq!(msg.action(), "DelegateKFrag");
     }
 
@@ -364,5 +403,20 @@ mod tests {
         use crate::adapter::external::ao::AOQueryMsg;
         let msg = AOQueryMsg::get_cfrag("kfrag-0", "cap-001");
         assert_eq!(msg.action(), "GetCFrag");
+    }
+
+    #[test]
+    fn init_action_name_matches_contract() {
+        use crate::adapter::external::ao::AOExecuteMsg;
+        let msg = AOExecuteMsg::init("Owner");
+        assert_eq!(msg.action(), "Init");
+    }
+
+    #[test]
+    fn delegate_kfrag_includes_holder_process_id() {
+        use crate::adapter::external::ao::AOExecuteMsg;
+        let msg = AOExecuteMsg::delegate_kfrag("kfrag-0", vec![1, 2, 3], "holder-0");
+        let data = msg.data();
+        assert_eq!(data["holder_process_id"].as_str(), Some("holder-0"));
     }
 }

@@ -45,7 +45,10 @@ pub struct DataItemTag {
 }
 impl DataItemTag {
     pub fn new(name: &str, value: &str) -> Self {
-        Self { name: name.to_string(), value: value.to_string() }
+        Self {
+            name: name.to_string(),
+            value: value.to_string(),
+        }
     }
 }
 
@@ -66,9 +69,10 @@ impl DataItemBuilder {
         target: &str,
         msg: &AOExecuteMsg,
     ) -> Result<UnsignedDataItem, AOCommunicationError> {
-        let data = serde_json::to_vec(msg).map_err(|e| AOCommunicationError::SerializationError {
-            details: format!("Failed to serialize AOExecuteMsg: {e}"),
-        })?;
+        let data =
+            serde_json::to_vec(msg).map_err(|e| AOCommunicationError::SerializationError {
+                details: format!("Failed to serialize AOExecuteMsg: {e}"),
+            })?;
         let target_bytes = Self::decode_target(target)?;
         Ok(UnsignedDataItem {
             target: target_bytes,
@@ -83,9 +87,10 @@ impl DataItemBuilder {
         target: &str,
         msg: &AOExecuteMsg,
     ) -> Result<serde_json::Value, AOCommunicationError> {
-        let data = serde_json::to_string(msg).map_err(|e| AOCommunicationError::SerializationError {
-            details: format!("Failed to serialize AOExecuteMsg: {e}"),
-        })?;
+        let data =
+            serde_json::to_string(msg).map_err(|e| AOCommunicationError::SerializationError {
+                details: format!("Failed to serialize AOExecuteMsg: {e}"),
+            })?;
         Ok(Self::dry_run_json(target, msg.action(), &data))
     }
 
@@ -94,16 +99,20 @@ impl DataItemBuilder {
         target: &str,
         msg: &AOQueryMsg,
     ) -> Result<serde_json::Value, AOCommunicationError> {
-        let data = serde_json::to_string(msg).map_err(|e| AOCommunicationError::SerializationError {
-            details: format!("Failed to serialize AOQueryMsg: {e}"),
-        })?;
+        let data =
+            serde_json::to_string(msg).map_err(|e| AOCommunicationError::SerializationError {
+                details: format!("Failed to serialize AOQueryMsg: {e}"),
+            })?;
         Ok(Self::dry_run_json(target, msg.action(), &data))
     }
 
     fn decode_target(target: &str) -> Result<Vec<u8>, AOCommunicationError> {
-        let bytes = URL_SAFE_NO_PAD.decode(target).map_err(|e| {
-            AOCommunicationError::ValidationError { details: format!("Invalid base64url target: {e}") }
-        })?;
+        let bytes =
+            URL_SAFE_NO_PAD
+                .decode(target)
+                .map_err(|e| AOCommunicationError::ValidationError {
+                    details: format!("Invalid base64url target: {e}"),
+                })?;
         if bytes.len() != 32 {
             return Err(AOCommunicationError::ValidationError {
                 details: format!("Target must be 32 bytes (got {})", bytes.len()),
@@ -125,13 +134,31 @@ impl DataItemBuilder {
 
     fn dry_run_json(target: &str, action: &str, data: &str) -> serde_json::Value {
         #[derive(Serialize)]
-        struct DryRunTag { name: String, value: String }
+        struct DryRunTag {
+            name: String,
+            value: String,
+        }
         let tags: Vec<DryRunTag> = vec![
-            DryRunTag { name: "Data-Protocol".into(), value: DATA_PROTOCOL.into() },
-            DryRunTag { name: "Variant".into(), value: VARIANT.into() },
-            DryRunTag { name: "Type".into(), value: MESSAGE_TYPE.into() },
-            DryRunTag { name: "SDK".into(), value: SDK.into() },
-            DryRunTag { name: "Action".into(), value: action.into() },
+            DryRunTag {
+                name: "Data-Protocol".into(),
+                value: DATA_PROTOCOL.into(),
+            },
+            DryRunTag {
+                name: "Variant".into(),
+                value: VARIANT.into(),
+            },
+            DryRunTag {
+                name: "Type".into(),
+                value: MESSAGE_TYPE.into(),
+            },
+            DryRunTag {
+                name: "SDK".into(),
+                value: SDK.into(),
+            },
+            DryRunTag {
+                name: "Action".into(),
+                value: action.into(),
+            },
         ];
         serde_json::json!({ "Target": target, "Tags": tags, "Data": data })
     }
@@ -148,15 +175,24 @@ impl DataItemBuilder {
 /// exports or JWKs where CRT components are absent).
 #[derive(Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct ArweaveJWK {
-    #[zeroize(skip)] pub kty: String,
-    #[zeroize(skip)] pub n: String,
-    #[zeroize(skip)] pub e: String,
-    #[serde(default)] pub d: String,
-    #[serde(default)] pub p: String,
-    #[serde(default)] pub q: String,
-    #[serde(default)] pub dp: String,
-    #[serde(default)] pub dq: String,
-    #[serde(default)] pub qi: String,
+    #[zeroize(skip)]
+    pub kty: String,
+    #[zeroize(skip)]
+    pub n: String,
+    #[zeroize(skip)]
+    pub e: String,
+    #[serde(default)]
+    pub d: String,
+    #[serde(default)]
+    pub p: String,
+    #[serde(default)]
+    pub q: String,
+    #[serde(default)]
+    pub dp: String,
+    #[serde(default)]
+    pub dq: String,
+    #[serde(default)]
+    pub qi: String,
 }
 
 impl std::fmt::Debug for ArweaveJWK {
@@ -203,8 +239,10 @@ impl DataItemSigner {
         }
 
         let decode = |field: &str, name: &str| -> Result<BigUint, AOCommunicationError> {
-            let bytes = URL_SAFE_NO_PAD.decode(field).map_err(|e| AOCommunicationError::ValidationError {
-                details: format!("Invalid base64url in JWK {name}: {e}"),
+            let bytes = URL_SAFE_NO_PAD.decode(field).map_err(|e| {
+                AOCommunicationError::ValidationError {
+                    details: format!("Invalid base64url in JWK {name}: {e}"),
+                }
             })?;
             Ok(BigUint::from_bytes_be(&bytes))
         };
@@ -225,19 +263,26 @@ impl DataItemSigner {
             }
         })?;
 
-        let owner_bytes = URL_SAFE_NO_PAD.decode(&jwk.n).map_err(|e| AOCommunicationError::ValidationError {
-            details: format!("Invalid base64url in JWK n: {e}"),
-        })?;
+        let owner_bytes =
+            URL_SAFE_NO_PAD
+                .decode(&jwk.n)
+                .map_err(|e| AOCommunicationError::ValidationError {
+                    details: format!("Invalid base64url in JWK n: {e}"),
+                })?;
         if owner_bytes.len() != RSA_OWNER_LENGTH {
             return Err(AOCommunicationError::ValidationError {
                 details: format!(
                     "Invalid RSA modulus length: expected {} bytes, got {}",
-                    RSA_OWNER_LENGTH, owner_bytes.len()
+                    RSA_OWNER_LENGTH,
+                    owner_bytes.len()
                 ),
             });
         }
 
-        Ok(Self { signing_key: SigningKey::<Sha256>::new(private_key), owner_bytes })
+        Ok(Self {
+            signing_key: SigningKey::<Sha256>::new(private_key),
+            owner_bytes,
+        })
     }
 
     /// Owner address: `base64url(SHA-256(owner_public_key_bytes))`

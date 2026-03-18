@@ -50,10 +50,18 @@ impl AOConfig {
         })
     }
 
-    pub fn mu_url(&self) -> &str { &self.mu_url }
-    pub fn cu_url(&self) -> &str { &self.cu_url }
-    pub fn gateway_url(&self) -> &str { &self.gateway_url }
-    pub fn timeout_ms(&self) -> u64 { self.timeout_ms }
+    pub fn mu_url(&self) -> &str {
+        &self.mu_url
+    }
+    pub fn cu_url(&self) -> &str {
+        &self.cu_url
+    }
+    pub fn gateway_url(&self) -> &str {
+        &self.gateway_url
+    }
+    pub fn timeout_ms(&self) -> u64 {
+        self.timeout_ms
+    }
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn from_env() -> Result<Self, AOCommunicationError> {

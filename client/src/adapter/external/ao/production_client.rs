@@ -30,11 +30,16 @@ impl ProductionAOClient {
             .map_err(|e| AOCommunicationError::ConnectionError {
                 details: format!("Failed to create HTTP client: {e}"),
             })?;
-        Ok(Self { config, http_client, signer })
+        Ok(Self {
+            config,
+            http_client,
+            signer,
+        })
     }
 
     async fn post_to_mu(&self, item_bytes: &[u8]) -> Result<String, AOCommunicationError> {
-        let response = self.http_client
+        let response = self
+            .http_client
             .post(self.config.mu_url())
             .header("Content-Type", "application/octet-stream")
             .body(item_bytes.to_vec())
@@ -50,10 +55,13 @@ impl ProductionAOClient {
                 details: format!("MU returned {status}: {body}"),
             });
         }
-        let body: serde_json::Value = response.json().await
-            .map_err(|e| AOCommunicationError::DeserializationError {
-                details: format!("MU response parse: {e}"),
-            })?;
+        let body: serde_json::Value =
+            response
+                .json()
+                .await
+                .map_err(|e| AOCommunicationError::DeserializationError {
+                    details: format!("MU response parse: {e}"),
+                })?;
         body["id"].as_str().map(str::to_string).ok_or_else(|| {
             AOCommunicationError::DeserializationError {
                 details: "MU response missing 'id'".to_string(),
@@ -68,9 +76,15 @@ impl ProductionAOClient {
     ) -> Result<serde_json::Value, AOCommunicationError> {
         let url = format!(
             "{}/result/{}?process-id={}&no-busy",
-            self.config.cu_url(), message_id, process_id
+            self.config.cu_url(),
+            message_id,
+            process_id
         );
-        let response = self.http_client.get(&url).send().await
+        let response = self
+            .http_client
+            .get(&url)
+            .send()
+            .await
             .map_err(|e| Self::map_reqwest_error(&e, "CU result", self.config.timeout_ms()))?;
 
         let status = response.status();
@@ -85,9 +99,12 @@ impl ProductionAOClient {
                 details: format!("CU returned {status}"),
             });
         }
-        response.json().await.map_err(|e| AOCommunicationError::DeserializationError {
-            details: format!("CU result parse: {e}"),
-        })
+        response
+            .json()
+            .await
+            .map_err(|e| AOCommunicationError::DeserializationError {
+                details: format!("CU result parse: {e}"),
+            })
     }
 
     async fn post_cu_dry_run(
@@ -96,7 +113,12 @@ impl ProductionAOClient {
         body: serde_json::Value,
     ) -> Result<serde_json::Value, AOCommunicationError> {
         let url = format!("{}/dry-run?process-id={}", self.config.cu_url(), process_id);
-        let response = self.http_client.post(&url).json(&body).send().await
+        let response = self
+            .http_client
+            .post(&url)
+            .json(&body)
+            .send()
+            .await
             .map_err(|e| Self::map_reqwest_error(&e, "CU dry-run", self.config.timeout_ms()))?;
 
         let status = response.status();
@@ -111,9 +133,12 @@ impl ProductionAOClient {
                 details: format!("CU dry-run returned {status}"),
             });
         }
-        response.json().await.map_err(|e| AOCommunicationError::DeserializationError {
-            details: format!("CU dry-run parse: {e}"),
-        })
+        response
+            .json()
+            .await
+            .map_err(|e| AOCommunicationError::DeserializationError {
+                details: format!("CU dry-run parse: {e}"),
+            })
     }
 
     /// Parse AO-native response from CU result.
@@ -179,7 +204,12 @@ impl ProductionAOClient {
         }
 
         // No Output block — treat as empty success (e.g. MU acknowledgment only)
-        Ok(AONativeResponse { ok: true, data: None, error: None, message_id })
+        Ok(AONativeResponse {
+            ok: true,
+            data: None,
+            error: None,
+            message_id,
+        })
     }
 
     fn parse_cu_dryrun_data(
@@ -198,8 +228,12 @@ impl ProductionAOClient {
         if let Some(obj) = json.get("Output") {
             if let Some(data_str) = obj.get("data").and_then(|d| d.as_str()) {
                 // Try base64 decode, fallback to raw bytes
-                use base64::{engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD}, Engine};
-                return match STANDARD.decode(data_str)
+                use base64::{
+                    engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD},
+                    Engine,
+                };
+                return match STANDARD
+                    .decode(data_str)
                     .or_else(|_| URL_SAFE_NO_PAD.decode(data_str))
                 {
                     Ok(decoded) => Ok(Binary::from(decoded)),
@@ -219,11 +253,20 @@ impl ProductionAOClient {
         Ok(Binary::from(Vec::new()))
     }
 
-    fn map_reqwest_error(err: &reqwest::Error, operation: &str, timeout_ms: u64) -> AOCommunicationError {
+    fn map_reqwest_error(
+        err: &reqwest::Error,
+        operation: &str,
+        timeout_ms: u64,
+    ) -> AOCommunicationError {
         if err.is_timeout() {
-            AOCommunicationError::Timeout { operation: operation.to_string(), timeout_ms }
+            AOCommunicationError::Timeout {
+                operation: operation.to_string(),
+                timeout_ms,
+            }
         } else if err.is_connect() {
-            AOCommunicationError::ConnectionError { details: format!("{operation} connect: {err}") }
+            AOCommunicationError::ConnectionError {
+                details: format!("{operation} connect: {err}"),
+            }
         } else {
             AOCommunicationError::ExecutionError {
                 process_id: String::new(),

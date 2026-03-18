@@ -14,31 +14,51 @@ use serde::{Deserialize, Serialize};
 pub struct Binary(#[serde(with = "base64_serde")] pub Vec<u8>);
 
 impl Binary {
-    pub fn new(bytes: Vec<u8>) -> Self { Self(bytes) }
-    pub fn as_slice(&self) -> &[u8] { &self.0 }
-    pub fn len(&self) -> usize { self.0.len() }
-    pub fn is_empty(&self) -> bool { self.0.is_empty() }
-    pub fn into_vec(self) -> Vec<u8> { self.0 }
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    pub fn into_vec(self) -> Vec<u8> {
+        self.0
+    }
 }
 impl From<Vec<u8>> for Binary {
-    fn from(bytes: Vec<u8>) -> Self { Self(bytes) }
+    fn from(bytes: Vec<u8>) -> Self {
+        Self(bytes)
+    }
 }
 impl From<&[u8]> for Binary {
-    fn from(bytes: &[u8]) -> Self { Self(bytes.to_vec()) }
+    fn from(bytes: &[u8]) -> Self {
+        Self(bytes.to_vec())
+    }
 }
 impl AsRef<[u8]> for Binary {
-    fn as_ref(&self) -> &[u8] { &self.0 }
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
 }
 
 mod base64_serde {
     use base64::{engine::general_purpose::STANDARD, Engine};
     use serde::{Deserialize, Deserializer, Serializer};
     pub fn serialize<S>(bytes: &Vec<u8>, serializer: S) -> Result<S::Ok, S::Error>
-    where S: Serializer {
+    where
+        S: Serializer,
+    {
         serializer.serialize_str(&STANDARD.encode(bytes))
     }
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
-    where D: Deserializer<'de> {
+    where
+        D: Deserializer<'de>,
+    {
         let s = String::deserialize(deserializer)?;
         STANDARD.decode(&s).map_err(serde::de::Error::custom)
     }
@@ -61,19 +81,37 @@ pub struct AOExecuteMsg {
 
 impl AOExecuteMsg {
     /// The action name (e.g. `"DelegateKFrag"`). Used internally by DataItemBuilder.
-    pub fn action(&self) -> &str { &self.action }
+    pub fn action(&self) -> &str {
+        &self.action
+    }
     /// The payload data.
-    pub fn data(&self) -> &serde_json::Value { &self.data }
+    pub fn data(&self) -> &serde_json::Value {
+        &self.data
+    }
 }
 
 impl AOExecuteMsg {
+    /// Initialize a process with a specific role.
+    /// Must be the first message sent to a newly-spawned AO process.
+    pub fn init(role: impl Into<String>) -> Self {
+        Self {
+            action: "Init".to_string(),
+            data: serde_json::json!({ "role": role.into() }),
+        }
+    }
+
     /// Delegate a kFrag to the Holder-Process.
-    pub fn delegate_kfrag(kfrag_id: impl Into<String>, kfrag: Vec<u8>) -> Self {
+    pub fn delegate_kfrag(
+        kfrag_id: impl Into<String>,
+        kfrag: Vec<u8>,
+        holder_process_id: impl Into<String>,
+    ) -> Self {
         Self {
             action: "DelegateKFrag".to_string(),
             data: serde_json::json!({
                 "kfrag_id": kfrag_id.into(),
                 "kfrag": kfrag,
+                "holder_process_id": holder_process_id.into(),
             }),
         }
     }
@@ -122,9 +160,13 @@ pub struct AOQueryMsg {
 
 impl AOQueryMsg {
     /// The action name (e.g. `"GetCFrag"`). Used internally by DataItemBuilder.
-    pub fn action(&self) -> &str { &self.action }
+    pub fn action(&self) -> &str {
+        &self.action
+    }
     /// The payload data.
-    pub fn data(&self) -> &serde_json::Value { &self.data }
+    pub fn data(&self) -> &serde_json::Value {
+        &self.data
+    }
 }
 
 impl AOQueryMsg {
@@ -176,14 +218,29 @@ pub struct AONativeResponse {
 }
 
 impl AONativeResponse {
-    pub fn success(data: serde_json::Value) -> Self {
-        Self { ok: true, data: Some(data), error: None, message_id: None }
+    pub fn success(payload: serde_json::Value) -> Self {
+        Self {
+            ok: true,
+            data: Some(payload),
+            error: None,
+            message_id: None,
+        }
     }
     pub fn success_empty() -> Self {
-        Self { ok: true, data: None, error: None, message_id: None }
+        Self {
+            ok: true,
+            data: None,
+            error: None,
+            message_id: None,
+        }
     }
     pub fn error_response(reason: impl Into<String>) -> Self {
-        Self { ok: false, data: None, error: Some(reason.into()), message_id: None }
+        Self {
+            ok: false,
+            data: None,
+            error: Some(reason.into()),
+            message_id: None,
+        }
     }
 }
 
@@ -204,18 +261,27 @@ pub const MAX_ID_LENGTH: usize = 128;
 pub const MAX_BINARY_SIZE: usize = 128 * 1024;
 
 pub fn validate_id(id: &str, field: &str) -> Result<(), String> {
-    if id.is_empty() { return Err(format!("{field} cannot be empty")); }
+    if id.is_empty() {
+        return Err(format!("{field} cannot be empty"));
+    }
     if id.len() > MAX_ID_LENGTH {
         return Err(format!("{field} must be <= {MAX_ID_LENGTH} chars"));
     }
-    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
-        return Err(format!("{field} must be ASCII alphanumeric, underscore or hyphen"));
+    if !id
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err(format!(
+            "{field} must be ASCII alphanumeric, underscore or hyphen"
+        ));
     }
     Ok(())
 }
 
 pub fn validate_binary(binary: &[u8], field: &str) -> Result<(), String> {
-    if binary.is_empty() { return Err(format!("{field} cannot be empty")); }
+    if binary.is_empty() {
+        return Err(format!("{field} cannot be empty"));
+    }
     if binary.len() > MAX_BINARY_SIZE {
         return Err(format!("{field} exceeds {}KB", MAX_BINARY_SIZE / 1024));
     }

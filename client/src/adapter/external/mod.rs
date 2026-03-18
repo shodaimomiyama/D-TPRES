@@ -16,8 +16,8 @@ pub use arweave::{ArweaveClientConfig, ArweaveClientImpl, ArweaveWallet};
 
 // Re-export HyperBEAM-native AO types (new default)
 pub use ao::{
-    AOClient, AOConfig, AOExecuteMsg, AONativeResponse, AOQueryMsg,
-    Binary, GetCFragResponse, MAX_BINARY_SIZE, MAX_ID_LENGTH,
+    AOClient, AOConfig, AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary, GetCFragResponse,
+    MAX_BINARY_SIZE, MAX_ID_LENGTH,
 };
 #[cfg(feature = "production-ao")]
 pub use ao::{ArweaveJWK, DataItemBuilder, DataItemSigner, ProductionAOClient};
