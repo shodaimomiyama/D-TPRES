@@ -231,7 +231,21 @@ impl AOClient for MockAOClient {
                 let capsule_id = data_str(d, "capsule_id")?;
                 let capsule = data_bytes(d, "capsule")?;
                 let holder_process_id = data_str(d, "holder_process_id")?;
-                // Route capsule to holder_process_id (mirrors contract OutgoingMessage)
+                // Mirror contract: verify holder was registered via DelegateKFrag
+                {
+                    let holders = self.kfrag_holders.read().unwrap();
+                    let registered = holders
+                        .get(process_id)
+                        .and_then(|m| m.get(kfrag_id));
+                    if registered.is_none() {
+                        return Err(AOCommunicationError::ExecutionError {
+                            process_id: process_id.to_string(),
+                            details: format!(
+                                "No holder registered for kfrag_id: {kfrag_id}"
+                            ),
+                        });
+                    }
+                }
                 self.store_capsule(holder_process_id, kfrag_id, capsule_id, capsule);
                 Ok(AONativeResponse::success(
                     serde_json::json!({ "capsule_id": capsule_id, "delegated": true }),

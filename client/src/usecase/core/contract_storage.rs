@@ -174,7 +174,7 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
                         })?;
                     cfrags.push(CFragData {
                         cfrag_data: response.cfrag,
-                        holder_id: kfrag_id,
+                        holder_id: process_id.to_string(),
                     });
                 }
                 Err(e) => {
@@ -274,6 +274,12 @@ mod tests {
         let mock = Arc::new(MockAOClient::new());
         let cs = ContractStorageImpl::new_single_process(Arc::clone(&mock));
 
+        // Pre-register kfrag so mock's holder validation passes
+        use crate::adapter::external::ao::{AOClient, AOExecuteMsg};
+        let kfrag_msg =
+            AOExecuteMsg::delegate_kfrag("kfrag-0", vec![1, 2, 3], "owner-process");
+        mock.execute("owner-process", kfrag_msg).await.unwrap();
+
         cs.delegate_capsule(b"capsule-data", "owner-process", "kfrag-0", "cap-001")
             .await
             .unwrap();
@@ -296,6 +302,12 @@ mod tests {
     async fn delegate_capsule_uses_holder_when_set() {
         let mock = Arc::new(MockAOClient::new());
         let cs = ContractStorageImpl::new(Arc::clone(&mock), "holder-process");
+
+        // Pre-register kfrag so mock's holder validation passes
+        use crate::adapter::external::ao::{AOClient, AOExecuteMsg};
+        let kfrag_msg =
+            AOExecuteMsg::delegate_kfrag("kfrag-0", vec![1, 2, 3], "holder-process");
+        mock.execute("owner-process", kfrag_msg).await.unwrap();
 
         cs.delegate_capsule(b"capsule-data", "owner-process", "kfrag-0", "cap-001")
             .await
@@ -341,7 +353,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(cfrags.len(), 1);
-        assert_eq!(cfrags[0].holder_id, "secret-1_0");
+        assert_eq!(cfrags[0].holder_id, "holder-process");
     }
 
     #[tokio::test]
