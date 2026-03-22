@@ -9,10 +9,22 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
 use crate::adapter::external::ao::{AOClient, AOExecuteMsg, AOQueryMsg, GetCFragResponse};
 use crate::service::error::{ServiceError, ServiceResult};
 use crate::usecase::core::crypto::{CFragData, KeyFragment};
+
+/// Bincode-serializable payload matching the contract's `StoredKeyFrag` layout.
+/// The contract validates incoming kFrag bytes via `bincode::deserialize::<StoredKeyFrag>`,
+/// so the client must send the full structure — not just `key_data`.
+#[derive(Serialize, Deserialize)]
+struct StoredKeyFragPayload {
+    id: String,
+    key_data: Vec<u8>,
+    verification_data: Vec<u8>,
+    precursor: Vec<u8>,
+}
 
 /// Contract storage trait for AO Network communication.
 #[async_trait]
@@ -96,7 +108,16 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
             } else {
                 self.holder_process_id.clone()
             };
-            let msg = AOExecuteMsg::delegate_kfrag(&kfrag_id, kfrag.key_data.clone(), holder);
+            let payload = StoredKeyFragPayload {
+                id: kfrag_id.clone(),
+                key_data: kfrag.key_data.clone(),
+                verification_data: kfrag.verification_data.clone(),
+                precursor: kfrag.precursor.clone(),
+            };
+            let kfrag_bytes = bincode::serialize(&payload).map_err(|e| {
+                ServiceError::validation_error(format!("kFrag serialization failed: {e}"))
+            })?;
+            let msg = AOExecuteMsg::delegate_kfrag(&kfrag_id, kfrag_bytes, holder);
             let resp = self
                 .ao_client
                 .execute(contract_id, msg)
@@ -228,7 +249,10 @@ mod tests {
         assert_eq!(stored.len(), 1, "should store 1 kfrag at contract_id");
         let (kfrag_id, data) = &stored[0];
         assert_eq!(kfrag_id, "secret-1_0");
-        assert_eq!(data, &[1u8, 2, 3]);
+        // Stored bytes are bincode-serialized StoredKeyFragPayload
+        let decoded: super::StoredKeyFragPayload =
+            bincode::deserialize(data).expect("should deserialize as StoredKeyFragPayload");
+        assert_eq!(decoded.key_data, vec![1u8, 2, 3]);
     }
 
     #[tokio::test]
