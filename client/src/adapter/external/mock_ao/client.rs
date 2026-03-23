@@ -2,6 +2,7 @@
 //!
 //! Implements `AOClient` from `ao/` using `AOExecuteMsg`/`AOQueryMsg`/`AONativeResponse`.
 //! All business logic dispatches on `msg.action()` string instead of enum variants.
+//! Uses real Umbral proxy re-encryption for DelegateCapsule/SubmitCapsule/Reencrypt.
 
 #![allow(clippy::unwrap_used)]
 #![allow(clippy::disallowed_names)]
@@ -12,11 +13,33 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 
 use async_trait::async_trait;
+use serde::Deserialize;
+use umbral_pre::{DefaultDeserialize, DefaultSerialize};
 
 use crate::adapter::errors::AOCommunicationError;
 use crate::adapter::external::ao::{
     AOClient, AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary, GetCFragResponse,
 };
+
+// ─── Local structs mirroring contract's StoredKeyFrag / VerificationData ──────
+// Duplicated here to avoid layering dependency on ao/contracts.
+
+#[derive(Deserialize)]
+struct MockStoredKeyFrag {
+    #[allow(dead_code)]
+    id: String,
+    key_data: Vec<u8>,
+    verification_data: Vec<u8>,
+    #[allow(dead_code)]
+    precursor: Vec<u8>,
+}
+
+#[derive(Deserialize)]
+struct MockVerificationData {
+    verifying_pk: Vec<u8>,
+    delegating_pk: Vec<u8>,
+    receiving_pk: Vec<u8>,
+}
 
 /// Configuration for MockAOClient behavior
 #[derive(Debug, Clone, Default)]
@@ -155,6 +178,102 @@ impl Default for MockAOClient {
     }
 }
 
+/// Real Umbral proxy re-encryption (ported from ao/contracts/src/handlers.rs:402-464).
+/// Takes bincode-serialized StoredKeyFragPayload and raw Capsule bytes.
+/// Returns raw CapsuleFrag bytes (suitable for `CapsuleFrag::from_bytes`).
+fn perform_reencryption(
+    kfrag_bytes: &[u8],
+    capsule_bytes: &[u8],
+) -> Result<Vec<u8>, AOCommunicationError> {
+    if kfrag_bytes.is_empty() {
+        return Err(AOCommunicationError::ExecutionError {
+            process_id: String::new(),
+            details: "Empty kFrag payload".to_string(),
+        });
+    }
+    if capsule_bytes.is_empty() {
+        return Err(AOCommunicationError::ExecutionError {
+            process_id: String::new(),
+            details: "Empty capsule payload".to_string(),
+        });
+    }
+
+    let stored_kfrag: MockStoredKeyFrag =
+        bincode::deserialize(kfrag_bytes).map_err(|e| AOCommunicationError::ExecutionError {
+            process_id: String::new(),
+            details: format!("KFrag deserialize failed: {e}"),
+        })?;
+
+    if stored_kfrag.key_data.is_empty() {
+        return Err(AOCommunicationError::ExecutionError {
+            process_id: String::new(),
+            details: "Invalid kFrag data".to_string(),
+        });
+    }
+    if stored_kfrag.verification_data.is_empty() {
+        return Err(AOCommunicationError::ExecutionError {
+            process_id: String::new(),
+            details: "Missing verification data".to_string(),
+        });
+    }
+
+    let verification: MockVerificationData = bincode::deserialize(&stored_kfrag.verification_data)
+        .map_err(|_| AOCommunicationError::ExecutionError {
+            process_id: String::new(),
+            details: "Invalid verification payload".to_string(),
+        })?;
+
+    let verifying_pk: umbral_pre::PublicKey = bincode::deserialize(&verification.verifying_pk)
+        .map_err(|_| AOCommunicationError::ExecutionError {
+            process_id: String::new(),
+            details: "Invalid verifying key".to_string(),
+        })?;
+
+    let delegating_pk: umbral_pre::PublicKey = bincode::deserialize(&verification.delegating_pk)
+        .map_err(|_| AOCommunicationError::ExecutionError {
+            process_id: String::new(),
+            details: "Invalid delegating key".to_string(),
+        })?;
+
+    let receiving_pk: umbral_pre::PublicKey = bincode::deserialize(&verification.receiving_pk)
+        .map_err(|_| AOCommunicationError::ExecutionError {
+            process_id: String::new(),
+            details: "Invalid receiving key".to_string(),
+        })?;
+
+    let key_frag = umbral_pre::KeyFrag::from_bytes(&stored_kfrag.key_data).map_err(|_| {
+        AOCommunicationError::ExecutionError {
+            process_id: String::new(),
+            details: "Failed to deserialize kFrag".to_string(),
+        }
+    })?;
+
+    let verified_kfrag = key_frag
+        .verify(&verifying_pk, Some(&delegating_pk), Some(&receiving_pk))
+        .map_err(|_| AOCommunicationError::ExecutionError {
+            process_id: String::new(),
+            details: "kFrag verification failed".to_string(),
+        })?;
+
+    // Client serializes capsules with bincode (see crypto.rs:create_pre_capsule)
+    let capsule: umbral_pre::Capsule =
+        bincode::deserialize(capsule_bytes).map_err(|e| AOCommunicationError::ExecutionError {
+            process_id: String::new(),
+            details: format!("Capsule deserialize failed: {e:?}"),
+        })?;
+
+    let verified_cfrag = umbral_pre::reencrypt(&capsule, verified_kfrag);
+    let cfrag = verified_cfrag.unverify();
+    let cfrag_bytes = cfrag
+        .to_bytes()
+        .map_err(|_| AOCommunicationError::ExecutionError {
+            process_id: String::new(),
+            details: "Failed to serialize cFrag".to_string(),
+        })?;
+
+    Ok(cfrag_bytes.to_vec())
+}
+
 /// Extract a string field from `msg.data` JSON.
 fn data_str<'a>(data: &'a serde_json::Value, field: &str) -> Result<&'a str, AOCommunicationError> {
     data.get(field)
@@ -234,22 +353,37 @@ impl AOClient for MockAOClient {
                 // Mirror contract: verify holder was registered via DelegateKFrag
                 {
                     let holders = self.kfrag_holders.read().unwrap();
-                    let registered = holders
-                        .get(process_id)
-                        .and_then(|m| m.get(kfrag_id));
+                    let registered = holders.get(process_id).and_then(|m| m.get(kfrag_id));
                     if registered.is_none() {
                         return Err(AOCommunicationError::ExecutionError {
                             process_id: process_id.to_string(),
-                            details: format!(
-                                "No holder registered for kfrag_id: {kfrag_id}"
-                            ),
+                            details: format!("No holder registered for kfrag_id: {kfrag_id}"),
                         });
                     }
                 }
-                self.store_capsule(holder_process_id, kfrag_id, capsule_id, capsule);
-                Ok(AONativeResponse::success(
-                    serde_json::json!({ "capsule_id": capsule_id, "delegated": true }),
-                ))
+                self.store_capsule(holder_process_id, kfrag_id, capsule_id, capsule.clone());
+
+                // Perform real Umbral re-encryption (replacing dummy cFrag)
+                let kfrag_bytes = {
+                    let storage = self.kfrag_storage.read().unwrap();
+                    storage
+                        .get(process_id)
+                        .and_then(|m| m.get(kfrag_id))
+                        .cloned()
+                };
+                match kfrag_bytes {
+                    Some(kb) => {
+                        let cfrag = perform_reencryption(&kb, &capsule)?;
+                        self.store_cfrag(holder_process_id, kfrag_id, capsule_id, cfrag);
+                        Ok(AONativeResponse::success(
+                            serde_json::json!({ "capsule_id": capsule_id, "cfrag_ready": true }),
+                        ))
+                    }
+                    None => Err(AOCommunicationError::ExecutionError {
+                        process_id: process_id.to_string(),
+                        details: format!("KFrag not found for re-encryption: {kfrag_id}"),
+                    }),
+                }
             }
             "SubmitKFrag" => {
                 let kfrag_id = data_str(d, "kfrag_id")?;
@@ -263,22 +397,67 @@ impl AOClient for MockAOClient {
                 let kfrag_id = data_str(d, "kfrag_id")?;
                 let capsule_id = data_str(d, "capsule_id")?;
                 let capsule = data_bytes(d, "capsule")?;
-                // Simulate re-encryption: store dummy cFrag
-                let dummy_cfrag = format!("cfrag:{kfrag_id}:{capsule_id}").into_bytes();
-                self.store_capsule(process_id, kfrag_id, capsule_id, capsule);
-                self.store_cfrag(process_id, kfrag_id, capsule_id, dummy_cfrag);
-                Ok(AONativeResponse::success(
-                    serde_json::json!({ "capsule_id": capsule_id, "cfrag_ready": true }),
-                ))
+                self.store_capsule(process_id, kfrag_id, capsule_id, capsule.clone());
+
+                // Perform real Umbral re-encryption (no dummy fallback)
+                let kfrag_bytes = {
+                    let storage = self.kfrag_storage.read().unwrap();
+                    storage
+                        .get(process_id)
+                        .and_then(|m| m.get(kfrag_id))
+                        .cloned()
+                };
+                match kfrag_bytes {
+                    Some(kb) => {
+                        let cfrag = perform_reencryption(&kb, &capsule)?;
+                        self.store_cfrag(process_id, kfrag_id, capsule_id, cfrag);
+                        Ok(AONativeResponse::success(
+                            serde_json::json!({ "capsule_id": capsule_id, "cfrag_ready": true }),
+                        ))
+                    }
+                    None => Err(AOCommunicationError::ExecutionError {
+                        process_id: process_id.to_string(),
+                        details: format!("KFrag not found for re-encryption: {kfrag_id}"),
+                    }),
+                }
             }
             "Reencrypt" => {
                 let kfrag_id = data_str(d, "kfrag_id")?;
                 let capsule_id = data_str(d, "capsule_id")?;
-                let dummy_cfrag = format!("cfrag:{kfrag_id}:{capsule_id}").into_bytes();
-                self.store_cfrag(process_id, kfrag_id, capsule_id, dummy_cfrag);
-                Ok(AONativeResponse::success(
-                    serde_json::json!({ "capsule_id": capsule_id, "cfrag_ready": true }),
-                ))
+
+                // Look up kfrag and capsule, then perform real re-encryption
+                let kfrag_bytes = {
+                    let storage = self.kfrag_storage.read().unwrap();
+                    storage
+                        .get(process_id)
+                        .and_then(|m| m.get(kfrag_id))
+                        .cloned()
+                };
+                let capsule_bytes = {
+                    let storage = self.capsule_storage.read().unwrap();
+                    storage
+                        .get(process_id)
+                        .and_then(|m| m.get(capsule_id))
+                        .map(|(_, data)| data.clone())
+                };
+
+                match (kfrag_bytes, capsule_bytes) {
+                    (Some(kb), Some(cb)) => {
+                        let cfrag = perform_reencryption(&kb, &cb)?;
+                        self.store_cfrag(process_id, kfrag_id, capsule_id, cfrag);
+                        Ok(AONativeResponse::success(
+                            serde_json::json!({ "capsule_id": capsule_id, "cfrag_ready": true }),
+                        ))
+                    }
+                    (None, _) => Err(AOCommunicationError::ExecutionError {
+                        process_id: process_id.to_string(),
+                        details: format!("KFrag not found: {kfrag_id}"),
+                    }),
+                    (_, None) => Err(AOCommunicationError::ExecutionError {
+                        process_id: process_id.to_string(),
+                        details: format!("Capsule not found: {capsule_id}"),
+                    }),
+                }
             }
             other => Err(AOCommunicationError::ExecutionError {
                 process_id: process_id.to_string(),

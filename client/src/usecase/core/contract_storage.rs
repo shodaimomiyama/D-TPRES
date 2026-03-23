@@ -298,13 +298,14 @@ mod tests {
         let mock = Arc::new(MockAOClient::new());
         let cs = ContractStorageImpl::new_single_process(Arc::clone(&mock));
 
-        // Pre-register kfrag so mock's holder validation passes
         use crate::adapter::external::ao::{AOClient, AOExecuteMsg};
-        let kfrag_msg =
-            AOExecuteMsg::delegate_kfrag("kfrag-0", vec![1, 2, 3], "owner-process");
+        let (kfrag_bytes, capsule_bytes) = create_test_crypto_data("kfrag-0");
+
+        // Pre-register kfrag with valid Umbral data
+        let kfrag_msg = AOExecuteMsg::delegate_kfrag("kfrag-0", kfrag_bytes, "owner-process");
         mock.execute("owner-process", kfrag_msg).await.unwrap();
 
-        cs.delegate_capsule(b"capsule-data", "owner-process", "kfrag-0", "cap-001")
+        cs.delegate_capsule(&capsule_bytes, "owner-process", "kfrag-0", "cap-001")
             .await
             .unwrap();
 
@@ -315,10 +316,9 @@ mod tests {
             1,
             "capsule should be at contract_id when holder unset"
         );
-        let (cap_id, kfrag_id, data) = &stored[0];
+        let (cap_id, kfrag_id, _data) = &stored[0];
         assert_eq!(cap_id, "cap-001");
         assert_eq!(kfrag_id, "kfrag-0");
-        assert_eq!(data, b"capsule-data");
     }
 
     /// holder_process_id が設定済み → そのプロセスIDに送られる
@@ -327,13 +327,14 @@ mod tests {
         let mock = Arc::new(MockAOClient::new());
         let cs = ContractStorageImpl::new(Arc::clone(&mock), "holder-process");
 
-        // Pre-register kfrag so mock's holder validation passes
         use crate::adapter::external::ao::{AOClient, AOExecuteMsg};
-        let kfrag_msg =
-            AOExecuteMsg::delegate_kfrag("kfrag-0", vec![1, 2, 3], "holder-process");
+        let (kfrag_bytes, capsule_bytes) = create_test_crypto_data("kfrag-0");
+
+        // Pre-register kfrag with valid Umbral data
+        let kfrag_msg = AOExecuteMsg::delegate_kfrag("kfrag-0", kfrag_bytes, "holder-process");
         mock.execute("owner-process", kfrag_msg).await.unwrap();
 
-        cs.delegate_capsule(b"capsule-data", "owner-process", "kfrag-0", "cap-001")
+        cs.delegate_capsule(&capsule_bytes, "owner-process", "kfrag-0", "cap-001")
             .await
             .unwrap();
 
@@ -362,14 +363,75 @@ mod tests {
 
     // ─── retrieve_cfrags ─────────────────────────────────────────────────────
 
+    /// Generate valid Umbral kFrag + Capsule test data for a given kfrag_id.
+    fn create_test_crypto_data(kfrag_id: &str) -> (Vec<u8>, Vec<u8>) {
+        use serde::Serialize as TestSerialize;
+        use umbral_pre::{DefaultSerialize, SecretKey};
+
+        #[derive(TestSerialize)]
+        struct Payload {
+            id: String,
+            key_data: Vec<u8>,
+            verification_data: Vec<u8>,
+            precursor: Vec<u8>,
+        }
+        #[derive(TestSerialize)]
+        struct VD {
+            verifying_pk: Vec<u8>,
+            delegating_pk: Vec<u8>,
+            receiving_pk: Vec<u8>,
+        }
+
+        let delegating_sk = SecretKey::random();
+        let delegating_pk = delegating_sk.public_key();
+        let receiving_sk = SecretKey::random();
+        let receiving_pk = receiving_sk.public_key();
+        let signing_sk = SecretKey::random();
+        let verifying_pk = signing_sk.public_key();
+        let signer = umbral_pre::Signer::new(signing_sk);
+
+        let (capsule, _) = umbral_pre::encrypt(&delegating_pk, b"test").unwrap();
+        let capsule_bytes = bincode::serialize(&capsule).unwrap();
+
+        let verified_kfrags =
+            umbral_pre::generate_kfrags(&delegating_sk, &receiving_pk, &signer, 1, 1, true, true);
+        let kfrag = verified_kfrags[0].clone().unverify();
+        let kfrag_data = kfrag.to_bytes().unwrap().to_vec();
+
+        let vd = VD {
+            verifying_pk: bincode::serialize(&verifying_pk).unwrap(),
+            delegating_pk: bincode::serialize(&delegating_pk).unwrap(),
+            receiving_pk: bincode::serialize(&receiving_pk).unwrap(),
+        };
+
+        let payload = Payload {
+            id: kfrag_id.to_string(),
+            key_data: kfrag_data,
+            verification_data: bincode::serialize(&vd).unwrap(),
+            precursor: vec![],
+        };
+        (bincode::serialize(&payload).unwrap(), capsule_bytes)
+    }
+
     #[tokio::test]
     async fn retrieve_cfrags_returns_ready_cfrags() {
         let mock = Arc::new(MockAOClient::new());
         let cs = ContractStorageImpl::new_single_process(Arc::clone(&mock));
 
-        // Simulate re-encryption: use Reencrypt action to generate a cFrag
         use crate::adapter::external::ao::{AOClient, AOExecuteMsg};
-        let msg = AOExecuteMsg::reencrypt("secret-1_0", "cap-001");
+        let (kfrag_bytes, capsule_bytes) = create_test_crypto_data("secret-1_0");
+
+        // DelegateKFrag → stores kfrag at holder-process
+        let msg = AOExecuteMsg::delegate_kfrag("secret-1_0", kfrag_bytes, "holder-process");
+        mock.execute("holder-process", msg).await.unwrap();
+
+        // DelegateCapsule → triggers real re-encryption → cFrag stored
+        let msg = AOExecuteMsg::delegate_capsule(
+            "secret-1_0",
+            "cap-001",
+            capsule_bytes,
+            "holder-process",
+        );
         mock.execute("holder-process", msg).await.unwrap();
 
         let cfrags = cs
@@ -385,9 +447,19 @@ mod tests {
         let mock = Arc::new(MockAOClient::new());
         let cs = ContractStorageImpl::new_single_process(Arc::clone(&mock));
 
-        // total_shares=3 but only 1 cfrag exists
         use crate::adapter::external::ao::{AOClient, AOExecuteMsg};
-        let msg = AOExecuteMsg::reencrypt("secret-1_1", "cap-001");
+        // Only create data for kfrag index 1 (out of 3)
+        let (kfrag_bytes, capsule_bytes) = create_test_crypto_data("secret-1_1");
+
+        let msg = AOExecuteMsg::delegate_kfrag("secret-1_1", kfrag_bytes, "holder-process");
+        mock.execute("holder-process", msg).await.unwrap();
+
+        let msg = AOExecuteMsg::delegate_capsule(
+            "secret-1_1",
+            "cap-001",
+            capsule_bytes,
+            "holder-process",
+        );
         mock.execute("holder-process", msg).await.unwrap();
 
         let cfrags = cs

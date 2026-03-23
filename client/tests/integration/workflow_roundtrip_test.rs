@@ -13,6 +13,7 @@ use std::sync::Arc;
 use zeroize::Zeroizing;
 
 use formix::adapter::external::mock_ao::MockAOClient;
+use formix::domain::value_objects::SecretId;
 use formix::usecase::core::contract_storage::ContractStorageImpl;
 use formix::usecase::core::crypto::{
     CFragData, CryptoService, CryptoServiceImpl as CoreCryptoServiceImpl, ShamirShare,
@@ -21,8 +22,11 @@ use formix::usecase::core::storage::ArweaveStorageServiceImpl;
 use formix::usecase::service::{
     CryptoServiceImpl as ServiceCryptoServiceImpl, StorageServiceImpl as ServiceStorageServiceImpl,
 };
-use formix::usecase::workflow::{SecretSharingWorkflowService, SecretSharingWorkflowServiceImpl};
-use formix::usecase::SecretSharingRequest;
+use formix::usecase::workflow::{
+    SecretRecoveryWorkflowService, SecretRecoveryWorkflowServiceImpl, SecretSharingWorkflowService,
+    SecretSharingWorkflowServiceImpl,
+};
+use formix::usecase::{SecretRecoveryRequest, SecretSharingRequest};
 
 // ============================================================================
 // PHASE 1 → PHASE 3 Roundtrip Tests (Task 22)
@@ -642,4 +646,215 @@ fn test_full_pre_roundtrip_phase1_phase2_phase3() {
     println!("  [PASS] AES-encrypted secret also decrypted correctly");
 
     println!("\n[PASS] Full PRE roundtrip Phase 1 → Phase 2 → Phase 3 successful!");
+}
+
+// ============================================================================
+// E2E Tests: Phase 1 → Phase 2 → Phase 3 via Workflow Services (GAP-5)
+// ============================================================================
+
+/// Wire up both sharing and recovery workflow services with shared MockAOClient + Arweave.
+fn setup_e2e_services() -> (
+    Arc<CoreCryptoServiceImpl>,
+    SecretSharingWorkflowServiceImpl<
+        ServiceCryptoServiceImpl<CoreCryptoServiceImpl>,
+        ServiceStorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<MockAOClient>>,
+    >,
+    SecretRecoveryWorkflowServiceImpl<
+        ServiceCryptoServiceImpl<CoreCryptoServiceImpl>,
+        ServiceStorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<MockAOClient>>,
+    >,
+) {
+    let core_crypto = Arc::new(CoreCryptoServiceImpl::new());
+    let service_crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
+    let mock_ao = Arc::new(MockAOClient::new());
+    let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+    let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
+    let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
+
+    let sharing =
+        SecretSharingWorkflowServiceImpl::new(Arc::clone(&service_crypto), Arc::clone(&storage));
+    let recovery = SecretRecoveryWorkflowServiceImpl::new(service_crypto, storage);
+
+    (core_crypto, sharing, recovery)
+}
+
+/// Happy path: Phase 1 → Phase 2 (auto) → Phase 3, k=3, n=5.
+/// Verifies that the recovered secret equals the original byte-for-byte.
+#[tokio::test]
+async fn test_e2e_full_pipeline_phase1_to_phase3() {
+    let (core_crypto, sharing, recovery) = setup_e2e_services();
+
+    let (owner_sk, owner_pk) = core_crypto.generate_keypair().unwrap();
+    let (requester_sk, requester_pk) = core_crypto.generate_keypair().unwrap();
+
+    let original_secret = b"E2E happy-path test secret (k=3, n=5)!";
+    let secret_data: Vec<u8> = original_secret.to_vec();
+    let owner_process_id = "e2e-owner-process";
+
+    // ── Phase 1 ──
+    let phase1 = sharing
+        .execute_secret_sharing(SecretSharingRequest {
+            secret: Zeroizing::new(secret_data.clone()),
+            owner_secret_key: owner_sk,
+            owner_public_key: owner_pk.clone(),
+            requester_public_key: requester_pk,
+            threshold: 3,
+            total_shares: 5,
+            owner_process_id: owner_process_id.to_string(),
+            metadata: None,
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(phase1.kfrag_count, 5);
+    assert_eq!(phase1.share_tx_ids.len(), 5);
+
+    // ── Phase 2 is automatic (MockAOClient performs real Umbral re-encryption) ──
+
+    // ── Phase 3 ──
+    let phase3 = recovery
+        .execute_secret_recovery(SecretRecoveryRequest {
+            secret_id: phase1.secret_id,
+            requester_secret_key: requester_sk,
+            owner_public_key: owner_pk,
+            requester_process_id: owner_process_id.to_string(),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(phase3.recovered_secret, secret_data);
+}
+
+/// Error case: fewer cFrags than threshold → InsufficientCFrags.
+///
+/// Uses a fresh MockAOClient where no cFrags exist for the kfrag_ids,
+/// so Phase 3 retrieves 0 cFrags against k=3.
+#[tokio::test]
+async fn test_e2e_threshold_not_met() {
+    let core_crypto = Arc::new(CoreCryptoServiceImpl::new());
+    let service_crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
+    let mock_ao_phase1 = Arc::new(MockAOClient::new());
+    let arweave = Arc::new(ArweaveStorageServiceImpl::default());
+    let contract_phase1 = Arc::new(ContractStorageImpl::new_single_process(Arc::clone(
+        &mock_ao_phase1,
+    )));
+    let storage_phase1 = Arc::new(ServiceStorageServiceImpl::new(
+        Arc::clone(&arweave),
+        contract_phase1,
+    ));
+
+    let (owner_sk, owner_pk) = core_crypto.generate_keypair().unwrap();
+    let (requester_sk, requester_pk) = core_crypto.generate_keypair().unwrap();
+
+    let owner_process_id = "e2e-threshold-owner";
+    let original_secret = b"Threshold test secret";
+
+    // Phase 1: share normally
+    let sharing = SecretSharingWorkflowServiceImpl::new(
+        Arc::clone(&service_crypto),
+        Arc::clone(&storage_phase1),
+    );
+    let phase1 = sharing
+        .execute_secret_sharing(SecretSharingRequest {
+            secret: Zeroizing::new(original_secret.to_vec()),
+            owner_secret_key: owner_sk,
+            owner_public_key: owner_pk.clone(),
+            requester_public_key: requester_pk,
+            threshold: 3,
+            total_shares: 5,
+            owner_process_id: owner_process_id.to_string(),
+            metadata: None,
+        })
+        .await
+        .unwrap();
+
+    // Phase 3: use a NEW MockAOClient that has NO cFrags
+    let mock_ao_empty = Arc::new(MockAOClient::new());
+    let contract_empty = Arc::new(ContractStorageImpl::new_single_process(mock_ao_empty));
+    let storage_empty = Arc::new(ServiceStorageServiceImpl::new(arweave, contract_empty));
+    let recovery = SecretRecoveryWorkflowServiceImpl::new(service_crypto, storage_empty);
+
+    let result = recovery
+        .execute_secret_recovery(SecretRecoveryRequest {
+            secret_id: phase1.secret_id,
+            requester_secret_key: requester_sk,
+            owner_public_key: owner_pk,
+            requester_process_id: owner_process_id.to_string(),
+        })
+        .await;
+
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    let err_msg = err.to_string();
+    assert!(
+        err_msg.contains("Insufficient") || err_msg.contains("insufficient"),
+        "Expected InsufficientCFrags error, got: {err_msg}"
+    );
+}
+
+/// Error case: wrong requester secret key → PRE decryption failure.
+#[tokio::test]
+async fn test_e2e_wrong_requester_key() {
+    let (core_crypto, sharing, recovery) = setup_e2e_services();
+
+    let (owner_sk, owner_pk) = core_crypto.generate_keypair().unwrap();
+    let (_correct_requester_sk, requester_pk) = core_crypto.generate_keypair().unwrap();
+    let (wrong_requester_sk, _) = core_crypto.generate_keypair().unwrap();
+
+    let owner_process_id = "e2e-wrong-key-owner";
+
+    let phase1 = sharing
+        .execute_secret_sharing(SecretSharingRequest {
+            secret: Zeroizing::new(b"Wrong key test secret".to_vec()),
+            owner_secret_key: owner_sk,
+            owner_public_key: owner_pk.clone(),
+            requester_public_key: requester_pk,
+            threshold: 3,
+            total_shares: 5,
+            owner_process_id: owner_process_id.to_string(),
+            metadata: None,
+        })
+        .await
+        .unwrap();
+
+    let result = recovery
+        .execute_secret_recovery(SecretRecoveryRequest {
+            secret_id: phase1.secret_id,
+            requester_secret_key: wrong_requester_sk,
+            owner_public_key: owner_pk,
+            requester_process_id: owner_process_id.to_string(),
+        })
+        .await;
+
+    assert!(result.is_err());
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("decrypt") || err_msg.contains("Decrypt") || err_msg.contains("PRE"),
+        "Expected decryption error, got: {err_msg}"
+    );
+}
+
+/// Error case: non-existent secret → Capsule not found.
+#[tokio::test]
+async fn test_e2e_capsule_not_found() {
+    let (core_crypto, _sharing, recovery) = setup_e2e_services();
+
+    let (requester_sk, _) = core_crypto.generate_keypair().unwrap();
+    let (_, owner_pk) = core_crypto.generate_keypair().unwrap();
+
+    let result = recovery
+        .execute_secret_recovery(SecretRecoveryRequest {
+            secret_id: SecretId::new("nonexistent-secret-id"),
+            requester_secret_key: requester_sk,
+            owner_public_key: owner_pk,
+            requester_process_id: "e2e-notfound-process".to_string(),
+        })
+        .await;
+
+    assert!(result.is_err());
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("not found") || err_msg.contains("Not found"),
+        "Expected not-found error, got: {err_msg}"
+    );
 }
