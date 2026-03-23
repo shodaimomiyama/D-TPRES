@@ -11,7 +11,7 @@ use zeroize::Zeroizing;
 fn create_test_container() -> DefaultActionsContainer {
     let mock_ao = Arc::new(MockAOClient::new());
     let arweave = Arc::new(ArweaveStorageServiceImpl::default());
-    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
     DefaultActionsContainer::with_storage(arweave, contract)
 }
 

@@ -25,7 +25,7 @@ fn create_test_service() -> SecretRecoveryWorkflowServiceImpl<TestCryptoService,
 
     let mock_ao = Arc::new(MockAOClient::new());
     let arweave = Arc::new(ArweaveStorageServiceImpl::default());
-    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
     let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
 
     SecretRecoveryWorkflowServiceImpl::new(crypto, storage)

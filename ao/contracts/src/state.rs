@@ -1,34 +1,39 @@
 use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 
-/// Replaces ao_cwao/'s CosmWasm storage maps.
-/// All data lives in WASM linear memory; HyperBEAM snapshots/restores it.
+use serde::{Deserialize, Serialize};
+use zeroize::{Zeroize, ZeroizeOnDrop};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProcessRole {
+    Owner,
+    Holder,
+    Requester,
+    /// Single-process mode: allows both Owner and Holder actions.
+    Combined,
+}
+
+/// WASM-memory-resident state, persisted via HyperBEAM memory snapshots.
 ///
 /// Key naming mirrors ao_cwao/:
-///   OWNER_KFRAGS     → owner_kfrags:  (kfrag_id)         → OwnerKFragData
-///   OWNER_CAPSULES   → owner_capsules: (kfrag_id, cap_id) → OwnerCapsuleData
-///   HOLDER_CFRAGS    → holder_cfrags:  (kfrag_id, cap_id) → HolderCFragData
-///   KFRAG_HOLDERS    → kfrag_holders:  kfrag_id           → holder_process_id
-///   INDEX_KFRAG_TO_CAPS → kfrag_to_caps: kfrag_id         → [capsule_ids]
+///   OWNER_KFRAGS     -> owner_kfrags:  (kfrag_id)         -> raw bytes
+///   OWNER_CAPSULES   -> owner_capsules: (kfrag_id, cap_id) -> OwnerCapsuleData
+///   HOLDER_CFRAGS    -> holder_cfrags:  (kfrag_id, cap_id) -> raw bytes
+///   KFRAG_HOLDERS    -> kfrag_holders:  kfrag_id           -> holder_process_id
+///   INDEX_KFRAG_TO_CAPS -> kfrag_to_caps: kfrag_id         -> [capsule_ids]
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ProcessState {
-    /// kfrag_id → raw kFrag bytes (bincode-encoded StoredKeyFrag)
+    pub role: Option<ProcessRole>,
+    /// Authorized owner address (the AO process/wallet that initialized this contract)
+    pub owner_id: Option<String>,
+
     pub owner_kfrags: HashMap<String, Vec<u8>>,
-
-    /// (kfrag_id, capsule_id) compound key → capsule data
     pub owner_capsules: HashMap<String, OwnerCapsuleData>,
-
-    /// (kfrag_id, capsule_id) compound key → re-encrypted cFrag bytes
     pub holder_cfrags: HashMap<String, Vec<u8>>,
-
-    /// kfrag_id → target holder AO process ID (replaces DEFAULT_HOLDER_PROCESS_ID)
     pub kfrag_holders: HashMap<String, String>,
-
-    /// kfrag_id → list of capsule_ids (for listing)
     pub kfrag_to_caps: HashMap<String, Vec<String>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OwnerCapsuleData {
     pub capsule_bytes: Vec<u8>,
     pub status: CapsuleStatus,
@@ -49,8 +54,43 @@ impl ProcessState {
         Self::default()
     }
 
-    /// Compound key for capsule/cfrag lookups
+    // Length-prefixed encoding prevents collisions from IDs containing the delimiter
     pub fn cap_key(kfrag_id: &str, capsule_id: &str) -> String {
-        format!("{}/{}", kfrag_id, capsule_id)
+        format!("{}:{}/{}", kfrag_id.len(), kfrag_id, capsule_id)
     }
+
+    pub fn is_initialized(&self) -> bool {
+        self.role.is_some()
+    }
+
+    pub fn is_authorized_sender(&self, from: Option<&str>) -> bool {
+        match (&self.owner_id, from) {
+            (Some(owner), Some(sender)) => owner == sender,
+            _ => false,
+        }
+    }
+}
+
+/// Intermediate deserialized kFrag — zeroized on drop to prevent
+/// key material from lingering in WASM linear memory after use.
+#[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+pub struct StoredKeyFrag {
+    #[zeroize(skip)]
+    pub id: String,
+    pub key_data: Vec<u8>,
+    pub verification_data: Vec<u8>,
+    pub precursor: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+pub struct StoredCFrag {
+    pub fragment_data: Vec<u8>,
+}
+
+/// Deserialized from StoredKeyFrag.verification_data for kFrag verification.
+#[derive(Serialize, Deserialize)]
+pub struct VerificationData {
+    pub verifying_pk: Vec<u8>,
+    pub delegating_pk: Vec<u8>,
+    pub receiving_pk: Vec<u8>,
 }

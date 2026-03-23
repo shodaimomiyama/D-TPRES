@@ -360,7 +360,8 @@ impl<C: CryptoService, ST: StorageService> SecretSharingWorkflowService
         let mut delegate_failed_ids: Vec<(String, String)> = Vec::new();
 
         for kfrag in &kfrags {
-            let kfrag_id = format!("kfrag-{}", kfrag.id);
+            // Must match the format used in send_kfrags: {secret_id}_{index}
+            let kfrag_id = format!("{}_{}", secret_id.as_str(), kfrag.id);
             let mut last_err: Option<String> = None;
 
             for attempt in 0..=DELEGATE_CAPSULE_MAX_RETRIES {

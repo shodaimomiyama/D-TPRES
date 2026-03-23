@@ -1,6 +1,5 @@
 use formix::adapter::external::ao::{
-    AOEvent, AOMessageTags, AOResponse, Binary, CapsuleStatus, ExecuteMsg, QueryMsg,
-    ValidateMessage,
+    AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary, GetCFragResponse,
 };
 
 #[test]
@@ -28,186 +27,97 @@ fn test_binary_serialization() {
 }
 
 #[test]
-fn test_execute_msg_delegate_kfrag_serialization() {
-    let msg = ExecuteMsg::DelegateKFrag {
-        kfrag_id: "kfrag-001".to_string(),
-        kfrag: Binary::new(vec![1, 2, 3, 4]),
-    };
-
-    let json = serde_json::to_string(&msg).unwrap();
-    assert!(json.contains("kfrag_id"));
-
-    let deserialized: ExecuteMsg = serde_json::from_str(&json).unwrap();
-    assert_eq!(msg, deserialized);
+fn test_ao_execute_msg_delegate_kfrag() {
+    let msg = AOExecuteMsg::delegate_kfrag("kfrag-001", vec![1, 2, 3, 4], "holder-1");
+    assert_eq!(msg.action(), "DelegateKFrag");
+    assert_eq!(msg.data()["kfrag_id"].as_str(), Some("kfrag-001"));
+    assert_eq!(msg.data()["holder_process_id"].as_str(), Some("holder-1"));
 }
 
 #[test]
-fn test_execute_msg_delegate_capsule_serialization() {
-    let msg = ExecuteMsg::DelegateCapsule {
-        kfrag_id: "kfrag-001".to_string(),
-        capsule_id: "capsule-001".to_string(),
-        capsule: Binary::new(vec![5, 6, 7, 8]),
-    };
-
-    let json = serde_json::to_string(&msg).unwrap();
-    assert!(json.contains("capsule_id"));
-
-    let deserialized: ExecuteMsg = serde_json::from_str(&json).unwrap();
-    assert_eq!(msg, deserialized);
+fn test_ao_execute_msg_delegate_capsule() {
+    let msg =
+        AOExecuteMsg::delegate_capsule("kfrag-001", "capsule-001", vec![5, 6, 7, 8], "holder-1");
+    assert_eq!(msg.action(), "DelegateCapsule");
+    assert_eq!(msg.data()["capsule_id"].as_str(), Some("capsule-001"));
+    assert_eq!(msg.data()["holder_process_id"].as_str(), Some("holder-1"));
 }
 
 #[test]
-fn test_query_msg_get_cfrag_serialization() {
-    let msg = QueryMsg::GetCFrag {
-        kfrag_id: "kfrag-001".to_string(),
-        capsule_id: "capsule-001".to_string(),
-    };
-
-    let json = serde_json::to_string(&msg).unwrap();
-    assert!(json.contains("kfrag_id"));
-
-    let deserialized: QueryMsg = serde_json::from_str(&json).unwrap();
-    assert_eq!(msg, deserialized);
+fn test_ao_execute_msg_reencrypt() {
+    let msg = AOExecuteMsg::reencrypt("kfrag-001", "capsule-001");
+    assert_eq!(msg.action(), "Reencrypt");
+    assert_eq!(msg.data()["kfrag_id"].as_str(), Some("kfrag-001"));
+    assert_eq!(msg.data()["capsule_id"].as_str(), Some("capsule-001"));
 }
 
 #[test]
-fn test_query_msg_list_capsules_serialization() {
-    let msg = QueryMsg::ListCapsulesByKFrag {
-        kfrag_id: "kfrag-001".to_string(),
-        start_after: Some("capsule-000".to_string()),
-        limit: Some(10),
-    };
-
-    let json = serde_json::to_string(&msg).unwrap();
-    assert!(json.contains("kfrag_id"));
-
-    let deserialized: QueryMsg = serde_json::from_str(&json).unwrap();
-    assert_eq!(msg, deserialized);
+fn test_ao_execute_msg_init() {
+    let msg = AOExecuteMsg::init("Owner");
+    assert_eq!(msg.action(), "Init");
+    assert_eq!(msg.data()["role"].as_str(), Some("Owner"));
 }
 
 #[test]
-fn test_validate_execute_msg_delegate_kfrag() {
-    let valid_msg = ExecuteMsg::DelegateKFrag {
-        kfrag_id: "valid-kfrag-id".to_string(),
-        kfrag: Binary::new(vec![1, 2, 3]),
-    };
-    assert!(valid_msg.validate().is_ok());
-
-    let empty_id_msg = ExecuteMsg::DelegateKFrag {
-        kfrag_id: "".to_string(),
-        kfrag: Binary::new(vec![1, 2, 3]),
-    };
-    assert!(empty_id_msg.validate().is_err());
-
-    let empty_data_msg = ExecuteMsg::DelegateKFrag {
-        kfrag_id: "valid-kfrag-id".to_string(),
-        kfrag: Binary::new(vec![]),
-    };
-    assert!(empty_data_msg.validate().is_err());
+fn test_ao_query_msg_get_cfrag() {
+    let msg = AOQueryMsg::get_cfrag("kfrag-001", "capsule-001");
+    assert_eq!(msg.action(), "GetCFrag");
+    assert_eq!(msg.data()["kfrag_id"].as_str(), Some("kfrag-001"));
+    assert_eq!(msg.data()["capsule_id"].as_str(), Some("capsule-001"));
 }
 
 #[test]
-fn test_validate_query_msg_list_capsules() {
-    let valid_msg = QueryMsg::ListCapsulesByKFrag {
-        kfrag_id: "valid-kfrag-id".to_string(),
-        start_after: None,
-        limit: Some(50),
-    };
-    assert!(valid_msg.validate().is_ok());
-
-    let invalid_limit_zero = QueryMsg::ListCapsulesByKFrag {
-        kfrag_id: "valid-kfrag-id".to_string(),
-        start_after: None,
-        limit: Some(0),
-    };
-    assert!(invalid_limit_zero.validate().is_err());
-
-    let invalid_limit_over = QueryMsg::ListCapsulesByKFrag {
-        kfrag_id: "valid-kfrag-id".to_string(),
-        start_after: None,
-        limit: Some(101),
-    };
-    assert!(invalid_limit_over.validate().is_err());
+fn test_ao_query_msg_list_capsules() {
+    let msg =
+        AOQueryMsg::list_capsules_by_kfrag("kfrag-001", Some("cap-000".to_string()), Some(10));
+    assert_eq!(msg.action(), "ListCapsules");
+    assert_eq!(msg.data()["kfrag_id"].as_str(), Some("kfrag-001"));
+    assert_eq!(msg.data()["start_after"].as_str(), Some("cap-000"));
 }
 
 #[test]
-fn test_ao_response_creation() {
-    let response = AOResponse::success();
-    assert!(response.success);
+fn test_ao_native_response_success() {
+    let response = AONativeResponse::success(serde_json::json!({"key": "value"}));
+    assert!(response.ok);
+    assert!(response.data.is_some());
+    assert!(response.error.is_none());
+}
+
+#[test]
+fn test_ao_native_response_error() {
+    let response = AONativeResponse::error_response("something failed");
+    assert!(!response.ok);
     assert!(response.data.is_none());
-    assert!(response.events.is_empty());
-
-    let response_with_data = AOResponse::success_with_data(Binary::new(vec![1, 2, 3]));
-    assert!(response_with_data.success);
-    assert!(response_with_data.data.is_some());
-
-    let event = AOEvent::new("kfrag_delegated");
-    let response_with_events = AOResponse::success_with_events(vec![event]);
-    assert_eq!(response_with_events.events.len(), 1);
+    assert_eq!(response.error, Some("something failed".to_string()));
 }
 
 #[test]
-fn test_ao_event_creation() {
-    let mut event = AOEvent::new("test_event");
-    event.add_attribute("key1", "value1");
-    event.add_attribute("key2", "value2");
-
-    assert_eq!(event.event_type, "test_event");
-    assert_eq!(event.attributes.len(), 2);
-    assert_eq!(event.attributes[0].key, "key1");
-    assert_eq!(event.attributes[0].value, "value1");
+fn test_get_cfrag_response_serialization() {
+    let response = GetCFragResponse {
+        kfrag_id: "kfrag-001".to_string(),
+        capsule_id: "capsule-001".to_string(),
+        cfrag: vec![1, 2, 3, 4],
+    };
+    let json = serde_json::to_string(&response).unwrap();
+    let deserialized: GetCFragResponse = serde_json::from_str(&json).unwrap();
+    assert_eq!(deserialized.kfrag_id, "kfrag-001");
+    assert_eq!(deserialized.cfrag, vec![1, 2, 3, 4]);
 }
 
 #[test]
-fn test_ao_event_with_attributes() {
-    let event = AOEvent::with_attributes(
-        "kfrag_delegated",
-        vec![("kfrag_id", "kfrag-001"), ("process_id", "proc-001")],
-    );
-
-    assert_eq!(event.event_type, "kfrag_delegated");
-    assert_eq!(event.attributes.len(), 2);
+fn test_ao_execute_msg_serialization_roundtrip() {
+    let msg = AOExecuteMsg::delegate_kfrag("kfrag-001", vec![1, 2, 3], "holder-1");
+    let json = serde_json::to_string(&msg).unwrap();
+    assert!(json.contains("DelegateKFrag"));
+    let deserialized: AOExecuteMsg = serde_json::from_str(&json).unwrap();
+    assert_eq!(deserialized.action(), "DelegateKFrag");
 }
 
 #[test]
-fn test_ao_message_tags_execute() {
-    let tags = AOMessageTags::new_execute(
-        "DelegateKFrag",
-        r#"{"kfrag_id":"test"}"#,
-        "process-001",
-        "actor-001",
-        "2024-01-01T00:00:00Z",
-    );
-
-    assert_eq!(tags.app_name, "cwao");
-    assert_eq!(tags.action, "DelegateKFrag");
-    assert_eq!(tags.read_only, "False");
-    assert!(!tags.is_read_only());
-}
-
-#[test]
-fn test_ao_message_tags_query() {
-    let tags = AOMessageTags::new_query(
-        "GetCFrag",
-        r#"{"kfrag_id":"test"}"#,
-        "process-001",
-        "actor-001",
-        "2024-01-01T00:00:00Z",
-    );
-
-    assert_eq!(tags.app_name, "cwao");
-    assert_eq!(tags.action, "GetCFrag");
-    assert_eq!(tags.read_only, "True");
-    assert!(tags.is_read_only());
-}
-
-#[test]
-fn test_capsule_status_serialization() {
-    let status = CapsuleStatus::Pending;
-    let json = serde_json::to_string(&status).unwrap();
-    assert_eq!(json, "\"pending\"");
-
-    let status = CapsuleStatus::Reencrypted;
-    let json = serde_json::to_string(&status).unwrap();
-    assert_eq!(json, "\"reencrypted\"");
+fn test_ao_query_msg_serialization_roundtrip() {
+    let msg = AOQueryMsg::get_cfrag("kfrag-001", "capsule-001");
+    let json = serde_json::to_string(&msg).unwrap();
+    assert!(json.contains("GetCFrag"));
+    let deserialized: AOQueryMsg = serde_json::from_str(&json).unwrap();
+    assert_eq!(deserialized.action(), "GetCFrag");
 }

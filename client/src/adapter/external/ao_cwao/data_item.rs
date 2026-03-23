@@ -1,17 +1,6 @@
-//! ANS-104 DataItem builder and signer for HyperBEAM AO.
-//!
-//! Port of `ao_cwao/data_item.rs` with updated message types.
-//! Core changes:
-//! - `ExecuteMsg` / `QueryMsg` → `AOExecuteMsg` / `AOQueryMsg`
-//! - `action` read via `.action()` accessor (private field)
-//!
-//! Signing and ANS-104 encoding are IDENTICAL to ao_cwao — do not diverge.
-//! Specifically:
-//!   - Deep-hash (SHA-384 recursive tree) is preserved exactly
-//!   - Tags are Avro-encoded (zigzag varint + block encoding)
-//!   - RSA signature / owner padding is 512-byte zero-padded
-
 #![allow(clippy::disallowed_names)]
+
+use std::fmt;
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
@@ -24,25 +13,22 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256, Sha384};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use super::message::{AOExecuteMsg, AOQueryMsg};
+use super::message::{ExecuteMsg, QueryMsg};
 use crate::adapter::errors::AOCommunicationError;
 
-// AO protocol constants (unchanged)
+// AO protocol constants
 const DATA_PROTOCOL: &str = "ao";
 const VARIANT: &str = "ao.TN.1";
 const MESSAGE_TYPE: &str = "Message";
 const SDK: &str = "ao";
 
-// ANS-104 constants (must match ao_cwao)
-const SIG_TYPE_RSA256: u16 = 1;
-const RSA_SIG_LENGTH: usize = 512;
-const RSA_OWNER_LENGTH: usize = 512;
-
+/// Tag attached to a DataItem (name-value pair)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataItemTag {
     pub name: String,
     pub value: String,
 }
+
 impl DataItemTag {
     pub fn new(name: &str, value: &str) -> Self {
         Self {
@@ -52,6 +38,7 @@ impl DataItemTag {
     }
 }
 
+/// Unsigned DataItem ready for signing (ANS-104 format)
 #[derive(Debug, Clone)]
 pub struct UnsignedDataItem {
     pub target: Vec<u8>,
@@ -60,65 +47,154 @@ pub struct UnsignedDataItem {
     pub data: Vec<u8>,
 }
 
-/// Builds AO-compatible DataItems from `AOExecuteMsg` / `AOQueryMsg`.
+/// Builds AO-compatible DataItems from ExecuteMsg/QueryMsg
 pub struct DataItemBuilder;
 
 impl DataItemBuilder {
-    /// Build an unsigned DataItem from `AOExecuteMsg` for MU submission.
+    /// Build an unsigned DataItem from an ExecuteMsg for MU submission
     pub fn build_execute(
         target: &str,
-        msg: &AOExecuteMsg,
+        msg: &ExecuteMsg,
     ) -> Result<UnsignedDataItem, AOCommunicationError> {
+        let action = Self::execute_msg_action(msg);
         let data =
             serde_json::to_vec(msg).map_err(|e| AOCommunicationError::SerializationError {
-                details: format!("Failed to serialize AOExecuteMsg: {e}"),
+                details: format!("Failed to serialize ExecuteMsg: {e}"),
             })?;
-        let target_bytes = Self::decode_target(target)?;
-        Ok(UnsignedDataItem {
-            target: target_bytes,
-            anchor: Vec::new(),
-            tags: Self::ao_tags(target, msg.action()),
-            data,
-        })
-    }
 
-    /// Build a JSON body for CU dry-run (AOExecuteMsg).
-    pub fn build_dry_run_body(
-        target: &str,
-        msg: &AOExecuteMsg,
-    ) -> Result<serde_json::Value, AOCommunicationError> {
-        let data =
-            serde_json::to_string(msg).map_err(|e| AOCommunicationError::SerializationError {
-                details: format!("Failed to serialize AOExecuteMsg: {e}"),
-            })?;
-        Ok(Self::dry_run_json(target, msg.action(), &data))
-    }
+        let tags = Self::ao_tags(target, &action);
 
-    /// Build a JSON body for CU dry-run (AOQueryMsg).
-    pub fn build_query_body(
-        target: &str,
-        msg: &AOQueryMsg,
-    ) -> Result<serde_json::Value, AOCommunicationError> {
-        let data =
-            serde_json::to_string(msg).map_err(|e| AOCommunicationError::SerializationError {
-                details: format!("Failed to serialize AOQueryMsg: {e}"),
-            })?;
-        Ok(Self::dry_run_json(target, msg.action(), &data))
-    }
-
-    fn decode_target(target: &str) -> Result<Vec<u8>, AOCommunicationError> {
-        let bytes =
+        let target_bytes =
             URL_SAFE_NO_PAD
                 .decode(target)
                 .map_err(|e| AOCommunicationError::ValidationError {
                     details: format!("Invalid base64url target: {e}"),
                 })?;
-        if bytes.len() != 32 {
+        if target_bytes.len() != 32 {
             return Err(AOCommunicationError::ValidationError {
-                details: format!("Target must be 32 bytes (got {})", bytes.len()),
+                details: format!("Target must be 32 bytes (got {})", target_bytes.len()),
             });
         }
-        Ok(bytes)
+
+        Ok(UnsignedDataItem {
+            target: target_bytes,
+            anchor: Vec::new(),
+            tags,
+            data,
+        })
+    }
+
+    /// Build a JSON body for CU dry-run API (ExecuteMsg)
+    pub fn build_dry_run_body(
+        target: &str,
+        msg: &ExecuteMsg,
+    ) -> Result<serde_json::Value, AOCommunicationError> {
+        let action = Self::execute_msg_action(msg);
+        let data =
+            serde_json::to_string(msg).map_err(|e| AOCommunicationError::SerializationError {
+                details: format!("Failed to serialize ExecuteMsg: {e}"),
+            })?;
+
+        Ok(Self::dry_run_json(target, &action, &data))
+    }
+
+    /// Build a JSON body for CU dry-run API (QueryMsg)
+    pub fn build_query_body(
+        target: &str,
+        msg: &QueryMsg,
+    ) -> Result<serde_json::Value, AOCommunicationError> {
+        let action = Self::query_msg_action(msg);
+        let data =
+            serde_json::to_string(msg).map_err(|e| AOCommunicationError::SerializationError {
+                details: format!("Failed to serialize QueryMsg: {e}"),
+            })?;
+
+        Ok(Self::dry_run_json(target, &action, &data))
+    }
+
+    fn execute_msg_action(msg: &ExecuteMsg) -> String {
+        match msg {
+            ExecuteMsg::DelegateKFrag { .. } => "DelegateKFrag".to_string(),
+            ExecuteMsg::DelegateCapsule { .. } => "DelegateCapsule".to_string(),
+            ExecuteMsg::SubmitKFrag { .. } => "SubmitKFrag".to_string(),
+            ExecuteMsg::SubmitCapsule { .. } => "SubmitCapsule".to_string(),
+            ExecuteMsg::Reencrypt { .. } => "Reencrypt".to_string(),
+        }
+    }
+
+    fn query_msg_action(msg: &QueryMsg) -> String {
+        match msg {
+            QueryMsg::GetCFrag { .. } => "GetCFrag".to_string(),
+            QueryMsg::ListCapsulesByKFrag { .. } => "ListCapsulesByKFrag".to_string(),
+        }
+    }
+
+    /// Build an unsigned DataItem with Read-Only tag for query via MU
+    pub fn build_read_only(
+        target: &str,
+        msg: &QueryMsg,
+    ) -> Result<UnsignedDataItem, AOCommunicationError> {
+        let action = Self::query_msg_action(msg);
+        let data =
+            serde_json::to_vec(msg).map_err(|e| AOCommunicationError::SerializationError {
+                details: format!("Failed to serialize QueryMsg: {e}"),
+            })?;
+
+        let mut tags = Self::ao_tags(target, &action);
+        tags.push(DataItemTag::new("Read-Only", "True"));
+
+        let target_bytes =
+            URL_SAFE_NO_PAD
+                .decode(target)
+                .map_err(|e| AOCommunicationError::ValidationError {
+                    details: format!("Invalid base64url target: {e}"),
+                })?;
+        if target_bytes.len() != 32 {
+            return Err(AOCommunicationError::ValidationError {
+                details: format!("Target must be 32 bytes (got {})", target_bytes.len()),
+            });
+        }
+
+        Ok(UnsignedDataItem {
+            target: target_bytes,
+            anchor: Vec::new(),
+            tags,
+            data,
+        })
+    }
+
+    /// Build an unsigned DataItem with Read-Only tag for dry-run via MU
+    pub fn build_dry_run(
+        target: &str,
+        msg: &ExecuteMsg,
+    ) -> Result<UnsignedDataItem, AOCommunicationError> {
+        let action = Self::execute_msg_action(msg);
+        let data =
+            serde_json::to_vec(msg).map_err(|e| AOCommunicationError::SerializationError {
+                details: format!("Failed to serialize ExecuteMsg: {e}"),
+            })?;
+
+        let mut tags = Self::ao_tags(target, &action);
+        tags.push(DataItemTag::new("Read-Only", "True"));
+
+        let target_bytes =
+            URL_SAFE_NO_PAD
+                .decode(target)
+                .map_err(|e| AOCommunicationError::ValidationError {
+                    details: format!("Invalid base64url target: {e}"),
+                })?;
+        if target_bytes.len() != 32 {
+            return Err(AOCommunicationError::ValidationError {
+                details: format!("Target must be 32 bytes (got {})", target_bytes.len()),
+            });
+        }
+
+        Ok(UnsignedDataItem {
+            target: target_bytes,
+            anchor: Vec::new(),
+            tags,
+            data,
+        })
     }
 
     fn ao_tags(target: &str, action: &str) -> Vec<DataItemTag> {
@@ -138,41 +214,42 @@ impl DataItemBuilder {
             name: String,
             value: String,
         }
+
         let tags: Vec<DryRunTag> = vec![
             DryRunTag {
-                name: "Data-Protocol".into(),
-                value: DATA_PROTOCOL.into(),
+                name: "Data-Protocol".to_string(),
+                value: DATA_PROTOCOL.to_string(),
             },
             DryRunTag {
-                name: "Variant".into(),
-                value: VARIANT.into(),
+                name: "Variant".to_string(),
+                value: VARIANT.to_string(),
             },
             DryRunTag {
-                name: "Type".into(),
-                value: MESSAGE_TYPE.into(),
+                name: "Type".to_string(),
+                value: MESSAGE_TYPE.to_string(),
             },
             DryRunTag {
-                name: "SDK".into(),
-                value: SDK.into(),
+                name: "SDK".to_string(),
+                value: SDK.to_string(),
             },
             DryRunTag {
-                name: "Action".into(),
-                value: action.into(),
+                name: "Action".to_string(),
+                value: action.to_string(),
             },
         ];
-        serde_json::json!({ "Target": target, "Tags": tags, "Data": data })
+
+        serde_json::json!({
+            "Target": target,
+            "Tags": tags,
+            "Data": data,
+        })
     }
 }
 
-// ─── ArweaveJWK ───────────────────────────────────────────────────────────────
-
-/// Arweave JWK (JSON Web Key) for RSA signing.
+/// Arweave JWK (JSON Web Key) for RSA signing
 ///
-/// Secret fields are zeroized on drop to prevent private key material from
-/// lingering in memory.
-///
-/// `p/q/dp/dq/qi` have `#[serde(default)]` to accept minimal JWKs (e.g. public-key only
-/// exports or JWKs where CRT components are absent).
+/// Secret RSA components (d, p, q, dp, dq, qi) are zeroized on drop
+/// to prevent private key material from lingering in memory.
 #[derive(Deserialize, Zeroize, ZeroizeOnDrop)]
 pub struct ArweaveJWK {
     #[zeroize(skip)]
@@ -195,8 +272,8 @@ pub struct ArweaveJWK {
     pub qi: String,
 }
 
-impl std::fmt::Debug for ArweaveJWK {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for ArweaveJWK {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ArweaveJWK")
             .field("kty", &self.kty)
             .field("n", &format!("[{} chars]", self.n.len()))
@@ -204,20 +281,19 @@ impl std::fmt::Debug for ArweaveJWK {
             .field("d", &"[REDACTED]")
             .field("p", &"[REDACTED]")
             .field("q", &"[REDACTED]")
-            .finish_non_exhaustive()
+            .field("dp", &"[REDACTED]")
+            .field("dq", &"[REDACTED]")
+            .field("qi", &"[REDACTED]")
+            .finish()
     }
 }
 
-// ─── DataItemSigner ───────────────────────────────────────────────────────────
-// Identical to ao_cwao/data_item.rs — must not diverge.
+// ANS-104 signature type for RSA-256
+const SIG_TYPE_RSA256: u16 = 1;
+const RSA_SIG_LENGTH: usize = 512;
+const RSA_OWNER_LENGTH: usize = 512;
 
-/// Signs UnsignedDataItems with an Arweave RSA key using ANS-104 format.
-///
-/// Wire format details:
-/// - Signature: RSA-PSS-SHA256, 512-byte zero-padded
-/// - Owner: RSA modulus (n), 512-byte zero-padded
-/// - Tags: Avro block encoding (zigzag varint lengths)
-/// - Hash: ANS-104 deep-hash (SHA-384 recursive tree)
+/// Signs UnsignedDataItems with an Arweave RSA key
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct DataItemSigner {
     #[zeroize(skip)]
@@ -234,7 +310,7 @@ impl DataItemSigner {
         }
         if jwk.n.is_empty() || jwk.e.is_empty() || jwk.d.is_empty() {
             return Err(AOCommunicationError::ValidationError {
-                details: "JWK missing required RSA fields (n, e, d)".to_string(),
+                details: "JWK missing required RSA fields".to_string(),
             });
         }
 
@@ -279,18 +355,15 @@ impl DataItemSigner {
             });
         }
 
+        let signing_key = SigningKey::<Sha256>::new(private_key);
+
         Ok(Self {
-            signing_key: SigningKey::<Sha256>::new(private_key),
+            signing_key,
             owner_bytes,
         })
     }
 
-    /// Owner address: `base64url(SHA-256(owner_public_key_bytes))`
-    pub fn owner_address(&self) -> String {
-        URL_SAFE_NO_PAD.encode(Sha256::digest(&self.owner_bytes))
-    }
-
-    /// Sign a DataItem and return complete ANS-104 signed bytes.
+    /// Sign a DataItem and return complete ANS-104 signed bytes
     pub fn sign(&self, item: &UnsignedDataItem) -> Result<Vec<u8>, AOCommunicationError> {
         let deep_hash = self.build_deep_hash(item);
         let signature = self.signing_key.sign_with_rng(&mut OsRng, &deep_hash);
@@ -301,7 +374,7 @@ impl DataItemSigner {
         // Signature type (2 bytes, little-endian)
         result.extend_from_slice(&SIG_TYPE_RSA256.to_le_bytes());
 
-        // Signature (512 bytes, zero-padded to the right)
+        // Signature (512 bytes, zero-padded)
         let mut sig_padded = vec![0u8; RSA_SIG_LENGTH];
         let sig_vec = sig_bytes.to_vec();
         let start = RSA_SIG_LENGTH.saturating_sub(sig_vec.len());
@@ -314,7 +387,7 @@ impl DataItemSigner {
         owner_padded[start..].copy_from_slice(&self.owner_bytes);
         result.extend_from_slice(&owner_padded);
 
-        // Target present flag + bytes (32 bytes)
+        // Target
         if item.target.is_empty() {
             result.push(0);
         } else {
@@ -322,7 +395,7 @@ impl DataItemSigner {
             result.extend_from_slice(&item.target);
         }
 
-        // Anchor present flag + bytes (32 bytes)
+        // Anchor
         if item.anchor.is_empty() {
             result.push(0);
         } else {
@@ -330,7 +403,7 @@ impl DataItemSigner {
             result.extend_from_slice(&item.anchor);
         }
 
-        // Tags: num_tags (u64 LE) + tags_bytes_len (u64 LE) + Avro-encoded tags
+        // Tags
         let tags_bytes = self.serialize_avro_tags(&item.tags);
         let num_tags = item.tags.len() as u64;
         result.extend_from_slice(&num_tags.to_le_bytes());
@@ -343,10 +416,13 @@ impl DataItemSigner {
         Ok(result)
     }
 
-    // ─── ANS-104 deep-hash ────────────────────────────────────────────────────
-    // Identical to ao_cwao — SHA-384 recursive tree hash.
-    // Reference: https://github.com/ArweaveTeam/arweave-standards/blob/master/ans/ANS-104.md
+    /// Owner address: base64url(SHA-256(owner_public_key_bytes))
+    pub fn owner_address(&self) -> String {
+        let hash = Sha256::digest(&self.owner_bytes);
+        URL_SAFE_NO_PAD.encode(hash)
+    }
 
+    /// ANS-104 deep hash: SHA-384-based recursive tree hash
     fn build_deep_hash(&self, item: &UnsignedDataItem) -> Vec<u8> {
         let tags_bytes = self.serialize_avro_tags(&item.tags);
         let sig_type_str = SIG_TYPE_RSA256.to_string();
@@ -386,23 +462,22 @@ impl DataItemSigner {
         tag.extend_from_slice(items.len().to_string().as_bytes());
 
         let mut acc: [u8; 48] = Sha384::digest(&tag).into();
+
         for item in items {
             let mut combined = Vec::with_capacity(96);
             combined.extend_from_slice(&acc);
             combined.extend_from_slice(item);
             acc = Sha384::digest(&combined).into();
         }
+
         acc
     }
-
-    // ─── Avro tag encoding ────────────────────────────────────────────────────
-    // ANS-104 tags use Avro object container format (zigzag varint lengths).
-    // Identical to ao_cwao — must not diverge.
 
     fn serialize_avro_tags(&self, tags: &[DataItemTag]) -> Vec<u8> {
         if tags.is_empty() {
             return Vec::new();
         }
+
         let mut buf = Vec::new();
         #[allow(clippy::cast_possible_wrap)]
         Self::avro_encode_long(&mut buf, tags.len() as i64);
@@ -416,12 +491,11 @@ impl DataItemSigner {
             Self::avro_encode_long(&mut buf, value_bytes.len() as i64);
             buf.extend_from_slice(value_bytes);
         }
-        Self::avro_encode_long(&mut buf, 0); // end-of-block marker
+        Self::avro_encode_long(&mut buf, 0);
         buf
     }
 
     fn avro_encode_long(buf: &mut Vec<u8>, val: i64) {
-        // Zigzag encoding
         #[allow(clippy::cast_sign_loss)]
         let mut v = ((val << 1) ^ (val >> 63)) as u64;
         loop {

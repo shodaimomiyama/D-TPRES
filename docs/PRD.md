@@ -37,10 +37,10 @@ Proxy Re-Encryption により、データ所有者の秘密鍵を一切露出す
 | --- | ----------------- | ------------------------------------------- | ---- |
 | 2-1 | **Owner-Process** | RandAOを利用してn個のHolder-Processを選出 | 分散選択 |
 | 2-2 | **Owner-Process** | 各Holder-Processに `kFragⱼ` と署名を送信 | 配布 |
-| 2-3 | **Holder-Process** | `kFragⱼ` を受信・検証してArweaveに保存 | 永続化 |
-| 2-4 | **Holder-Process** | Arweaveから `Capsuleₒ` を取得 | 準備完了 |
+| 2-3 | **Holder-Process** | `kFragⱼ` を受信・検証してWASMメモリスナップショットに保存 | HyperBEAMが自動永続化 |
+| 2-4 | **Owner-Process** | `DelegateCapsule` メッセージで `Capsuleₒ` をHolder-Processにpush | Owner→Holder push |
 | 2-5 | **Holder-Process** | `cFragⱼ = PRE_ReEnc(kFragⱼ, Capsuleₒ)` 実行 | 再暗号化 |
-| 2-6 | **Holder-Process** | `cFragⱼ` をArweaveに保存 | 永続化 |
+| 2-6 | **Holder-Process** | `cFragⱼ` をWASMメモリスナップショットに保存 | HyperBEAMが自動永続化 |
 
 **PHASE 3 秘密の復元**
 

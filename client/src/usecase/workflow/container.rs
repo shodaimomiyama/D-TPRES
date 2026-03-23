@@ -84,7 +84,7 @@ impl DefaultWorkflowServiceContainer {
 
         let mock_ao = Arc::new(MockAOClient::new());
         let arweave = Arc::new(ArweaveStorageServiceImpl::default());
-        let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+        let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
         let storage_service = Arc::new(StorageServiceImpl::new(arweave, contract));
 
         Self::new(crypto_service, storage_service)
@@ -102,7 +102,7 @@ pub fn create_secret_sharing_service() -> impl SecretSharingWorkflowService {
 
     let mock_ao = Arc::new(MockAOClient::new());
     let arweave = Arc::new(ArweaveStorageServiceImpl::default());
-    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
     let storage_service = Arc::new(StorageServiceImpl::new(arweave, contract));
 
     SecretSharingWorkflowServiceImpl::new(crypto_service, storage_service)
@@ -115,7 +115,7 @@ pub fn create_secret_recovery_service() -> impl SecretRecoveryWorkflowService {
 
     let mock_ao = Arc::new(MockAOClient::new());
     let arweave = Arc::new(ArweaveStorageServiceImpl::default());
-    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
     let storage_service = Arc::new(StorageServiceImpl::new(arweave, contract));
 
     SecretRecoveryWorkflowServiceImpl::new(crypto_service, storage_service)
@@ -131,7 +131,7 @@ pub fn create_workflow_services() -> (
 
     let mock_ao = Arc::new(MockAOClient::new());
     let arweave = Arc::new(ArweaveStorageServiceImpl::default());
-    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
     let storage_service = Arc::new(StorageServiceImpl::new(arweave, contract));
 
     let sharing = SecretSharingWorkflowServiceImpl::new(
