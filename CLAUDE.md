@@ -145,9 +145,23 @@ All processes use the same Wasm binary deployed to Arweave, with role differenti
 - **Formatting**: 100 character line width, 4 spaces, Unix newlines
 - **Linting**: Aggressive clippy configuration with specific allowances for development phase
 
-## AO Stateless Execution Constraints
+## AO Execution Constraints
 
-**Critical for FORMIX**: The AO Network executes processes statelessly with specific constraints:
+FORMIX targets two AO runtimes with different state models:
+
+### HyperBEAM-native (`ao/contracts/src/`) — WASM memory snapshots
+
+HyperBEAM's `~wasm64@1.0` device snapshots the entire WASM linear memory after
+each message and restores it before the next. This means **global Rust statics
+persist across invocations** — no explicit load/save to Arweave is needed.
+
+- State is kept in `static` globals using `UnsafeCell` (safe because WASM is single-threaded)
+- No CosmWasm host functions (`db_read`/`db_write`)
+- Entry point: `handle(msg_ptr, msg_len) -> i32`
+
+### CWAO (`ao_cwao/contracts/src/`) — CosmWasm-style persistence
+
+The legacy CWAO runtime is stateless between messages:
 
 1. **Memory Non-Persistence Between Messages**
    - Each message execution starts with clean memory
@@ -159,31 +173,17 @@ All processes use the same Wasm binary deployed to Arweave, with role differenti
    - No shared memory between executions
    - State consistency must be maintained through persistence
 
-3. **Synchronous-Only Execution**
+### Shared Constraints (both runtimes)
+
+1. **Synchronous-Only Execution**
    - async/await is not available in AO environment
    - All operations must be blocking
    - Error handling must be synchronous
 
-4. **Message-Driven Architecture**
+2. **Message-Driven Architecture**
    - All processing is triggered by messages
    - UseCase handlers are entry points
    - State transitions must be atomic per message
-
-### Required Message Handler Pattern
-```rust
-pub fn handle_message(msg: AOMessage, repo: &dyn Repository) -> Result<Response> {
-    // 1. Load state
-    let mut state = repo.load_state(msg.process_id)?;
-    
-    // 2. Process message
-    let result = process_with_state(&mut state, msg)?;
-    
-    // 3. Persist state
-    repo.save_state(msg.process_id, &state)?;
-    
-    Ok(result)
-}
-```
 
 ## Directory-Specific Async Policy
 
@@ -192,10 +192,11 @@ FORMIX has two Rust codebases with different async constraints:
 | Directory | async/await | tokio | Reason |
 |-----------|------------|-------|--------|
 | `ao/contracts/src/` | Prohibited | Not available | AO WASM single-threaded constraint |
+| `ao_cwao/contracts/src/` | Prohibited | Not available | AO WASM single-threaded constraint |
 | `client/` | Required for I/O | Available (non-wasm32) | Client-side library with network operations |
 
-### `ao/contracts/src/` - Sync Only
-The "AO Stateless Execution Constraints" above apply exclusively to this directory.
+### `ao/contracts/src/` and `ao_cwao/contracts/src/` - Sync Only
+The "AO Execution Constraints" above apply exclusively to these directories.
 
 ### `client/` - Async for Network I/O
 - `AOClient` trait uses `#[async_trait]` - all AO Network calls are async

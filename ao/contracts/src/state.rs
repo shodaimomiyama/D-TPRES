@@ -1,244 +1,96 @@
-use cosmwasm_schema::cw_serde;
-use cosmwasm_std::Binary;
-use cw_storage_plus::{Item, Map};
-use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 
-pub const DEFAULT_LIST_LIMIT: u32 = 50;
-pub const DEFAULT_HOLDER_PROCESS_ID: &str = "holder_ABC123XYZ456DEF789GHI012JKL345MNO678PQR";
+use serde::{Deserialize, Serialize};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
-// --------------------- 設定 ---------------------
-#[cw_serde]
-pub struct Config {
-    pub process_id: String,
-    pub default_list_limit: u32,
-}
-pub const CONFIG: Item<Config> = Item::new("config");
-
-// Owner-Holder 委譲マッピング（将来的にRandAO差し替え予定）
-pub const KFRAG_HOLDERS: Map<(String, String), String> = Map::new("kfrag_holders");
-
-// --------------------- メタ ---------------------
-pub type Rfc3339String = String;
-
-#[cw_serde]
-pub struct BlobMeta {
-    pub size_bytes: u64,
-    pub sha256_hex: String,
-    pub updated_ts: Rfc3339String,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProcessRole {
+    Owner,
+    Holder,
+    Requester,
+    /// Single-process mode: allows both Owner and Holder actions.
+    Combined,
 }
 
-// --------------------- ドメイン ---------------------
-#[cw_serde]
+/// WASM-memory-resident state, persisted via HyperBEAM memory snapshots.
+///
+/// Key naming mirrors ao_cwao/:
+///   OWNER_KFRAGS     -> owner_kfrags:  (kfrag_id)         -> raw bytes
+///   OWNER_CAPSULES   -> owner_capsules: (kfrag_id, cap_id) -> OwnerCapsuleData
+///   HOLDER_CFRAGS    -> holder_cfrags:  (kfrag_id, cap_id) -> raw bytes
+///   KFRAG_HOLDERS    -> kfrag_holders:  kfrag_id           -> holder_process_id
+///   INDEX_KFRAG_TO_CAPS -> kfrag_to_caps: kfrag_id         -> [capsule_ids]
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct ProcessState {
+    pub role: Option<ProcessRole>,
+    /// Authorized owner address (the AO process/wallet that initialized this contract)
+    pub owner_id: Option<String>,
+
+    pub owner_kfrags: HashMap<String, Vec<u8>>,
+    pub owner_capsules: HashMap<String, OwnerCapsuleData>,
+    pub holder_cfrags: HashMap<String, Vec<u8>>,
+    pub kfrag_holders: HashMap<String, String>,
+    pub kfrag_to_caps: HashMap<String, Vec<String>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OwnerCapsuleData {
+    pub capsule_bytes: Vec<u8>,
+    pub status: CapsuleStatus,
+    pub kfrag_id: String,
+    pub capsule_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum CapsuleStatus {
     Received,
     ReencInProgress,
     CFragReady,
-    Error,
+    Error(String),
 }
 
-#[cw_serde]
-pub struct OwnerKFragData {
-    pub kfrag: Binary,
-    pub meta: BlobMeta,
-}
+impl ProcessState {
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-#[cw_serde]
-pub struct OwnerCapsuleData {
-    pub capsule: Binary,
-    pub status: CapsuleStatus,
-    pub meta: BlobMeta,
-}
+    // Length-prefixed encoding prevents collisions from IDs containing the delimiter
+    pub fn cap_key(kfrag_id: &str, capsule_id: &str) -> String {
+        format!("{}:{}/{}", kfrag_id.len(), kfrag_id, capsule_id)
+    }
 
-#[cw_serde]
-pub struct HolderCFragData {
-    pub cfrag: Binary,
-    pub meta: BlobMeta,
-}
+    pub fn is_initialized(&self) -> bool {
+        self.role.is_some()
+    }
 
-#[cw_serde]
-pub struct IndexKFragToCapsValue {
-    pub status: CapsuleStatus,
-    pub updated_ts: Rfc3339String,
-}
-
-#[cw_serde]
-pub struct IndexCapsToCFragValue {
-    pub exists: bool,
-    pub updated_ts: Rfc3339String,
-}
-
-#[cw_serde]
-pub struct IdemFlag {
-    pub generated: bool,
-    pub updated_ts: Rfc3339String,
-}
-
-// --------------------- マッピング ---------------------
-// すべて process_id を先頭キーに含むタプルキー
-
-pub const OWNER_KFRAGS: Map<(String, String), OwnerKFragData> = Map::new("owner_kfrags");
-
-pub const OWNER_CAPSULES: Map<(String, String, String), OwnerCapsuleData> =
-    Map::new("owner_capsules");
-
-pub const HOLDER_CFRAGS: Map<(String, String, String), HolderCFragData> = Map::new("holder_cfrags");
-
-pub const INDEX_KFRAG_TO_CAPS: Map<(String, String, String), IndexKFragToCapsValue> =
-    Map::new("index_kfrag_to_caps");
-
-pub const INDEX_CAPS_TO_CFRAG: Map<(String, String, String), IndexCapsToCFragValue> =
-    Map::new("index_caps_to_cfrag");
-
-pub const IDEM_FLAGS: Map<(String, String, String), IdemFlag> = Map::new("idem_flags");
-
-// --------------------- エラー型 ---------------------
-#[derive(thiserror::Error, Debug)]
-pub enum StorageError {
-    #[error("Storage operation failed: {reason}")]
-    StorageFailure { reason: String },
-
-    #[error("Data not found: {key}")]
-    DataNotFound { key: String },
-
-    #[error("Invalid data format")]
-    InvalidFormat,
-
-    #[error("Unauthorized access")]
-    Unauthorized,
-
-    #[error("KFrag not found: {kfrag_id}")]
-    KFragNotFound { kfrag_id: String },
-
-    #[error("CFrag not ready: {kfrag_id}/{capsule_id}")]
-    CFragNotReady {
-        kfrag_id: String,
-        capsule_id: String,
-    },
-
-    #[error("Reencryption failed: {reason}")]
-    ReencryptionFailed { reason: String },
-
-    #[error("Object too large: {size} bytes")]
-    ObjectTooLarge { size: u64 },
-
-    #[error("Bad request: {msg}")]
-    BadRequest { msg: String },
-}
-
-// --------------------- ヘルパー実装 ---------------------
-impl ToString for CapsuleStatus {
-    fn to_string(&self) -> String {
-        match self {
-            CapsuleStatus::Received => "received".to_string(),
-            CapsuleStatus::ReencInProgress => "reenc_in_progress".to_string(),
-            CapsuleStatus::CFragReady => "cfrag_ready".to_string(),
-            CapsuleStatus::Error => "error".to_string(),
+    pub fn is_authorized_sender(&self, from: Option<&str>) -> bool {
+        match (&self.owner_id, from) {
+            (Some(owner), Some(sender)) => owner == sender,
+            _ => false,
         }
     }
 }
 
-impl OwnerKFragData {
-    pub fn new(kfrag: Binary, timestamp: String) -> Self {
-        let meta = BlobMeta {
-            size_bytes: kfrag.len() as u64,
-            sha256_hex: hex::encode(Sha256::digest(kfrag.as_slice())),
-            updated_ts: timestamp,
-        };
-        Self { kfrag, meta }
-    }
+/// Intermediate deserialized kFrag — zeroized on drop to prevent
+/// key material from lingering in WASM linear memory after use.
+#[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+pub struct StoredKeyFrag {
+    #[zeroize(skip)]
+    pub id: String,
+    pub key_data: Vec<u8>,
+    pub verification_data: Vec<u8>,
+    pub precursor: Vec<u8>,
 }
 
-impl OwnerCapsuleData {
-    pub fn new(capsule: Binary, timestamp: String) -> Self {
-        let meta = BlobMeta {
-            size_bytes: capsule.len() as u64,
-            sha256_hex: hex::encode(Sha256::digest(capsule.as_slice())),
-            updated_ts: timestamp.clone(),
-        };
-        Self {
-            capsule,
-            status: CapsuleStatus::Received,
-            meta,
-        }
-    }
-
-    pub fn update_status(&mut self, status: CapsuleStatus, timestamp: String) {
-        self.status = status;
-        self.meta.updated_ts = timestamp;
-    }
+#[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+pub struct StoredCFrag {
+    pub fragment_data: Vec<u8>,
 }
 
-impl HolderCFragData {
-    pub fn new(cfrag: Binary, timestamp: String) -> Self {
-        let meta = BlobMeta {
-            size_bytes: cfrag.len() as u64,
-            sha256_hex: hex::encode(Sha256::digest(cfrag.as_slice())),
-            updated_ts: timestamp,
-        };
-        Self { cfrag, meta }
-    }
+/// Deserialized from StoredKeyFrag.verification_data for kFrag verification.
+#[derive(Serialize, Deserialize)]
+pub struct VerificationData {
+    pub verifying_pk: Vec<u8>,
+    pub delegating_pk: Vec<u8>,
+    pub receiving_pk: Vec<u8>,
 }
-
-impl IndexKFragToCapsValue {
-    pub fn new(status: CapsuleStatus, timestamp: String) -> Self {
-        Self {
-            status,
-            updated_ts: timestamp,
-        }
-    }
-}
-
-impl IndexCapsToCFragValue {
-    pub fn new(timestamp: String) -> Self {
-        Self {
-            exists: true,
-            updated_ts: timestamp,
-        }
-    }
-}
-
-impl IdemFlag {
-    pub fn new(timestamp: String) -> Self {
-        Self {
-            generated: true,
-            updated_ts: timestamp,
-        }
-    }
-}
-
-// --------------------- KVユーティリティ ---------------------
-pub fn get_current_timestamp(env: &cosmwasm_std::Env) -> String {
-    format!("{}Z", env.block.time.seconds())
-}
-
-// --------------------- バリデーション ---------------------
-pub fn validate_id(id: &str, max_len: usize) -> Result<(), StorageError> {
-    if id.is_empty() || id.len() > max_len {
-        return Err(StorageError::BadRequest {
-            msg: format!("ID must be 1-{} characters", max_len),
-        });
-    }
-
-    // ASCII安全文字のみ許可
-    if !id
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-    {
-        return Err(StorageError::BadRequest {
-            msg: "ID must contain only ASCII alphanumeric, underscore, or hyphen".to_string(),
-        });
-    }
-
-    Ok(())
-}
-
-pub fn validate_base64_data(data: &[u8]) -> Result<(), StorageError> {
-    if data.is_empty() {
-        return Err(StorageError::BadRequest {
-            msg: "Data cannot be empty".to_string(),
-        });
-    }
-    Ok(())
-}
-
-// tests moved to `tests/`

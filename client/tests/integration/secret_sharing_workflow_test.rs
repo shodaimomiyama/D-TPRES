@@ -29,7 +29,7 @@ fn create_integration_service(
     let crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
     let mock_ao = Arc::new(MockAOClient::new());
     let arweave = Arc::new(ArweaveStorageServiceImpl::default());
-    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
     let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
     SecretSharingWorkflowServiceImpl::new(crypto, storage)
 }
@@ -144,7 +144,7 @@ fn test_phase1_integration_crypto_operations_valid() {
     let service_crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
     let mock_ao = Arc::new(MockAOClient::new());
     let arweave = Arc::new(ArweaveStorageServiceImpl::default());
-    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
     let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
     let _service = SecretSharingWorkflowServiceImpl::new(service_crypto, storage);
 

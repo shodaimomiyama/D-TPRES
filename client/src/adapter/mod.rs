@@ -9,8 +9,8 @@ pub mod repository_impl;
 
 pub use errors::{AOCommunicationError, AOResult, AdapterError, AdapterResult};
 pub use external::{
-    AOAttribute, AOClient, AOEvent, AOMessageTags, AOResponse, Binary, ExecuteMsg, MockAOClient,
-    MockConfig, QueryMsg, ValidateMessage,
+    AOClient, AOConfig, AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary, GetCFragResponse,
+    MockAOClient, MockConfig,
 };
 pub use external::{ArweaveClientConfig, ArweaveClientImpl, ArweaveWallet};
 pub use repository_impl::{ArweaveClient, Tag};

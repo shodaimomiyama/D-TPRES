@@ -34,7 +34,7 @@ fn create_integration_service(
     let crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
     let mock_ao = Arc::new(MockAOClient::new());
     let arweave = Arc::new(ArweaveStorageServiceImpl::default());
-    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
     let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
     SecretRecoveryWorkflowServiceImpl::new(crypto, storage)
 }
@@ -218,7 +218,7 @@ async fn test_phase3_integration_execute_fails_at_storage() {
     let service_crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
     let mock_ao = Arc::new(MockAOClient::new());
     let arweave = Arc::new(ArweaveStorageServiceImpl::default());
-    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
     let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
     let service = SecretRecoveryWorkflowServiceImpl::new(service_crypto, storage);
 
@@ -276,7 +276,7 @@ async fn test_phase3_integration_validation_errors() {
     let service_crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
     let mock_ao = Arc::new(MockAOClient::new());
     let arweave = Arc::new(ArweaveStorageServiceImpl::default());
-    let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+    let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
     let storage = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
     let service = SecretRecoveryWorkflowServiceImpl::new(service_crypto, storage);
 

@@ -1,14 +1,22 @@
+//! AO Network configuration for HyperBEAM nodes.
+//!
+//! Default URLs updated to HyperBEAM-compatible endpoints.
+//! Set `AO_MU_URL` / `AO_CU_URL` env vars to override.
+
 #[cfg(not(target_arch = "wasm32"))]
 use std::env;
 
 use crate::adapter::errors::AOCommunicationError;
 
+/// TODO: Replace with confirmed production HyperBEAM MU endpoint.
+/// Candidates: https://mu.ao-testnet.xyz still works for ao-legacy;
+/// HyperBEAM-native MU is TBD pending public node announcement.
 const DEFAULT_MU_URL: &str = "https://mu.ao-testnet.xyz";
 const DEFAULT_CU_URL: &str = "https://cu.ao-testnet.xyz";
 const DEFAULT_GATEWAY_URL: &str = "https://arweave.net";
 const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 
-/// AO Network connection configuration
+/// AO Network connection configuration.
 #[derive(Debug, Clone)]
 pub struct AOConfig {
     mu_url: String,
@@ -34,7 +42,6 @@ impl AOConfig {
                 details: "CU URL must not be empty".to_string(),
             });
         }
-
         Ok(Self {
             mu_url: mu_url.to_string(),
             cu_url: cu_url.to_string(),
@@ -46,15 +53,12 @@ impl AOConfig {
     pub fn mu_url(&self) -> &str {
         &self.mu_url
     }
-
     pub fn cu_url(&self) -> &str {
         &self.cu_url
     }
-
     pub fn gateway_url(&self) -> &str {
         &self.gateway_url
     }
-
     pub fn timeout_ms(&self) -> u64 {
         self.timeout_ms
     }
@@ -69,7 +73,6 @@ impl AOConfig {
             .ok()
             .and_then(|v| v.parse().ok())
             .unwrap_or(DEFAULT_TIMEOUT_MS);
-
         Self::new(&mu_url, &cu_url, &gateway_url, timeout_ms)
     }
 }

@@ -86,26 +86,12 @@ pub struct ShamirShare {
     pub share_data: Vec<u8>,
 }
 
-impl ShamirShare {
-    #[cfg(feature = "key-export")]
-    pub fn new(index: u8, share_data: Vec<u8>) -> Self {
-        Self { index, share_data }
-    }
-}
-
 /// Umbral暗号化のカプセル（シリアライズされた不透明トークン）
 #[non_exhaustive]
 #[derive(Debug, Clone, Zeroize, ZeroizeOnDrop)]
 pub struct Capsule {
     /// umbral_pre::Capsuleのシリアライズされた完全なデータ
     pub capsule_bytes: Vec<u8>,
-}
-
-impl Capsule {
-    #[cfg(feature = "key-export")]
-    pub fn from_bytes(capsule_bytes: Vec<u8>) -> Self {
-        Self { capsule_bytes }
-    }
 }
 
 /// 公開鍵

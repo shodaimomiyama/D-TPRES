@@ -82,7 +82,9 @@ impl DefaultActionsContainer {
 
         let mock_ao = Arc::new(MockAOClient::new());
         let arweave = Arc::new(ArweaveStorageServiceImpl::default());
-        let contract = Arc::new(ContractStorageImpl::new(mock_ao));
+        // Single-process setup (Owner == Holder): holder_process_id defaults to contract_id at call time.
+        // Use ContractStorageImpl::new(mock_ao, holder_id) for two-process setups.
+        let contract = Arc::new(ContractStorageImpl::new_single_process(mock_ao));
         let storage_service = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
 
         let controller = ControllerContainer::new(Arc::clone(&crypto_service));
@@ -145,7 +147,9 @@ impl ProductionActionsContainer {
         let crypto_service = Arc::new(CoreCryptoServiceImpl::new());
         let service_crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&crypto_service)));
         let arweave = Arc::new(ProductionArweaveStorageService::new(arweave_client));
-        let contract = Arc::new(ContractStorageImpl::new(ao_client));
+        // Single-process setup: holder_process_id defaults to contract_id at call time.
+        // Use ContractStorageImpl::new(ao_client, holder_id) for two-process (Owner+Holder) setups.
+        let contract = Arc::new(ContractStorageImpl::new_single_process(ao_client));
         let storage_service = Arc::new(ServiceStorageServiceImpl::new(arweave, contract));
         let controller = ControllerContainer::new(Arc::clone(&crypto_service));
         let workflow_services = WorkflowServiceContainer::new(service_crypto, storage_service);
