@@ -12,8 +12,8 @@ sequenceDiagram
 
     Note over Requester: 1. keygen --role requester
     Note over Owner: 2. keygen --role owner
-    Note over Owner: (requester.json の PK を参照)
-    Owner->>Net: 3. share (owner_sk + requester_pk)
+    Note over Owner: (requester の公開鍵 hex を受け取る)
+    Owner->>Net: 3. share (owner_sk + requester_pk_hex)
     Note right of Net: Shamir 分割 + Umbral カプセル
     Owner->>Net: capsule を Arweave に保存
     Owner->>Net: shares を Arweave に保存
@@ -27,13 +27,121 @@ sequenceDiagram
 
 **2-of-3** 閾値スキームを使用します。秘密は 3 つのシェアに分割され、任意の 2 つで復元できます。
 
+## ローカルモード（推奨：クイックスタート）
+
+AO Network / Arweave への接続が不要なローカル実行モードです。Phase 2 の再暗号化処理は `ao/contracts/` の実際のコントラクトコードをネイティブリンクして実行します。
+
+### 一括実行
+
+全ステップを 1 コマンドで実行します:
+
+```bash
+make demo-local
+# または: cargo run --release -- local all
+# または: cargo run --release -- --local  (後方互換)
+```
+
+### ステップ実行
+
+各 Phase を個別に実行できます:
+
+```bash
+# Step 1: 鍵ペア生成（既存コマンド）
+cargo run --release -- keygen --role requester
+cargo run --release -- keygen --role owner
+
+# Step 2: requester の公開鍵 hex を取得
+REQUESTER_PK=$(jq -r .public_key_hex .formix-demo/requester/requester.json)
+
+# Step 3: Phase 1 — ローカル秘密分割（requester 公開鍵を hex で指定）
+cargo run --release -- local share --requester-pubkey $REQUESTER_PK
+# → secret_id が出力されます
+# --plaintext でカスタム秘密も指定可能（デフォルト: "Hello FORMIX - Threshold PRE Demo"）
+
+# Step 4: Phase 2 — コントラクトコードで再暗号化
+cargo run --release -- local reencrypt --secret-id <SECRET_ID>
+
+# Step 5: Phase 3 — ローカル秘密復元
+cargo run --release -- local recover --secret-id <SECRET_ID>
+```
+
+Make ターゲットも使用可能です:
+
+```bash
+make demo-keygen ROLE=owner
+make demo-keygen ROLE=requester
+make demo-local-share REQUESTER_PUBKEY=$(jq -r .public_key_hex .formix-demo/requester/requester.json)
+make demo-local-reencrypt SECRET_ID=<id>
+make demo-local-recover SECRET_ID=<id>
+```
+
+### Phase 2: コントラクト統合
+
+ローカルモードの Phase 2 では、`ao/contracts/` の実際のコントラクトコードを使用して再暗号化を実行します:
+
+1. kFrag ごとに独立した Holder コントラクトインスタンスを作成
+2. `SubmitKFrag` → `SubmitCapsule` → 内部で `perform_reencryption()` が自動実行
+3. `GetCFrag` クエリで cFrag を取得
+
+これにより AO Network 上の動作と同等の暗号処理パスを通ります。
+
+### 中間データファイル
+
+各ステップの結果は `.formix-demo/` にロール別サブディレクトリで保存されます:
+
+```
+.formix-demo/
+├── owner/
+│   ├── owner.json                          # Owner の秘密鍵 + 公開鍵
+│   └── {secret_id}.local-share.json        # Phase 1 出力（capsule, kFrags, encrypted shares）
+├── requester/
+│   └── requester.json                      # Requester の秘密鍵 + 公開鍵
+└── contract/
+    └── {secret_id}.local-reencrypt.json    # Phase 2 出力（cFrags）
+```
+
+### 出力例
+
+```
+[Phase 1] Secret Sharing (2-of-3 threshold)
+────────────────────────────────────────────────────────
+  secret: "Hello FORMIX - Threshold PRE Demo" (33 bytes)
+  threshold: k=2, n=3
+  OK Symmetric key generated (32 bytes)
+  OK Shamir split: 3 shares
+  OK AES-encrypted 3 shares
+  OK PRE capsule created (...)
+  OK Generated 3 kFrags
+
+[Phase 2] Proxy Re-Encryption (contract code, local execution)
+────────────────────────────────────────────────────────
+  Using 2 of 3 kFrags (threshold)
+  OK Holder 0 re-encrypted kFrag -> cFrag (...) [contract]
+  OK Holder 1 re-encrypted kFrag -> cFrag (...) [contract]
+  OK Collected 2/2 cFrags (threshold met)
+
+[Phase 3] Secret Recovery
+────────────────────────────────────────────────────────
+  >> Executing recover workflow...
+  OK Symmetric key recovered via PRE
+  OK Decrypted 2 shares with recovered key
+  OK Secret reconstructed via Shamir
+
+[Result] Phase 3 completed successfully
+  recovered secret: Hello FORMIX - Threshold PRE Demo
+
+  SUCCESS: Secret recovered!
+```
+
 ## 前提条件
 
 - Rust 1.86.0（`rustup` が `rust-toolchain.toml` を自動検出します）
-- Node.js 20+ および Yarn（`ao/` スクリプト用）
-- Arweave JWK ウォレットファイル（Step 3 で生成）
+- Node.js 20+（`ao/` スクリプト用）
+- Arweave JWK ウォレットファイル（`arweave-keyfile.json`）
 
-## セットアップ
+## セットアップ（Production モード）
+
+以下の手順は AO Network / Arweave を使用する Production モードのセットアップです。ローカルモードではこのセットアップは不要です。
 
 ### Step 1: 環境設定
 
@@ -46,38 +154,33 @@ cp .env.example .env
 
 ```bash
 make setup
+# --ignore-scripts 付きで npm install（sqlite3 ネイティブビルドをスキップ）
 ```
 
-### Step 3: Arweave ウォレットの生成
-
-```bash
-make keygen
-# ao/ ディレクトリに wallet.json が作成されます
-```
-
-### Step 4: WASM モジュールのデプロイ
+### Step 3: WASM ビルド & モジュールのデプロイ
 
 ```bash
 make deploy
+# WASM をビルドし Arweave にデプロイします
 # 出力された module_id を控えてください
 ```
 
-### Step 5: AO プロセスの起動
+### Step 4: AO プロセスの起動
 
 ```bash
-make spawn
+make spawn MODULE_ID=<module_id> SCHEDULER=<scheduler_address>
 # 出力された process_id を控えてください
 ```
 
-### Step 6: deploy.json の作成
+### Step 5: deploy.json の作成
 
 ```bash
 cp deploy.example.json deploy.json
 ```
 
-`deploy.json` を編集し、Step 4・5 で取得した `module_id` と `process_id` を記入してください。
+`deploy.json` を編集し、Step 3・4 で取得した `module_id` と `process_id` を記入してください。
 
-### Step 7: デモの実行（E2E フロー）
+### Step 6: デモの実行（E2E フロー）
 
 ```bash
 # 1. Requester の鍵ペアを生成・保存
@@ -91,18 +194,6 @@ cargo run -- share
 
 # 4. 秘密を復元（requester_sk + owner_pk を使用）
 cargo run -- recover --secret-id <SECRET_ID>
-# → "Hello FORMIX - Threshold PRE Demo" が復元されます
-```
-
-## 鍵ファイルの構造
-
-鍵と結果は `.formix-demo/` ディレクトリに保存されます。
-
-```
-.formix-demo/
-├── owner.json         # Owner の秘密鍵 + 公開鍵
-├── requester.json     # Requester の秘密鍵 + 公開鍵
-└── {secret_id}.json   # share コマンドの結果（owner_pk, tx_ids 等）
 ```
 
 ## サブコマンド
@@ -113,45 +204,58 @@ cargo run -- recover --secret-id <SECRET_ID>
 cargo run -- keygen --role <owner|requester> [--output <PATH>]
 ```
 
-指定されたロール（owner または requester）の Umbral PRE 鍵ペアを生成し、ファイルに永続化します。
-
 | オプション | デフォルト | 説明 |
 |-----------|-----------|------|
 | `--role` | (必須) | `owner` または `requester` |
-| `--output` | `.formix-demo/{role}.json` | 出力先ファイルパス |
+| `--output` | `.formix-demo/{role}/{role}.json` | 出力先ファイルパス |
 
-### `share` - Phase 1: 秘密分割
+### `share` - Phase 1: 秘密分割（Production）
 
 ```bash
 cargo run -- share [--owner-key-file <PATH>] [--requester-pubkey-file <PATH>]
 ```
 
-1. `owner.json` から Owner 秘密鍵を読込
-2. `requester.json` から Requester 公開鍵を読込
-3. デモ用秘密データを Shamir 秘密分散で分割（k=2, n=3）
-4. Umbral PRE カプセルを作成し Arweave に保存
-5. 結果を `.formix-demo/{secret_id}.json` に保存
-
-| オプション | デフォルト | 説明 |
-|-----------|-----------|------|
-| `--owner-key-file` | `.formix-demo/owner.json` | Owner 鍵ファイルのパス |
-| `--requester-pubkey-file` | `.formix-demo/requester.json` | Requester 公開鍵ファイルのパス |
-
-### `recover` - Phase 3: 秘密復元
+### `recover` - Phase 3: 秘密復元（Production）
 
 ```bash
 cargo run -- recover --secret-id <SECRET_ID> [--requester-key-file <PATH>] [--share-result-file <PATH>]
 ```
 
-1. `requester.json` から Requester 秘密鍵を読込
-2. `{secret_id}.json` から Owner 公開鍵を読込
-3. AO Network から cFrags を収集、復号し秘密を再構成
+### `local share` - Phase 1: ローカル秘密分割
+
+```bash
+cargo run -- local share --requester-pubkey <HEX> [--owner-key-file <PATH>] [--plaintext <TEXT>]
+```
 
 | オプション | デフォルト | 説明 |
 |-----------|-----------|------|
-| `--secret-id` | (必須) | share コマンドが出力した秘密ID |
-| `--requester-key-file` | `.formix-demo/requester.json` | Requester 鍵ファイルのパス |
-| `--share-result-file` | `.formix-demo/{secret_id}.json` | share 結果ファイルのパス |
+| `--requester-pubkey` | (必須) | Requester の公開鍵（hex 文字列） |
+| `--owner-key-file` | `.formix-demo/owner/owner.json` | Owner 鍵ファイルのパス |
+| `--plaintext` | `Hello FORMIX - Threshold PRE Demo` | 分割する秘密テキスト |
+
+### `local reencrypt` - Phase 2: コントラクト再暗号化
+
+```bash
+cargo run -- local reencrypt --secret-id <SECRET_ID> [--share-result-file <PATH>]
+```
+
+### `local recover` - Phase 3: ローカル秘密復元
+
+```bash
+cargo run -- local recover --secret-id <SECRET_ID> [--requester-key-file <PATH>]
+```
+
+### `local all` - 全ステップ一括実行
+
+```bash
+cargo run -- local all [--owner-key-file <PATH>] [--requester-key-file <PATH>] [--plaintext <TEXT>]
+```
+
+| オプション | デフォルト | 説明 |
+|-----------|-----------|------|
+| `--owner-key-file` | `.formix-demo/owner/owner.json` | Owner 鍵ファイルのパス |
+| `--requester-key-file` | `.formix-demo/requester/requester.json` | Requester 鍵ファイルのパス |
+| `--plaintext` | `Hello FORMIX - Threshold PRE Demo` | 分割する秘密テキスト |
 
 ## CLI オプション
 
@@ -159,14 +263,34 @@ cargo run -- recover --secret-id <SECRET_ID> [--requester-key-file <PATH>] [--sh
 formix-demo [OPTIONS] <COMMAND>
 
 Options:
+  --local           全フェーズを一括実行（local all のエイリアス）
   --deploy <PATH>   deploy.json のパス（デフォルト: deploy.json）
   --wallet <PATH>   Arweave JWK ウォレットのパス（ARWEAVE_WALLET_PATH を上書き）
 
 Commands:
   keygen   鍵ペアを生成してファイルに保存
-  share    2-of-3 閾値 PRE で秘密を分割
-  recover  Arweave から秘密を復元
+  share    2-of-3 閾値 PRE で秘密を分割（Production）
+  recover  Arweave から秘密を復元（Production）
+  local    ローカルモード: ステップ実行 + コントラクト再暗号化
 ```
+
+## Make ターゲット一覧
+
+| ターゲット | 説明 | 必須変数 |
+|-----------|------|----------|
+| `make setup` | `ao/` の npm 依存パッケージをインストール | - |
+| `make deploy` | WASM ビルド & Arweave にモジュールをデプロイ | `WALLET` |
+| `make spawn` | AO プロセスを起動 | `MODULE_ID`, `SCHEDULER` |
+| `make build` | デモバイナリをビルド（release） | - |
+| `make demo-keygen` | PRE 鍵ペアを生成 | `ROLE` |
+| `make demo-share` | Phase 1: 秘密分割（Production） | - |
+| `make demo-recover` | Phase 3: 秘密復元（Production） | `SECRET_ID` |
+| `make demo-local` | ローカル全ステップ実行 | - |
+| `make demo-local-share` | ローカル Phase 1: 秘密分割 | `REQUESTER_PUBKEY` |
+| `make demo-local-reencrypt` | ローカル Phase 2: コントラクト再暗号化 | `SECRET_ID` |
+| `make demo-local-recover` | ローカル Phase 3: 秘密復元 | `SECRET_ID` |
+| `make demo-local-all` | ローカル全ステップ実行 | - |
+| `make demo-all` | フルデモフロー（keygen + share） | - |
 
 ## トラブルシューティング
 
@@ -179,14 +303,14 @@ Commands:
 **"Failed to load owner key from ..."**
 先に `keygen --role owner` を実行して鍵ファイルを生成してください。
 
-**"Failed to load requester PK from ..."**
-先に `keygen --role requester` を実行して鍵ファイルを生成してください。
+**"Invalid requester public key hex"**
+`--requester-pubkey` に渡した hex 文字列が正しいか確認してください。`jq -r .public_key_hex .formix-demo/requester/requester.json` で取得できます。
 
-**"Failed to load share result from ..."**
-先に `share` コマンドを実行してください。`--secret-id` が正しいことを確認してください。
+**"Failed to load local share from ..."**
+先に `local share` を実行してください。`--secret-id` が正しいことを確認してください。
 
-**"Failed to create AO client"**
-`deploy.json` の `module_id` と `process_id` が正しいこと、AO ゲートウェイに接続可能であることを確認してください。
+**"Failed to load local reencrypt from ..."**
+先に `local reencrypt --secret-id <ID>` を実行してください。
 
 **`formix` クレートのビルドエラー**
 `cd ../client && make check` で原因を確認してください。デモは `production-ao` と `key-export` フィーチャーフラグに依存しています。
@@ -198,23 +322,25 @@ graph TD
     CLI[formix-demo CLI]
     KS[KeyStore<br/>.formix-demo/]
     Client[ProductionFormixClient<br/>from_deploy_file]
+    Contract[ao/contracts<br/>native link]
     Share[ShareBuilder<br/>type-state]
     Recover[RecoverBuilder<br/>type-state]
     P1[Phase 1 Workflow]
+    P2[Phase 2: Contract Re-encryption]
     P3[Phase 3 Workflow]
     AR1[Arweave Storage]
     AO1[AO Network]
-    AR2[Arweave Storage]
-    AO2[AO Network]
 
     CLI --> KS
     CLI --> Client
+    CLI --> Contract
     Client --> Share
     Client --> Recover
     Share --> P1
     Recover --> P3
     P1 --> AR1
     P1 --> AO1
-    P3 --> AR2
-    P3 --> AO2
+    P3 --> AR1
+    P3 --> AO1
+    Contract --> P2
 ```

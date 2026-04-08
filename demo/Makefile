@@ -1,6 +1,6 @@
-.PHONY: help setup keygen deploy spawn build demo-keygen demo-share demo-recover demo-all
+.PHONY: help setup keygen deploy spawn build demo-keygen demo-share demo-recover demo-all demo-local demo-local-share demo-local-reencrypt demo-local-recover demo-local-all
 
-WALLET ?= wallet.json
+WALLET ?= ./arweave-keyfile.json
 
 help: ## Show this help
 	@echo "FORMIX Demo Targets:"
@@ -18,17 +18,20 @@ help: ## Show this help
 	@echo "    6. cp deploy.example.json deploy.json && fill in IDs"
 	@echo "    7. make demo-all"
 
-setup: ## Install ao/ dependencies (yarn)
-	cd ../ao && yarn install
+setup: ## Install ao/ dependencies (npm)
+	cd ../ao && npm install --ignore-scripts
 
 keygen: ## Generate an Arweave wallet via ao/ scripts
-	cd ../ao && yarn keygen $(WALLET)
+	cd ../ao && npm run keygen -- $(WALLET)
 
-deploy: ## Deploy WASM module to Arweave (returns module_id)
-	cd ../ao && yarn deploy --wallet $(WALLET)
+deploy: ## Build WASM and deploy module to Arweave (returns module_id)
+	cargo build --release --manifest-path ../ao/contracts/Cargo.toml --target wasm32-unknown-unknown
+	cd ../ao && npm run deploy -- --wallet $(abspath $(WALLET))
 
-spawn: ## Spawn an AO process (returns process_id)
-	cd ../ao && yarn instantiate --wallet $(WALLET)
+spawn: ## Spawn an AO process (MODULE_ID, SCHEDULER required)
+	@test -n "$(MODULE_ID)" || (echo "Error: MODULE_ID is required (from make deploy output)" && exit 1)
+	@test -n "$(SCHEDULER)" || (echo "Error: SCHEDULER is required" && exit 1)
+	cd ../ao && npm run instantiate -- --wallet $(abspath $(WALLET)) --module_id $(MODULE_ID) --scheduler $(SCHEDULER)
 
 build: ## Build the demo binary (release)
 	cargo build --release
@@ -44,6 +47,23 @@ demo-recover: build ## Run recover subcommand (Phase 3)
 	@echo "Usage: make demo-recover SECRET_ID=<id>"
 	@test -n "$(SECRET_ID)" || (echo "Error: SECRET_ID is required" && exit 1)
 	cargo run --release -- recover --secret-id $(SECRET_ID)
+
+demo-local-share: build ## Local Phase 1: split secret (REQUESTER_PUBKEY required)
+	@test -n "$(REQUESTER_PUBKEY)" || (echo "Error: REQUESTER_PUBKEY required. Example: make demo-local-share REQUESTER_PUBKEY=\$$(jq -r .public_key_hex .formix-demo/requester.json)" && exit 1)
+	cargo run --release -- local share --requester-pubkey $(REQUESTER_PUBKEY) $(if $(PLAINTEXT),--plaintext "$(PLAINTEXT)",)
+
+demo-local-reencrypt: build ## Local Phase 2: re-encrypt via contract (SECRET_ID required)
+	@test -n "$(SECRET_ID)" || (echo "Error: SECRET_ID required" && exit 1)
+	cargo run --release -- local reencrypt --secret-id $(SECRET_ID)
+
+demo-local-recover: build ## Local Phase 3: recover secret (SECRET_ID required)
+	@test -n "$(SECRET_ID)" || (echo "Error: SECRET_ID required" && exit 1)
+	cargo run --release -- local recover --secret-id $(SECRET_ID)
+
+demo-local-all: build ## Run all local steps (keygen + share + reencrypt + recover)
+	cargo run --release -- local all $(if $(PLAINTEXT),--plaintext "$(PLAINTEXT)",)
+
+demo-local: demo-local-all ## Alias for demo-local-all (backward compat)
 
 demo-all: build ## Run full demo flow (keygen + share)
 	@echo "=========================================="
