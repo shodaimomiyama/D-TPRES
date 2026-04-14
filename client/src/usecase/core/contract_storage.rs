@@ -391,7 +391,7 @@ mod tests {
         let signer = umbral_pre::Signer::new(signing_sk);
 
         let (capsule, _) = umbral_pre::encrypt(&delegating_pk, b"test").unwrap();
-        let capsule_bytes = bincode::serialize(&capsule).unwrap();
+        let capsule_bytes = capsule.to_bytes().unwrap().to_vec();
 
         let verified_kfrags =
             umbral_pre::generate_kfrags(&delegating_sk, &receiving_pk, &signer, 1, 1, true, true);

@@ -49,7 +49,7 @@ fn create_test_kfrag_and_capsule() -> TestCryptoData {
     // Encrypt test plaintext to get a Capsule
     let plaintext = b"test-data-for-reencryption";
     let (capsule, _ciphertext) = umbral_pre::encrypt(&delegating_pk, plaintext).unwrap();
-    let capsule_bytes = bincode::serialize(&capsule).unwrap();
+    let capsule_bytes = capsule.to_bytes().unwrap().to_vec();
 
     // Generate kFrags (k=1, n=1 for simple tests)
     let verified_kfrags =
