@@ -1,7 +1,6 @@
 /target
 demo/target/
 ao/contracts/target/
-ao/contracts/Cargo.lock
 
 **/node_modules/
 

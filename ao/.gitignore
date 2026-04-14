@@ -5,3 +5,5 @@ logs
 arweave-keyfile.json
 
 .cwao/
+
+*.lock
