@@ -375,7 +375,7 @@ impl CryptoServiceImpl {
 
     /// Capsuleからumbral_pre::Capsuleを復元
     fn deserialize_capsule(&self, capsule: &Capsule) -> ServiceResult<umbral_pre::Capsule> {
-        bincode::deserialize(&capsule.capsule_bytes)
+        umbral_pre::Capsule::from_bytes(&capsule.capsule_bytes)
             .map_err(|_| ServiceError::crypto_error("Failed to deserialize capsule"))
     }
 }
@@ -510,8 +510,10 @@ impl CryptoService for CryptoServiceImpl {
             .map_err(|_| ServiceError::crypto_error("Encryption failed"))?;
 
         // Capsuleをシリアライズして保存
-        let serialized_capsule: Vec<u8> = bincode::serialize(&umbral_capsule)
-            .map_err(|_| ServiceError::crypto_error("Failed to serialize capsule"))?;
+        let serialized_capsule: Vec<u8> = umbral_capsule
+            .to_bytes()
+            .map_err(|_| ServiceError::crypto_error("Failed to serialize capsule"))?
+            .to_vec();
 
         let capsule: Capsule = Capsule {
             capsule_bytes: serialized_capsule,

@@ -255,11 +255,12 @@ fn perform_reencryption(
             details: "kFrag verification failed".to_string(),
         })?;
 
-    // Client serializes capsules with bincode (see crypto.rs:create_pre_capsule)
     let capsule: umbral_pre::Capsule =
-        bincode::deserialize(capsule_bytes).map_err(|e| AOCommunicationError::ExecutionError {
-            process_id: String::new(),
-            details: format!("Capsule deserialize failed: {e:?}"),
+        umbral_pre::Capsule::from_bytes(capsule_bytes).map_err(|e| {
+            AOCommunicationError::ExecutionError {
+                process_id: String::new(),
+                details: format!("Capsule deserialize failed: {e:?}"),
+            }
         })?;
 
     let verified_cfrag = umbral_pre::reencrypt(&capsule, verified_kfrag);
