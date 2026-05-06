@@ -5,4 +5,6 @@ mod message;
 #[cfg(feature = "production-ao")]
 mod production_client;
 #[cfg(feature = "hyperbeam")]
+mod signer;
+#[cfg(feature = "hyperbeam")]
 mod wallet;

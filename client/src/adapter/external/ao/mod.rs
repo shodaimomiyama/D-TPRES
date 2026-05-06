@@ -18,6 +18,8 @@ mod message;
 #[cfg(feature = "production-ao")]
 mod production_client;
 #[cfg(feature = "hyperbeam")]
+pub mod signer;
+#[cfg(feature = "hyperbeam")]
 pub mod wallet;
 
 pub use client::AOClient;
