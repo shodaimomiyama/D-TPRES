@@ -19,9 +19,9 @@ fn test_ao_config_fields() {
 #[test]
 fn test_ao_config_default_endpoints() {
     let config = AOConfig::default();
-    assert_eq!(config.mu_url(), "https://mu.ao-testnet.xyz");
-    assert_eq!(config.cu_url(), "https://cu.ao-testnet.xyz");
-    assert_eq!(config.gateway_url(), "https://arweave.net");
+    assert_eq!(config.mu_url(), "http://localhost:10000");
+    assert_eq!(config.cu_url(), "http://localhost:10000");
+    assert_eq!(config.gateway_url(), "http://localhost:10000");
     assert_eq!(config.timeout_ms(), 30_000);
 }
 

@@ -8,12 +8,10 @@ use std::env;
 
 use crate::adapter::errors::AOCommunicationError;
 
-/// TODO: Replace with confirmed production HyperBEAM MU endpoint.
-/// Candidates: https://mu.ao-testnet.xyz still works for ao-legacy;
-/// HyperBEAM-native MU is TBD pending public node announcement.
-const DEFAULT_MU_URL: &str = "https://mu.ao-testnet.xyz";
-const DEFAULT_CU_URL: &str = "https://cu.ao-testnet.xyz";
-const DEFAULT_GATEWAY_URL: &str = "https://arweave.net";
+// HyperBEAM runs as a single node (MU/CU/Gateway share the same endpoint)
+const DEFAULT_MU_URL: &str = "http://localhost:10000";
+const DEFAULT_CU_URL: &str = "http://localhost:10000";
+const DEFAULT_GATEWAY_URL: &str = "http://localhost:10000";
 const DEFAULT_TIMEOUT_MS: u64 = 30_000;
 
 /// AO Network connection configuration.
