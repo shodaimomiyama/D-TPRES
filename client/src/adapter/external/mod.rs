@@ -19,7 +19,7 @@ pub use ao::{
     AOClient, AOConfig, AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary, GetCFragResponse,
     MAX_BINARY_SIZE, MAX_ID_LENGTH,
 };
-#[cfg(feature = "production-ao")]
-pub use ao::{ArweaveJWK, DataItemBuilder, DataItemSigner, ProductionAOClient};
+#[cfg(feature = "hyperbeam")]
+pub use ao::{HyperBEAMClient, wallet::ArweaveJWK};
 
 pub use mock_ao::{MockAOClient, MockConfig};

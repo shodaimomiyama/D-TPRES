@@ -39,7 +39,6 @@ sha2 = { version = "0.10", features = ["oid"], optional = true }
 reqwest = { version = "0.12", features = ["json"], default-features = false, optional = true }
 
 [features]
-production-ao = ["dep:reqwest", "dep:rsa", "dep:sha2"]
 hyperbeam = ["dep:reqwest", "dep:rsa", "dep:sha2"]
 key-export = []
 
