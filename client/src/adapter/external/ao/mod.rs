@@ -23,6 +23,8 @@ pub mod signer;
 pub mod tabm;
 #[cfg(feature = "hyperbeam")]
 pub mod wallet;
+#[cfg(feature = "hyperbeam")]
+mod hyperbeam_client;
 
 pub use client::AOClient;
 pub use config::AOConfig;
@@ -36,3 +38,5 @@ pub use message::{
 pub use production_client::ProductionAOClient;
 #[cfg(feature = "hyperbeam")]
 pub use wallet::ArweaveJWK as HyperbeamArweaveJWK;
+#[cfg(feature = "hyperbeam")]
+pub use hyperbeam_client::HyperBEAMClient;
