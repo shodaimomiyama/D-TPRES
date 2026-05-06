@@ -1,14 +1,14 @@
 use contract::{
-    execute as contract_execute, instantiate as contract_instantiate, query as contract_query,
-    validate_id, CapsuleStatus, ContractError, ExecuteMsg, InstantiateMsg,
-    ListCapsulesByKFragResponse, OwnerCapsuleData, OwnerKFragData, QueryMsg, ValidateMessage,
-    CONFIG, DEFAULT_HOLDER_PROCESS_ID, HOLDER_CFRAGS, IDEM_FLAGS, INDEX_KFRAG_TO_CAPS,
-    KFRAG_HOLDERS, OWNER_CAPSULES, REPLY_DELEGATE_CAPSULE, REPLY_DELEGATE_KFRAG,
+    CONFIG, CapsuleStatus, ContractError, DEFAULT_HOLDER_PROCESS_ID, ExecuteMsg, HOLDER_CFRAGS,
+    IDEM_FLAGS, INDEX_KFRAG_TO_CAPS, InstantiateMsg, KFRAG_HOLDERS, ListCapsulesByKFragResponse,
+    OWNER_CAPSULES, OwnerCapsuleData, OwnerKFragData, QueryMsg, REPLY_DELEGATE_CAPSULE,
+    REPLY_DELEGATE_KFRAG, ValidateMessage, execute as contract_execute,
+    instantiate as contract_instantiate, query as contract_query, validate_id,
 };
 use cosmwasm_std::testing::{
-    mock_dependencies, mock_env, mock_info, MockApi, MockQuerier, MockStorage,
+    MockApi, MockQuerier, MockStorage, mock_dependencies, mock_env, mock_info,
 };
-use cosmwasm_std::{from_json, Binary, CosmosMsg, Empty, OwnedDeps, WasmMsg};
+use cosmwasm_std::{Binary, CosmosMsg, Empty, OwnedDeps, WasmMsg, from_json};
 use serde::{Deserialize, Serialize};
 use umbral_pre::{self, DefaultDeserialize, DefaultSerialize};
 
