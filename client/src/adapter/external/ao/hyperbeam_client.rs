@@ -11,7 +11,8 @@ use crate::adapter::errors::AOCommunicationError;
 pub struct HyperBEAMClient {
     http: reqwest::Client,
     config: AOConfig,
-    wallet: ArweaveJWK,
+    rsa_key: rsa::RsaPrivateKey,
+    sig_name: String,
 }
 
 impl HyperBEAMClient {
@@ -21,19 +22,19 @@ impl HyperBEAMClient {
             .build()
             .map_err(|e| AOCommunicationError::connection_error(format!("HTTP client: {e}")))?;
 
+        let rsa_key = wallet.to_rsa_private_key()?;
+        let sig_name = wallet.sig_name()?;
+
         Ok(Self {
             http,
             config,
-            wallet,
+            rsa_key,
+            sig_name,
         })
     }
 
     fn base_url(&self) -> &str {
         self.config.mu_url()
-    }
-
-    fn rsa_key(&self) -> Result<rsa::RsaPrivateKey, AOCommunicationError> {
-        self.wallet.to_rsa_private_key()
     }
 
     async fn schedule(
@@ -42,8 +43,6 @@ impl HyperBEAMClient {
         msg: &AOExecuteMsg,
     ) -> Result<(u16, String, Vec<(String, String)>), AOCommunicationError> {
         let url = format!("{}/{}/schedule", self.base_url(), process_id);
-        let rsa_key = self.rsa_key()?;
-        let sig_name = self.wallet.sig_name();
 
         let action = msg.action();
         let payload = serde_json::to_string(msg.data()).map_err(|e| {
@@ -60,7 +59,7 @@ impl HyperBEAMClient {
             ("variant".to_string(), "ao.N.1".to_string()),
         ]);
 
-        let signed = signer::sign_message(&rsa_key, &header_fields, body, &sig_name)
+        let signed = signer::sign_message(&self.rsa_key, &header_fields, body, &self.sig_name)
             .map_err(|e| AOCommunicationError::signing_error(format!("{e}")))?;
 
         let mut req = self.http.post(&url);
@@ -216,10 +215,22 @@ impl AOClient for HyperBEAMClient {
         process_id: &str,
         _msg: AOQueryMsg,
     ) -> Result<Binary, AOCommunicationError> {
-        let (_status, body, _headers) = self.now(process_id).await?;
+        let (status, body, _headers) = self.now(process_id).await?;
+        if status >= 400 {
+            return Err(AOCommunicationError::execution_error(
+                process_id,
+                format!(
+                    "now query failed (HTTP {}): {}",
+                    status,
+                    &body[..body.len().min(200)]
+                ),
+            ));
+        }
         Ok(Binary(body.into_bytes()))
     }
 
+    // HyperBEAM does not expose a separate dry-run endpoint.
+    // This delegates to execute(), which performs a real schedule+compute.
     async fn dry_run(
         &self,
         process_id: &str,

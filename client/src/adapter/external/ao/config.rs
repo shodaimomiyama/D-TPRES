@@ -40,6 +40,11 @@ impl AOConfig {
                 details: "CU URL must not be empty".to_string(),
             });
         }
+        if gateway_url.is_empty() {
+            return Err(AOCommunicationError::ValidationError {
+                details: "Gateway URL must not be empty".to_string(),
+            });
+        }
         Ok(Self {
             mu_url: mu_url.to_string(),
             cu_url: cu_url.to_string(),

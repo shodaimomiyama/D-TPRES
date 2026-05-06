@@ -69,22 +69,28 @@ impl ArweaveJWK {
         })
     }
 
-    pub fn address(&self) -> String {
-        let n_bytes = URL_SAFE_NO_PAD
-            .decode(&self.n)
-            .expect("n field is valid base64url");
+    pub fn address(&self) -> Result<String, AOCommunicationError> {
+        let n_bytes = URL_SAFE_NO_PAD.decode(&self.n).map_err(|e| {
+            AOCommunicationError::wallet_error(format!("decoding n for address: {e}"))
+        })?;
         let hash = Sha256::digest(&n_bytes);
-        URL_SAFE_NO_PAD.encode(hash)
+        Ok(URL_SAFE_NO_PAD.encode(hash))
     }
 
-    pub fn sig_name(&self) -> String {
-        let address = self.address();
-        let raw = URL_SAFE_NO_PAD
-            .decode(&address)
-            .expect("address is valid base64url");
+    pub fn sig_name(&self) -> Result<String, AOCommunicationError> {
+        let address = self.address()?;
+        let raw = URL_SAFE_NO_PAD.decode(&address).map_err(|e| {
+            AOCommunicationError::wallet_error(format!("decoding address for sig_name: {e}"))
+        })?;
+        if raw.len() < 9 {
+            return Err(AOCommunicationError::wallet_error(format!(
+                "address hash too short ({} bytes, need 9)",
+                raw.len()
+            )));
+        }
         let slice = &raw[1..9];
         let hex: String = slice.iter().map(|b| format!("{b:02x}")).collect();
-        format!("http-sig-{hex}")
+        Ok(format!("http-sig-{hex}"))
     }
 }
 

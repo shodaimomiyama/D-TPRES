@@ -41,7 +41,7 @@ fn test_to_rsa_private_key_roundtrip() {
 #[test]
 fn test_address_is_43_chars_base64url() {
     let jwk = generate_test_jwk();
-    let address = jwk.address();
+    let address = jwk.address().unwrap();
     assert_eq!(
         address.len(),
         43,
@@ -55,7 +55,7 @@ fn test_address_is_43_chars_base64url() {
 #[test]
 fn test_sig_name_format() {
     let jwk = generate_test_jwk();
-    let sig_name = jwk.sig_name();
+    let sig_name = jwk.sig_name().unwrap();
     assert!(
         sig_name.starts_with("http-sig-"),
         "sig_name should start with 'http-sig-'"
@@ -70,7 +70,7 @@ fn test_sig_name_format() {
 #[test]
 fn test_address_deterministic() {
     let jwk = generate_test_jwk();
-    let addr1 = jwk.address();
-    let addr2 = jwk.address();
+    let addr1 = jwk.address().unwrap();
+    let addr2 = jwk.address().unwrap();
     assert_eq!(addr1, addr2);
 }
