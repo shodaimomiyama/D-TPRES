@@ -88,7 +88,9 @@ unsafe fn read_cstr(ptr: *const u8) -> &'static [u8] {
 /// Convert AOResponse to AOS format, serialize, null-terminate, and store.
 fn write_aos_response(response: AOResponse) -> *const u8 {
     let aos = response.into_aos_response();
-    let mut json = serde_json::to_vec(&aos).unwrap_or_else(|_| b"{}".to_vec());
+    let mut json = serde_json::to_vec(&aos).unwrap_or_else(|_| {
+        br#"{"ok":false,"error":"Internal serialization error"}"#.to_vec()
+    });
     json.push(0);
     write_response(json)
 }
