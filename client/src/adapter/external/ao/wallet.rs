@@ -44,10 +44,10 @@ impl std::fmt::Debug for ArweaveJWK {
 
 impl ArweaveJWK {
     pub fn from_file(path: &str) -> Result<Self, AOCommunicationError> {
-        let data = std::fs::read_to_string(path).map_err(|e| {
+        let contents = std::fs::read_to_string(path).map_err(|e| {
             AOCommunicationError::wallet_error(format!("reading wallet file '{path}': {e}"))
         })?;
-        serde_json::from_str(&data).map_err(|e| {
+        serde_json::from_str(&contents).map_err(|e| {
             AOCommunicationError::wallet_error(format!("parsing JWK: {e}"))
         })
     }

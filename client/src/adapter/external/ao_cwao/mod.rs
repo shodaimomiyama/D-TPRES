@@ -1,32 +1,17 @@
-//! AO Network client module
+//! Legacy CWAO AO Network client module (preserved for reference)
 //!
-//! Provides production implementation of AOClient trait
-//! for AO Network communication.
-//!
-//! ## Module Structure
-//!
-//! - `client` - AOClient trait definition
-//! - `config` - AO Network connection configuration
-//! - `message` - Message types for AO communication
-//! - `data_item` - ANS-104 DataItem builder and signer (production feature)
-//! - `production_client` - Production AOClient implementation (production feature)
+//! The production client and data_item modules have been superseded by
+//! the HyperBEAM-native implementation in `ao/`. The trait, config,
+//! and message types remain for CWAO compatibility.
 
 mod client;
 mod config;
-#[cfg(feature = "production-ao")]
-mod data_item;
 mod message;
-#[cfg(feature = "production-ao")]
-mod production_client;
 
 pub use client::AOClient;
 pub use config::AOConfig;
-#[cfg(feature = "production-ao")]
-pub use data_item::{ArweaveJWK, DataItemBuilder, DataItemSigner};
 pub use message::{
     AOAttribute, AOEvent, AOMessageTags, AOResponse, Binary, BlobMeta, CFragEntry, CapsuleInfo,
     CapsuleStatus, ExecuteMsg, GetCFragResponse, GetCFragsBySecretResponse,
     ListCapsulesByKFragResponse, QueryMsg, ValidateMessage, MAX_BINARY_SIZE, MAX_ID_LENGTH,
 };
-#[cfg(feature = "production-ao")]
-pub use production_client::ProductionAOClient;

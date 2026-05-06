@@ -46,7 +46,7 @@ pub enum BodyPart<'a> {
     },
     Binary {
         name: &'a str,
-        data: &'a [u8],
+        content: &'a [u8],
     },
 }
 
@@ -68,10 +68,10 @@ pub fn encode_hb_mixed_body(parts: &[BodyPart]) -> HbMultipart {
                     .into_bytes();
                 (name.to_string(), bytes)
             }
-            BodyPart::Binary { name, data } => {
+            BodyPart::Binary { name, content } => {
                 let header = format!("content-disposition: form-data;name=\"{name}\"\r\n\r\n");
                 let mut bytes = header.into_bytes();
-                bytes.extend_from_slice(data);
+                bytes.extend_from_slice(content);
                 (name.to_string(), bytes)
             }
         })

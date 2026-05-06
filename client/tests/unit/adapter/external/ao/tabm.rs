@@ -50,12 +50,12 @@ fn test_encode_mixed_body() {
             items: &[("1", "WASI@1.0")],
         },
         tabm::BodyPart::Binary {
-            name: "data",
-            data: b"hello",
+            name: "body",
+            content: b"hello",
         },
     ]);
     let body_str = String::from_utf8(result.body.clone()).unwrap();
-    assert!(body_str.contains("data"));
+    assert!(body_str.contains("body"));
     assert!(body_str.contains("device-stack"));
 }
 

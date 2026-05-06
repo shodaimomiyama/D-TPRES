@@ -46,10 +46,10 @@ impl HyperBEAMClient {
         let sig_name = self.wallet.sig_name();
 
         let action = msg.action();
-        let data = serde_json::to_string(msg.data()).map_err(|e| {
+        let payload = serde_json::to_string(msg.data()).map_err(|e| {
             AOCommunicationError::serialization_error(format!("serialize msg data: {e}"))
         })?;
-        let body = data.as_bytes();
+        let body = payload.as_bytes();
 
         let header_fields: BTreeMap<String, String> = BTreeMap::from([
             ("action".to_string(), action.to_string()),
