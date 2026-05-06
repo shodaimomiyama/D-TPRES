@@ -17,6 +17,8 @@ mod data_item;
 mod message;
 #[cfg(feature = "production-ao")]
 mod production_client;
+#[cfg(feature = "hyperbeam")]
+pub mod wallet;
 
 pub use client::AOClient;
 pub use config::AOConfig;
@@ -28,3 +30,5 @@ pub use message::{
 };
 #[cfg(feature = "production-ao")]
 pub use production_client::ProductionAOClient;
+#[cfg(feature = "hyperbeam")]
+pub use wallet::ArweaveJWK as HyperbeamArweaveJWK;
