@@ -1,9 +1,11 @@
-/// FORMIX AO-native WASM Contract for HyperBEAM (~wasm64@1.0)
+/// FORMIX AO-native WASM Contract for HyperBEAM (JSON-Iface)
 ///
-/// State lives in global Rust statics. HyperBEAM snapshots/restores the
-/// entire WASM linear memory between messages, so globals survive across
-/// invocations — unlike CWAO where state had to be read/written via
-/// db_read/db_write on each message.
+/// Entry point ABI: handle(msg_ptr, env_ptr) -> *const u8
+/// Memory exports: malloc(size) -> *mut u8, free(ptr)
+///
+/// State lives in global Rust statics. HyperBEAM replays all messages
+/// from genesis within a single WASM instance per compute request,
+/// so globals accumulate correctly (O(n) cost, acceptable for PoC).
 mod getrandom_impl;
 mod handlers;
 mod message;
@@ -11,7 +13,7 @@ mod state;
 
 use std::cell::UnsafeCell;
 
-use message::{AOMessage, AOResponse};
+use message::{AOIncomingMessage, AOResponse};
 use state::ProcessState;
 
 // ─── Global State ──────────────────────────────────────────────────────────────
@@ -33,63 +35,88 @@ fn get_state() -> &'static mut ProcessState {
     }
 }
 
-// ─── WASM Entry Point ──────────────────────────────────────────────────────────
+// ─── WASM Entry Point (JSON-Iface ABI) ──────────────────────────────────────
+/// Called by JSON-Iface with two null-terminated JSON strings:
+/// - msg_ptr: AO message (Tags format)
+/// - env_ptr: Process definition (unused in PoC)
+///
+/// Returns pointer to null-terminated AOS-compatible JSON response.
+///
+/// # Safety
+/// JSON-Iface guarantees msg_ptr is valid and null-terminated.
+#[cfg(not(test))]
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[unsafe(no_mangle)]
-pub extern "C" fn handle(msg_ptr: i32, msg_len: i32) -> i32 {
-    if msg_len <= 0 {
-        let response = AOResponse::error("Invalid message length");
-        let response_json = serde_json::to_vec(&response).unwrap_or_else(|_| b"{}".to_vec());
-        return write_response(response_json);
+pub extern "C" fn handle(msg_ptr: *const u8, _env_ptr: *const u8) -> *const u8 {
+    if msg_ptr.is_null() {
+        let response = AOResponse::error("Null message pointer");
+        return write_aos_response(response);
     }
 
-    let msg_bytes = unsafe { core::slice::from_raw_parts(msg_ptr as *const u8, msg_len as usize) };
+    let msg_bytes = unsafe { read_cstr(msg_ptr) };
 
-    let response = match serde_json::from_slice::<AOMessage>(msg_bytes) {
-        Ok(msg) => handlers::dispatch(get_state(), msg),
+    if msg_bytes.is_empty() {
+        let response = AOResponse::error("Empty message");
+        return write_aos_response(response);
+    }
+
+    let response = match serde_json::from_slice::<AOIncomingMessage>(msg_bytes) {
+        Ok(incoming) => {
+            let msg = incoming.into_ao_message();
+            handlers::dispatch(get_state(), msg)
+        }
         Err(e) => AOResponse::error(format!("Failed to parse message: {e}")),
     };
 
-    let response_json = serde_json::to_vec(&response).unwrap_or_else(|_| b"{}".to_vec());
-    write_response(response_json)
+    write_aos_response(response)
 }
 
 // ─── Memory helpers ────────────────────────────────────────────────────────────
-fn write_response(data: Vec<u8>) -> i32 {
+/// Read a null-terminated C string from a WASM memory pointer.
+///
+/// # Safety
+/// Caller must ensure ptr is valid and points to a null-terminated string.
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
+unsafe fn read_cstr(ptr: *const u8) -> &'static [u8] {
+    let mut len = 0;
+    while unsafe { *ptr.add(len) != 0 } {
+        len += 1;
+    }
+    unsafe { core::slice::from_raw_parts(ptr, len) }
+}
+
+/// Convert AOResponse to AOS format, serialize, null-terminate, and store.
+fn write_aos_response(response: AOResponse) -> *const u8 {
+    let aos = response.into_aos_response();
+    let mut json = serde_json::to_vec(&aos).unwrap_or_else(|_| b"{}".to_vec());
+    json.push(0);
+    write_response(json)
+}
+
+fn write_response(data: Vec<u8>) -> *const u8 {
     unsafe {
         let buf = &mut *RESPONSE_BUF.0.get();
         *buf = data;
-        buf.as_ptr() as i32
+        buf.as_ptr()
     }
 }
 
-/// Host calls this to allocate WASM memory before writing the incoming message.
+/// JSON-Iface calls this to allocate WASM memory for input strings.
+#[cfg(not(test))]
 #[unsafe(no_mangle)]
-pub extern "C" fn alloc(size: i32) -> i32 {
-    if size <= 0 {
-        return 0;
+pub extern "C" fn malloc(size: usize) -> *mut u8 {
+    if size == 0 {
+        return core::ptr::null_mut();
     }
-    let layout = std::alloc::Layout::from_size_align(size as usize, 1).expect("invalid layout");
-    let ptr = unsafe { std::alloc::alloc(layout) };
-    ptr as i32
+    let mut buf = Vec::with_capacity(size);
+    let ptr = buf.as_mut_ptr();
+    core::mem::forget(buf);
+    ptr
 }
 
-/// Host calls this to free previously allocated WASM memory.
+/// JSON-Iface calls this to free the response pointer.
+/// PoC: no-op. HyperBEAM replays from genesis per compute request,
+/// so accumulated leaks are bounded by message count.
+#[cfg(not(test))]
 #[unsafe(no_mangle)]
-pub extern "C" fn dealloc(ptr: i32, size: i32) {
-    if ptr == 0 || size <= 0 {
-        return;
-    }
-    let layout = std::alloc::Layout::from_size_align(size as usize, 1).expect("invalid layout");
-    unsafe {
-        std::alloc::dealloc(ptr as *mut u8, layout);
-    }
-}
-
-/// Returns the length of the last response (so the host can read ptr..ptr+len).
-#[unsafe(no_mangle)]
-pub extern "C" fn response_len() -> i32 {
-    unsafe {
-        let buf = &*RESPONSE_BUF.0.get();
-        buf.len() as i32
-    }
-}
+pub extern "C" fn free(_ptr: *mut u8) {}
