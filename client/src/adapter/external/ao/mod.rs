@@ -13,6 +13,8 @@
 
 mod client;
 mod config;
+#[cfg(feature = "hyperbeam")]
+mod hyperbeam_client;
 mod message;
 #[cfg(feature = "hyperbeam")]
 pub mod signer;
@@ -20,14 +22,12 @@ pub mod signer;
 pub mod tabm;
 #[cfg(feature = "hyperbeam")]
 pub mod wallet;
-#[cfg(feature = "hyperbeam")]
-mod hyperbeam_client;
 
 pub use client::AOClient;
 pub use config::AOConfig;
+#[cfg(feature = "hyperbeam")]
+pub use hyperbeam_client::HyperBEAMClient;
 pub use message::{
     validate_binary, validate_id, AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary,
     GetCFragResponse, MAX_BINARY_SIZE, MAX_ID_LENGTH,
 };
-#[cfg(feature = "hyperbeam")]
-pub use hyperbeam_client::HyperBEAMClient;

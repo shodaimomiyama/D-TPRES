@@ -47,27 +47,21 @@ impl ArweaveJWK {
         let contents = std::fs::read_to_string(path).map_err(|e| {
             AOCommunicationError::wallet_error(format!("reading wallet file '{path}': {e}"))
         })?;
-        serde_json::from_str(&contents).map_err(|e| {
-            AOCommunicationError::wallet_error(format!("parsing JWK: {e}"))
-        })
+        serde_json::from_str(&contents)
+            .map_err(|e| AOCommunicationError::wallet_error(format!("parsing JWK: {e}")))
     }
 
     pub fn to_rsa_private_key(&self) -> Result<RsaPrivateKey, AOCommunicationError> {
-        let n = decode_biguint(&self.n).map_err(|e| {
-            AOCommunicationError::wallet_error(format!("decoding n: {e}"))
-        })?;
-        let e = decode_biguint(&self.e).map_err(|e| {
-            AOCommunicationError::wallet_error(format!("decoding e: {e}"))
-        })?;
-        let d = decode_biguint(&self.d).map_err(|e| {
-            AOCommunicationError::wallet_error(format!("decoding d: {e}"))
-        })?;
-        let p = decode_biguint(&self.p).map_err(|e| {
-            AOCommunicationError::wallet_error(format!("decoding p: {e}"))
-        })?;
-        let q = decode_biguint(&self.q).map_err(|e| {
-            AOCommunicationError::wallet_error(format!("decoding q: {e}"))
-        })?;
+        let n = decode_biguint(&self.n)
+            .map_err(|e| AOCommunicationError::wallet_error(format!("decoding n: {e}")))?;
+        let e = decode_biguint(&self.e)
+            .map_err(|e| AOCommunicationError::wallet_error(format!("decoding e: {e}")))?;
+        let d = decode_biguint(&self.d)
+            .map_err(|e| AOCommunicationError::wallet_error(format!("decoding d: {e}")))?;
+        let p = decode_biguint(&self.p)
+            .map_err(|e| AOCommunicationError::wallet_error(format!("decoding p: {e}")))?;
+        let q = decode_biguint(&self.q)
+            .map_err(|e| AOCommunicationError::wallet_error(format!("decoding q: {e}")))?;
 
         let primes = vec![p, q];
         RsaPrivateKey::from_components(n, e, d, primes).map_err(|e| {

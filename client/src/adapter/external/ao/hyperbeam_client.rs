@@ -76,9 +76,7 @@ impl HyperBEAMClient {
             .body(body.to_vec())
             .send()
             .await
-            .map_err(|e| {
-                AOCommunicationError::connection_error(format!("schedule POST: {e}"))
-            })?;
+            .map_err(|e| AOCommunicationError::connection_error(format!("schedule POST: {e}")))?;
 
         let status = resp.status().as_u16();
         let headers: Vec<(String, String)> = resp
@@ -105,9 +103,7 @@ impl HyperBEAMClient {
             .header("slot", slot.to_string())
             .send()
             .await
-            .map_err(|e| {
-                AOCommunicationError::connection_error(format!("compute GET: {e}"))
-            })?;
+            .map_err(|e| AOCommunicationError::connection_error(format!("compute GET: {e}")))?;
 
         let status = resp.status().as_u16();
         let headers: Vec<(String, String)> = resp
@@ -127,9 +123,12 @@ impl HyperBEAMClient {
         process_id: &str,
     ) -> Result<(u16, String, Vec<(String, String)>), AOCommunicationError> {
         let url = format!("{}/{}/now", self.base_url(), process_id);
-        let resp = self.http.get(&url).send().await.map_err(|e| {
-            AOCommunicationError::connection_error(format!("now GET: {e}"))
-        })?;
+        let resp = self
+            .http
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| AOCommunicationError::connection_error(format!("now GET: {e}")))?;
 
         let status = resp.status().as_u16();
         let headers: Vec<(String, String)> = resp
@@ -137,9 +136,10 @@ impl HyperBEAMClient {
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
             .collect();
-        let body = resp.text().await.map_err(|e| {
-            AOCommunicationError::connection_error(format!("read now body: {e}"))
-        })?;
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| AOCommunicationError::connection_error(format!("read now body: {e}")))?;
 
         Ok((status, body, headers))
     }
@@ -158,15 +158,12 @@ impl HyperBEAMClient {
         None
     }
 
-    fn parse_response(
-        status: u16,
-        body: &str,
-        _headers: &[(String, String)],
-    ) -> AONativeResponse {
+    fn parse_response(status: u16, body: &str, _headers: &[(String, String)]) -> AONativeResponse {
         if status >= 400 {
-            return AONativeResponse::error_response(
-                format!("HTTP {status}: {}", &body[..body.len().min(200)]),
-            );
+            return AONativeResponse::error_response(format!(
+                "HTTP {status}: {}",
+                &body[..body.len().min(200)]
+            ));
         }
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(body) {
             let ok = v.get("ok").and_then(|o| o.as_bool()).unwrap_or(true);
@@ -194,8 +191,7 @@ impl AOClient for HyperBEAMClient {
         process_id: &str,
         msg: AOExecuteMsg,
     ) -> Result<AONativeResponse, AOCommunicationError> {
-        let (sched_status, sched_body, sched_headers) =
-            self.schedule(process_id, &msg).await?;
+        let (sched_status, sched_body, sched_headers) = self.schedule(process_id, &msg).await?;
 
         if sched_status >= 400 {
             return Err(AOCommunicationError::execution_error(
@@ -210,8 +206,7 @@ impl AOClient for HyperBEAMClient {
 
         let slot = Self::extract_slot(&sched_headers, &sched_body).unwrap_or(1);
 
-        let (comp_status, comp_body, comp_headers) =
-            self.compute(process_id, slot).await?;
+        let (comp_status, comp_body, comp_headers) = self.compute(process_id, slot).await?;
 
         Ok(Self::parse_response(comp_status, &comp_body, &comp_headers))
     }

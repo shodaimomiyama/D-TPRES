@@ -151,4 +151,3 @@ impl FormixClient {
         self.actions.generate_keypair()
     }
 }
-

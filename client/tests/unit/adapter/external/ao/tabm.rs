@@ -9,7 +9,9 @@ fn test_encode_multipart_simple_parts() {
     assert!(body_str.contains("Ping"));
     assert!(body_str.contains("type"));
     assert!(body_str.contains("Message"));
-    assert!(result.content_type.starts_with("multipart/form-data; boundary=\""));
+    assert!(result
+        .content_type
+        .starts_with("multipart/form-data; boundary=\""));
 }
 
 #[test]
@@ -19,7 +21,10 @@ fn test_encode_multipart_parts_sorted_lexicographically() {
 
     let alpha_pos = body_str.find("alpha").unwrap();
     let zebra_pos = body_str.find("zebra").unwrap();
-    assert!(alpha_pos < zebra_pos, "parts should be sorted lexicographically");
+    assert!(
+        alpha_pos < zebra_pos,
+        "parts should be sorted lexicographically"
+    );
 }
 
 #[test]

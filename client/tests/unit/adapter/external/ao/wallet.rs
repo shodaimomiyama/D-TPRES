@@ -32,7 +32,9 @@ fn generate_test_jwk() -> ArweaveJWK {
 #[test]
 fn test_to_rsa_private_key_roundtrip() {
     let jwk = generate_test_jwk();
-    let rsa_key = jwk.to_rsa_private_key().expect("should convert to RsaPrivateKey");
+    let rsa_key = jwk
+        .to_rsa_private_key()
+        .expect("should convert to RsaPrivateKey");
     assert!(rsa_key.validate().is_ok());
 }
 
@@ -40,16 +42,29 @@ fn test_to_rsa_private_key_roundtrip() {
 fn test_address_is_43_chars_base64url() {
     let jwk = generate_test_jwk();
     let address = jwk.address();
-    assert_eq!(address.len(), 43, "Arweave address should be 43 chars base64url");
-    assert!(address.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-'));
+    assert_eq!(
+        address.len(),
+        43,
+        "Arweave address should be 43 chars base64url"
+    );
+    assert!(address
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-'));
 }
 
 #[test]
 fn test_sig_name_format() {
     let jwk = generate_test_jwk();
     let sig_name = jwk.sig_name();
-    assert!(sig_name.starts_with("http-sig-"), "sig_name should start with 'http-sig-'");
-    assert_eq!(sig_name.len(), "http-sig-".len() + 16, "sig_name hex part should be 16 chars (8 bytes)");
+    assert!(
+        sig_name.starts_with("http-sig-"),
+        "sig_name should start with 'http-sig-'"
+    );
+    assert_eq!(
+        sig_name.len(),
+        "http-sig-".len() + 16,
+        "sig_name hex part should be 16 chars (8 bytes)"
+    );
 }
 
 #[test]

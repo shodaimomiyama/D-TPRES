@@ -6,7 +6,7 @@
 )]
 
 use formix::adapter::errors::AOCommunicationError;
-use formix::adapter::external::ao::{AOClient, AOExecuteMsg, AOQueryMsg, Binary, GetCFragResponse};
+use formix::adapter::external::ao::{AOClient, AOExecuteMsg, AOQueryMsg, GetCFragResponse};
 use formix::adapter::external::mock_ao::MockAOClient;
 
 /// Test data bundle containing valid Umbral crypto material for re-encryption tests.

@@ -1,4 +1,4 @@
-use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
+use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use rand::rngs::OsRng;
 use rsa::RsaPrivateKey;
@@ -37,7 +37,9 @@ fn test_sign_request_signature_input_format() {
     let signed = signer::sign_request(&key, b"data", "my-sig").unwrap();
 
     assert!(signed.signature_input_header.starts_with("my-sig="));
-    assert!(signed.signature_input_header.contains("alg=\"rsa-pss-sha512\""));
+    assert!(signed
+        .signature_input_header
+        .contains("alg=\"rsa-pss-sha512\""));
     assert!(signed.signature_input_header.contains("created="));
     assert!(signed.signature_input_header.contains("keyid=\""));
     assert!(signed.signature_input_header.contains("\"content-digest\""));
@@ -54,10 +56,18 @@ fn test_sign_message_covers_all_headers_sorted() {
 
     let input = &signed.signature_input_header;
     let action_pos = input.find("\"action\"").expect("should contain action");
-    let cd_pos = input.find("\"content-digest\"").expect("should contain content-digest");
+    let cd_pos = input
+        .find("\"content-digest\"")
+        .expect("should contain content-digest");
     let type_pos = input.find("\"type\"").expect("should contain type");
-    assert!(action_pos < cd_pos, "action before content-digest (alphabetical)");
-    assert!(cd_pos < type_pos, "content-digest before type (alphabetical)");
+    assert!(
+        action_pos < cd_pos,
+        "action before content-digest (alphabetical)"
+    );
+    assert!(
+        cd_pos < type_pos,
+        "content-digest before type (alphabetical)"
+    );
 }
 
 #[test]
