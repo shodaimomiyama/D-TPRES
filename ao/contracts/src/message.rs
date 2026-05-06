@@ -94,6 +94,49 @@ impl AOIncomingMessage {
     }
 }
 
+/// AOS-compatible response wrapper for JSON-Iface.
+/// JSON-Iface's `json_to_message` expects this format.
+#[derive(Debug, Serialize)]
+pub struct AOSResponse {
+    pub ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response: Option<AOSResultBody>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AOSResultBody {
+    #[serde(rename = "Output")]
+    pub output: AOSOutput,
+    #[serde(rename = "Messages")]
+    pub messages: Vec<AOSOutgoingMessage>,
+    #[serde(rename = "Spawns")]
+    pub spawns: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AOSOutput {
+    pub data: serde_json::Value,
+}
+
+/// Outgoing message in AOS Tags format for JSON-Iface routing.
+#[derive(Debug, Serialize)]
+pub struct AOSOutgoingMessage {
+    #[serde(rename = "Target")]
+    pub target: String,
+    #[serde(rename = "Tags")]
+    pub tags: Vec<AOSTag>,
+    #[serde(rename = "Data")]
+    pub data: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AOSTag {
+    pub name: String,
+    pub value: String,
+}
+
 impl AOResponse {
     pub fn success(data: serde_json::Value) -> Self {
         Self {
@@ -119,6 +162,44 @@ impl AOResponse {
             data: None,
             error: Some(msg.into()),
             messages: Vec::new(),
+        }
+    }
+
+    /// Wrap internal response in AOS-compatible format for JSON-Iface.
+    pub fn into_aos_response(self) -> AOSResponse {
+        if !self.ok {
+            return AOSResponse {
+                ok: false,
+                response: None,
+                error: self.error,
+            };
+        }
+
+        let messages: Vec<AOSOutgoingMessage> = self
+            .messages
+            .into_iter()
+            .map(|m| AOSOutgoingMessage {
+                target: m.target,
+                tags: vec![AOSTag {
+                    name: "Action".to_string(),
+                    value: m.action,
+                }],
+                data: m.data,
+            })
+            .collect();
+
+        let data = self
+            .data
+            .unwrap_or(serde_json::Value::String(String::new()));
+
+        AOSResponse {
+            ok: true,
+            response: Some(AOSResultBody {
+                output: AOSOutput { data },
+                messages,
+                spawns: Vec::new(),
+            }),
+            error: None,
         }
     }
 }
@@ -224,5 +305,61 @@ mod tests {
 
         assert_eq!(msg.action, "Eval");
         assert_eq!(msg.data.unwrap(), "return 1+1");
+    }
+
+    #[test]
+    fn aos_response_success_format() {
+        let response = AOResponse::success(serde_json::json!({"result": "ok"}));
+        let aos = response.into_aos_response();
+
+        let json_str = serde_json::to_string(&aos).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(parsed["response"]["Output"]["data"]["result"], "ok");
+        assert!(
+            parsed["response"]["Messages"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(parsed["response"]["Spawns"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn aos_response_error_format() {
+        let response = AOResponse::error("something failed");
+        let aos = response.into_aos_response();
+
+        let json_str = serde_json::to_string(&aos).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+
+        assert_eq!(parsed["ok"], false);
+        assert_eq!(parsed["error"], "something failed");
+        assert!(parsed.get("response").is_none());
+    }
+
+    #[test]
+    fn aos_response_with_messages() {
+        let outgoing = OutgoingMessage {
+            target: "holder-proc-123".to_string(),
+            action: "SubmitKFrag".to_string(),
+            data: serde_json::json!({"kfrag_id": "kf-1"}),
+        };
+        let response = AOResponse::success_with_messages(
+            serde_json::json!({"delegated": true}),
+            vec![outgoing],
+        );
+        let aos = response.into_aos_response();
+
+        let json_str = serde_json::to_string(&aos).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+
+        let msgs = parsed["response"]["Messages"].as_array().unwrap();
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0]["Target"], "holder-proc-123");
+        assert_eq!(msgs[0]["Tags"][0]["name"], "Action");
+        assert_eq!(msgs[0]["Tags"][0]["value"], "SubmitKFrag");
+        assert_eq!(msgs[0]["Data"]["kfrag_id"], "kf-1");
     }
 }
