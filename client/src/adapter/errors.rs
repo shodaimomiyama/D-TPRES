@@ -244,6 +244,18 @@ pub enum AOCommunicationError {
     /// Execution error from AO Process
     #[error("Execution error from process '{process_id}': {details}")]
     ExecutionError { process_id: String, details: String },
+
+    #[error("RFC-9421 signing failed: {details}")]
+    SigningError { details: String },
+
+    #[error("TABM encoding failed: {details}")]
+    TabmEncodingError { details: String },
+
+    #[error("Wallet error: {details}")]
+    WalletError { details: String },
+
+    #[error("Multipart response parsing failed: {details}")]
+    ResponseParsingError { details: String },
 }
 
 impl From<AOCommunicationError> for AdapterError {
@@ -300,6 +312,24 @@ impl From<AOCommunicationError> for AdapterError {
                 operation: format!("execute_on_{process_id}"),
                 details,
             },
+            AOCommunicationError::SigningError { details } => Self::StorageError {
+                operation: "rfc9421_signing".to_string(),
+                details,
+            },
+            AOCommunicationError::TabmEncodingError { details } => Self::SerializationError {
+                operation: "tabm_encode".to_string(),
+                details,
+            },
+            AOCommunicationError::WalletError { details } => Self::StorageError {
+                operation: "wallet".to_string(),
+                details,
+            },
+            AOCommunicationError::ResponseParsingError { details } => {
+                Self::SerializationError {
+                    operation: "response_parse".to_string(),
+                    details,
+                }
+            }
         }
     }
 }
@@ -381,6 +411,30 @@ impl AOCommunicationError {
     pub fn execution_error(process_id: impl Into<String>, details: impl Into<String>) -> Self {
         Self::ExecutionError {
             process_id: process_id.into(),
+            details: details.into(),
+        }
+    }
+
+    pub fn signing_error(details: impl Into<String>) -> Self {
+        Self::SigningError {
+            details: details.into(),
+        }
+    }
+
+    pub fn tabm_encoding_error(details: impl Into<String>) -> Self {
+        Self::TabmEncodingError {
+            details: details.into(),
+        }
+    }
+
+    pub fn wallet_error(details: impl Into<String>) -> Self {
+        Self::WalletError {
+            details: details.into(),
+        }
+    }
+
+    pub fn response_parsing_error(details: impl Into<String>) -> Self {
+        Self::ResponseParsingError {
             details: details.into(),
         }
     }

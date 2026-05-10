@@ -65,10 +65,8 @@ pub use di::{ActionsContainer, DefaultActionsContainer};
 pub use error::{ActionError, ActionResult};
 pub use options::{RecoverOptions, ShareOptions};
 
-#[cfg(feature = "production-ao")]
-pub use client::{DeployConfig, GatewayConfig, ProductionFormixClient};
-#[cfg(feature = "production-ao")]
-pub use di::{ProductionActionsContainer, ProductionStorageService};
+#[cfg(feature = "hyperbeam")]
+pub use di::{HyperBEAMActionsContainer, HyperBEAMStorageService};
 
 use zeroize::Zeroizing;
 

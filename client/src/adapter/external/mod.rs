@@ -15,11 +15,11 @@ pub mod mock_ao;
 pub use arweave::{ArweaveClientConfig, ArweaveClientImpl, ArweaveWallet};
 
 // Re-export HyperBEAM-native AO types (new default)
+#[cfg(feature = "hyperbeam")]
+pub use ao::{wallet::ArweaveJWK, HyperBEAMClient};
 pub use ao::{
     AOClient, AOConfig, AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary, GetCFragResponse,
     MAX_BINARY_SIZE, MAX_ID_LENGTH,
 };
-#[cfg(feature = "production-ao")]
-pub use ao::{ArweaveJWK, DataItemBuilder, DataItemSigner, ProductionAOClient};
 
 pub use mock_ao::{MockAOClient, MockConfig};

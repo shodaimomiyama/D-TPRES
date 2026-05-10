@@ -1,30 +1,33 @@
 //! AO Network client module (HyperBEAM-native)
 //!
-//! Replaces `ao_cwao/` which used CosmWasm-style messages on the legacy AO testnet.
 //! This module targets HyperBEAM (~wasm64@1.0) with AO-native message format.
 //!
 //! ## Module Structure
-//! - `client` - AOClient trait (updated for HyperBEAM message types)
+//! - `client` - AOClient trait
 //! - `config` - AO Network connection config (HyperBEAM endpoints)
 //! - `message` - AO-native message types (AOExecuteMsg, AOQueryMsg, AONativeResponse)
-//! - `data_item` - ANS-104 DataItem builder and signer (production feature)
-//! - `production_client` - ProductionAOClient impl (production feature)
+//! - `wallet` - Arweave JWK wallet loader (hyperbeam feature)
+//! - `signer` - RFC-9421 HTTP message signatures (hyperbeam feature)
+//! - `tabm` - TABM multipart encoder (hyperbeam feature)
+//! - `hyperbeam_client` - HyperBEAMClient AOClient impl (hyperbeam feature)
 
 mod client;
 mod config;
-#[cfg(feature = "production-ao")]
-mod data_item;
+#[cfg(feature = "hyperbeam")]
+mod hyperbeam_client;
 mod message;
-#[cfg(feature = "production-ao")]
-mod production_client;
+#[cfg(feature = "hyperbeam")]
+pub mod signer;
+#[cfg(feature = "hyperbeam")]
+pub mod tabm;
+#[cfg(feature = "hyperbeam")]
+pub mod wallet;
 
 pub use client::AOClient;
 pub use config::AOConfig;
-#[cfg(feature = "production-ao")]
-pub use data_item::{ArweaveJWK, DataItemBuilder, DataItemSigner};
+#[cfg(feature = "hyperbeam")]
+pub use hyperbeam_client::HyperBEAMClient;
 pub use message::{
     validate_binary, validate_id, AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary,
     GetCFragResponse, MAX_BINARY_SIZE, MAX_ID_LENGTH,
 };
-#[cfg(feature = "production-ao")]
-pub use production_client::ProductionAOClient;
