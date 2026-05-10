@@ -2,6 +2,7 @@
 // getrandom trait so umbral-pre compiles, but it is NOT cryptographically
 // secure. Production must inject real entropy (message field, block hash,
 // or PRNG seeded from process ID + message ID).
+#[cfg(target_arch = "wasm32")]
 getrandom::register_custom_getrandom!(ao_getrandom);
 
 pub fn ao_getrandom(buf: &mut [u8]) -> Result<(), getrandom::Error> {

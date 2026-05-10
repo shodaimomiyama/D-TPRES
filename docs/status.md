@@ -1,7 +1,7 @@
 ---
 title: "FORMIX Development Status"
-version: "2.1.0"
-last_updated: "2026-02-23"
+version: "2.2.0"
+last_updated: "2026-05-06"
 author: "FORMIX Development Team"
 status: "active"
 ---
@@ -128,7 +128,33 @@ status: "active"
 
 ---
 
-## 5. Testing Infrastructure
+## 5. AO Contract (WASM)
+
+**Progress**: 60% (HyperBEAM JSON-Iface ABI migration complete, handlers/state implemented)
+
+| Component | Plan | Implementation | Test | Notes |
+| :-------- | :--: | :------------: | :--: | :--- |
+| **Entry Point ABI** |
+| handle(msg_ptr, env_ptr) | ✅ | ✅ | ✅ | JSON-Iface compatible, null-terminated JSON I/O |
+| malloc / free | ✅ | ✅ | ✅ | WASM memory allocation for JSON-Iface |
+| SyncCell global state | ✅ | ✅ | ✅ | Rust 2024 safe static pattern for WASM |
+| **Message Format** |
+| AOIncomingMessage (AO Tags) | ✅ | ✅ | ✅ | Id, From, Owner, Tags, Data parsing (7 tests) |
+| AOSResponse format | ✅ | ✅ | ✅ | AOS-compatible Output/Messages/Spawns (3 tests) |
+| Data string re-parsing | ✅ | ✅ | ✅ | JSON string in Data field auto-parsed |
+| **Handlers** |
+| Init | ✅ | ✅ | 🟡 | Owner/Holder role initialization |
+| DelegateKFrag | ✅ | ✅ | 🟡 | kFrag delegation from Owner to Holder |
+| DelegateCapsule | ✅ | ✅ | 🟡 | Capsule delegation from Owner to Holder |
+| Reencrypt | ✅ | ✅ | 🟡 | Proxy re-encryption on Holder |
+| GetCFrag / ListCapsules | ✅ | ✅ | 🟡 | Query handlers |
+| **State** |
+| ProcessState | ✅ | ✅ | 🟡 | Role, kFrag, capsule, cFrag storage |
+| StoredKeyFrag (Zeroize) | ✅ | ✅ | 🟡 | Secure key fragment storage with memory cleanup |
+
+---
+
+## 6. Testing Infrastructure
 
 **Progress**: 75% (All inline tests extracted to external test directory)
 
@@ -145,7 +171,7 @@ status: "active"
 
 ---
 
-## 6. Automation & CI/CD
+## 7. Automation & CI/CD
 
 **Progress**: 30%
 
@@ -161,7 +187,7 @@ status: "active"
 
 ---
 
-## 7. Current Issues and Risks
+## 8. Current Issues and Risks
 
 ### High Priority
 1. **Umbral-PRE API Limitation**: Workaround for SecretBox direct generation
@@ -180,10 +206,11 @@ status: "active"
 
 ---
 
-## 8. Change History
+## 9. Change History
 
 | Version | Date | Changes | Author |
 |---------|------|---------|--------|
+| 2.2.0 | 2026-05-06 | AO Contract ABI migration: JSON-Iface compatible handle(msg_ptr, env_ptr), AO Tags message parsing, AOS response format, removed dead CosmWasm code | FORMIX Development Team |
 | 2.1.0 | 2026-02-23 | Extract all inline tests from client/src/ to client/tests/unit/ (273 unit tests, 0 inline tests remaining) | FORMIX Development Team |
 | 2.0.0 | 2026-02-16 | Major docs cleanup: removed 30 outdated docs files, updated status to reflect actual client/src/ implementation (entities, services, controllers, adapters) | FORMIX Development Team |
 | 1.6.0 | 2026-02-16 | Removed EVM/Elciao references, restructured phases from 6 to 3, updated CLAUDE.md/README/docs/.claude/rules/ | FORMIX Development Team |
@@ -204,4 +231,4 @@ status: "active"
 
 ---
 
-*Last updated: 2026-02-23 by FORMIX Development Team*
+*Last updated: 2026-05-06 by FORMIX Development Team*
