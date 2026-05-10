@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   review:
-    if: github.event.pull_request.draft == false
+    if: false  # Temporarily disabled — OpenAI Codex review paused
     runs-on: ubuntu-latest
     concurrency:
       group: codex-review-${{ github.event.pull_request.number }}
