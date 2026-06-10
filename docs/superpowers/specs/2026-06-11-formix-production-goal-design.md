@@ -90,6 +90,18 @@ assert_eq!(recovered.recovered_secret.as_slice(), b"original");
 - browser / フロントエンド(O-Browser / A-Browser)
 - Ed25519 メッセージ署名、Access Control List
 
+## 参照リソース: hyperbeam-sandbox
+
+ローカル HyperBEAM ノードの起動・検証環境は別リポジトリにある:
+
+- **場所**: `~/Develop/MyProject/D-TPRES/hyperbeam-sandbox`
+- **用途**: ローカル HyperBEAM ノードの起動(`make setup` / `make start` / `make status` /
+  `make sanity`)、および `~wasm64@1.0` デバイスの ABI・spawn タグ・レスポンス取得方法に関する
+  実証結果(M1-M5、`docs/` 配下)の参照
+- ローカル E2E(DoD #2、Phase 0/1)のノードはこの sandbox の手順で起動する
+- sandbox は FORMIX から意図的に分離された検証環境であり、**FORMIX 側の成果物を sandbox に
+  持ち込まない**。知見の取り込みは FORMIX 側への実装として行う
+
 ## 前提・制約(リポジトリ規約)
 
 - Single-process (Combined role) モデル: `ContractStorageImpl::new_single_process()` を使用
