@@ -1,4 +1,4 @@
-use base64::engine::general_purpose::STANDARD;
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
 use rsa::pss::BlindedSigningKey;
 use rsa::signature::{RandomizedSigner, SignatureEncoding};
@@ -36,7 +36,9 @@ pub fn sign_request(
 
     let created = unix_timestamp()?;
 
-    let keyid = STANDARD.encode(key.n().to_bytes_be());
+    // HyperBEAM derives the signer address from keyid (sha256 of the decoded
+    // modulus), so this must be base64url-no-pad — identical to the JWK `n`.
+    let keyid = URL_SAFE_NO_PAD.encode(key.n().to_bytes_be());
     let covered_components = "\"content-digest\"";
 
     let signature_input = format!(
@@ -78,7 +80,9 @@ pub fn sign_message(
 
     let created = unix_timestamp()?;
 
-    let keyid = STANDARD.encode(key.n().to_bytes_be());
+    // HyperBEAM derives the signer address from keyid (sha256 of the decoded
+    // modulus), so this must be base64url-no-pad — identical to the JWK `n`.
+    let keyid = URL_SAFE_NO_PAD.encode(key.n().to_bytes_be());
 
     let mut components: Vec<(String, String)> = headers
         .iter()
