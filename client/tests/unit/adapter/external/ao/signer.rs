@@ -1,6 +1,7 @@
-use base64::engine::general_purpose::STANDARD;
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
 use rand::rngs::OsRng;
+use rsa::traits::PublicKeyParts;
 use rsa::RsaPrivateKey;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -43,6 +44,40 @@ fn test_sign_request_signature_input_format() {
     assert!(signed.signature_input_header.contains("created="));
     assert!(signed.signature_input_header.contains("keyid=\""));
     assert!(signed.signature_input_header.contains("\"content-digest\""));
+}
+
+// HyperBEAM derives the signer address from keyid, so it must be the
+// base64url-no-pad modulus — identical to the JWK `n` field (issue #99).
+#[test]
+fn test_sign_request_keyid_is_base64url_modulus() {
+    let key = test_rsa_key();
+    let signed = signer::sign_request(&key, b"data", "my-sig").unwrap();
+
+    let expected = URL_SAFE_NO_PAD.encode(key.n().to_bytes_be());
+    assert!(
+        signed
+            .signature_input_header
+            .contains(&format!("keyid=\"{expected}\"")),
+        "keyid must be base64url(n): {}",
+        signed.signature_input_header
+    );
+}
+
+#[test]
+fn test_sign_message_keyid_is_base64url_modulus() {
+    let key = test_rsa_key();
+    let mut headers = BTreeMap::new();
+    headers.insert("action".to_string(), "Ping".to_string());
+    let signed = signer::sign_message(&key, &headers, b"body", "my-sig").unwrap();
+
+    let expected = URL_SAFE_NO_PAD.encode(key.n().to_bytes_be());
+    assert!(
+        signed
+            .signature_input_header
+            .contains(&format!("keyid=\"{expected}\"")),
+        "keyid must be base64url(n): {}",
+        signed.signature_input_header
+    );
 }
 
 #[test]
