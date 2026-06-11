@@ -168,6 +168,7 @@ status: "active"
 | MockAOClient | ✅ | ✅ | AO client test mock |
 | ArweaveClient Tests | ✅ | ✅ | Arweave transaction signing/verification |
 | E2E arlocal Investigation | 🟡 | 🟡 | Local Arweave testing setup |
+| HyperBEAM E2E (`test_hyperbeam_e2e`) | ✅ | ✅ | share() → recover() against a real local HyperBEAM node; run via `ao/scripts/deploy-hyperbeam.sh` |
 
 ---
 
@@ -210,6 +211,7 @@ status: "active"
 
 | Version | Date | Changes | Author |
 |---------|------|---------|--------|
+| 2.3.0 | 2026-06-11 | Local HyperBEAM E2E green: signer keyid fix, WASM canonicalization (wasm-tools), schedule-only execute + single-compute batch GetCFrags recovery, Combined-role inline submit delivery, CI/lint/audit green (#95-#102) | FORMIX Development Team |
 | 2.2.0 | 2026-05-06 | AO Contract ABI migration: JSON-Iface compatible handle(msg_ptr, env_ptr), AO Tags message parsing, AOS response format, removed dead CosmWasm code | FORMIX Development Team |
 | 2.1.0 | 2026-02-23 | Extract all inline tests from client/src/ to client/tests/unit/ (273 unit tests, 0 inline tests remaining) | FORMIX Development Team |
 | 2.0.0 | 2026-02-16 | Major docs cleanup: removed 30 outdated docs files, updated status to reflect actual client/src/ implementation (entities, services, controllers, adapters) | FORMIX Development Team |

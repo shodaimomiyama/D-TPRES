@@ -3,8 +3,7 @@ use umbral_pre::{self, DefaultDeserialize, DefaultSerialize};
 
 use crate::message::{AOMessage, AOResponse, OutgoingMessage};
 use crate::state::{
-    CapsuleStatus, OwnerCapsuleData, ProcessRole, ProcessState, StoredCFrag, StoredKeyFrag,
-    VerificationData,
+    CapsuleStatus, OwnerCapsuleData, ProcessRole, ProcessState, StoredKeyFrag, VerificationData,
 };
 
 fn parse_byte_array(arr: &[serde_json::Value]) -> Result<Vec<u8>, &'static str> {
@@ -49,6 +48,7 @@ pub fn dispatch(state: &mut ProcessState, msg: AOMessage) -> AOResponse {
 
         // Queries — allowed for any initialized role
         (_, "GetCFrag") => handle_get_cfrag(state, msg),
+        (_, "GetCFrags") => handle_get_cfrags(state, msg),
         (_, "ListCapsules") => handle_list_capsules(state, msg),
 
         (role, action) => {
@@ -126,6 +126,26 @@ fn handle_delegate_kfrag(state: &mut ProcessState, msg: AOMessage) -> AOResponse
         .kfrag_holders
         .insert(kfrag_id.clone(), holder_process_id.clone());
 
+    // Single-process (Combined) mode: this process is its own holder, and
+    // HyperBEAM does not push process outboxes in this flow — deliver the
+    // SubmitKFrag inline instead of emitting an outgoing message.
+    if matches!(state.role, Some(ProcessRole::Combined)) {
+        let submit = AOMessage {
+            action: "SubmitKFrag".to_string(),
+            from: msg.from.clone(),
+            id: None,
+            data: Some(json!({
+                "kfrag_id": kfrag_id,
+                "kfrag": kfrag_bytes,
+            })),
+        };
+        let sub_resp = handle_submit_kfrag(state, submit);
+        if !sub_resp.ok {
+            return sub_resp;
+        }
+        return AOResponse::success(json!({ "kfrag_id": kfrag_id, "delegated": true }));
+    }
+
     let outgoing = OutgoingMessage {
         target: holder_process_id,
         action: "SubmitKFrag".to_string(),
@@ -189,6 +209,26 @@ fn handle_delegate_capsule(state: &mut ProcessState, msg: AOMessage) -> AORespon
         .entry(kfrag_id.clone())
         .or_default()
         .push(capsule_id.clone());
+
+    // Same single-process inline delivery as DelegateKFrag — SubmitCapsule
+    // performs the re-encryption that produces the cFrag.
+    if matches!(state.role, Some(ProcessRole::Combined)) {
+        let submit = AOMessage {
+            action: "SubmitCapsule".to_string(),
+            from: msg.from.clone(),
+            id: None,
+            data: Some(json!({
+                "kfrag_id": kfrag_id,
+                "capsule_id": capsule_id,
+                "capsule": capsule_bytes,
+            })),
+        };
+        let sub_resp = handle_submit_capsule(state, submit);
+        if !sub_resp.ok {
+            return sub_resp;
+        }
+        return AOResponse::success(json!({ "capsule_id": capsule_id, "delegated": true }));
+    }
 
     let outgoing = OutgoingMessage {
         target: holder,
@@ -380,6 +420,37 @@ fn handle_get_cfrag(state: &mut ProcessState, msg: AOMessage) -> AOResponse {
     }
 }
 
+// HyperBEAM's wasm-64 snapshot restore is broken across HTTP requests, so the
+// client computes exactly one slot per recovery. This batch query returns every
+// cFrag for a capsule in a single response to make that possible.
+fn handle_get_cfrags(state: &mut ProcessState, msg: AOMessage) -> AOResponse {
+    let data = match msg.data {
+        Some(d) => d,
+        None => return AOResponse::error("Missing data"),
+    };
+    let capsule_id = match data["capsule_id"].as_str() {
+        Some(s) => s.to_string(),
+        None => return AOResponse::error("Missing capsule_id"),
+    };
+
+    let suffix = format!("/{capsule_id}");
+    let cfrags: Vec<serde_json::Value> = state
+        .holder_cfrags
+        .iter()
+        .filter_map(|(cap_key, cfrag_bytes)| {
+            let encoded = cap_key.strip_suffix(&suffix)?;
+            // cap_key = "{len}:{kfrag_id}/{capsule_id}"
+            let kfrag_id = encoded.split_once(':').map(|(_, id)| id)?;
+            Some(json!({ "kfrag_id": kfrag_id, "cfrag": cfrag_bytes }))
+        })
+        .collect();
+
+    AOResponse::success(json!({
+        "capsule_id": capsule_id,
+        "cfrags": cfrags,
+    }))
+}
+
 // ─── ListCapsules ─────────────────────────────────────────────────────────────
 fn handle_list_capsules(state: &mut ProcessState, msg: AOMessage) -> AOResponse {
     let data = match msg.data {
@@ -457,8 +528,8 @@ fn perform_reencryption(
         .to_bytes()
         .map_err(|_| "Failed to serialize cFrag".to_string())?;
 
-    let stored_cfrag = StoredCFrag {
-        fragment_data: cfrag_bytes.to_vec(),
-    };
-    bincode::serialize(&stored_cfrag).map_err(|e| format!("CFrag serialize failed: {e}"))
+    // Store the raw rmp_serde cfrag bytes — the client recovers with
+    // CapsuleFrag::from_bytes directly (see serialization conventions);
+    // a bincode wrapper here would break deserialization on recovery.
+    Ok(cfrag_bytes.to_vec())
 }

@@ -22,4 +22,7 @@ mod integration {
     mod secret_recovery_workflow_test;
     mod secret_sharing_workflow_test;
     mod workflow_roundtrip_test;
+
+    #[cfg(feature = "hyperbeam")]
+    mod test_hyperbeam_e2e;
 }

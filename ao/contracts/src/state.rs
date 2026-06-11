@@ -82,11 +82,6 @@ pub struct StoredKeyFrag {
     pub precursor: Vec<u8>,
 }
 
-#[derive(Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
-pub struct StoredCFrag {
-    pub fragment_data: Vec<u8>,
-}
-
 /// Deserialized from StoredKeyFrag.verification_data for kFrag verification.
 #[derive(Serialize, Deserialize)]
 pub struct VerificationData {

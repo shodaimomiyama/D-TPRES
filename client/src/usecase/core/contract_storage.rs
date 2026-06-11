@@ -11,7 +11,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use crate::adapter::external::ao::{AOClient, AOExecuteMsg, AOQueryMsg, GetCFragResponse};
+use crate::adapter::external::ao::{AOClient, AOExecuteMsg, AOQueryMsg, GetCFragsResponse};
 use crate::service::error::{ServiceError, ServiceResult};
 use crate::usecase::core::crypto::{CFragData, KeyFragment};
 
@@ -178,37 +178,38 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
         capsule_id: &str,
         process_id: &str,
     ) -> ServiceResult<Vec<CFragData>> {
-        let mut cfrags = Vec::new();
+        // Single batch query: HyperBEAM cannot restore wasm-64 snapshots
+        // across requests, so recovery reads all cFrags from one computed slot.
+        let msg = AOQueryMsg::get_cfrags(capsule_id);
+        let result = self
+            .ao_client
+            .query(process_id, msg)
+            .await
+            .map_err(|e| ServiceError::ao_network_error(format!("GetCFrags query: {e}")))?;
 
-        for i in 0..total_shares {
-            let kfrag_id = format!("{secret_id}_{i}");
-            let msg = AOQueryMsg::get_cfrag(&kfrag_id, capsule_id);
-
-            match self.ao_client.query(process_id, msg).await {
-                Ok(result) => {
-                    let response: GetCFragResponse = serde_json::from_slice(result.as_slice())
-                        .map_err(|e| {
-                            ServiceError::ao_network_error(format!(
-                                "Failed to parse cFrag for {kfrag_id}: {e}"
-                            ))
-                        })?;
-                    cfrags.push(CFragData {
-                        cfrag_data: response.cfrag,
-                        holder_id: process_id.to_string(),
-                    });
-                }
-                Err(e) => {
-                    let msg = e.to_string();
-                    // "not ready" means cFrag hasn't been generated yet — expected, skip
-                    if msg.contains("not ready") || msg.contains("CFrag not ready") {
-                        continue;
-                    }
-                    return Err(ServiceError::ao_network_error(format!(
-                        "Failed to query cFrag for {kfrag_id}: {msg}"
-                    )));
-                }
-            }
+        let value: serde_json::Value = serde_json::from_slice(result.as_slice())
+            .map_err(|e| ServiceError::ao_network_error(format!("Failed to parse cFrags: {e}")))?;
+        // Contract-level errors arrive as a bare string
+        // (`{"Error": ...}` response shape → results/data).
+        if let Some(err) = value.as_str() {
+            return Err(ServiceError::ao_network_error(format!(
+                "GetCFrags failed: {err}"
+            )));
         }
+        let response: GetCFragsResponse = serde_json::from_value(value)
+            .map_err(|e| ServiceError::ao_network_error(format!("Failed to parse cFrags: {e}")))?;
+
+        let prefix = format!("{secret_id}_");
+        let mut cfrags: Vec<CFragData> = response
+            .cfrags
+            .into_iter()
+            .filter(|entry| entry.kfrag_id.starts_with(&prefix))
+            .map(|entry| CFragData {
+                cfrag_data: entry.cfrag,
+                holder_id: process_id.to_string(),
+            })
+            .collect();
+        cfrags.truncate(total_shares as usize);
 
         Ok(cfrags)
     }

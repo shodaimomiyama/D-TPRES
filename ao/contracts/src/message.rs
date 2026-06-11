@@ -102,14 +102,14 @@ impl AOIncomingMessage {
 }
 
 /// AOS-compatible response wrapper for JSON-Iface.
-/// JSON-Iface's `json_to_message` expects this format.
+/// JSON-Iface's `results/3` only accepts `{"ok": true, "response": ...}` —
+/// anything else aborts the whole compute replay with a try_clause error.
+/// Contract-level failures therefore must also use `ok: true`, signalled via
+/// the `{"Error": ...}` response shape that `normalize_results/1` understands.
 #[derive(Debug, Serialize)]
 pub struct AOSResponse {
     pub ok: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub response: Option<AOSResultBody>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
+    pub response: serde_json::Value,
 }
 
 #[derive(Debug, Serialize)]
@@ -176,9 +176,10 @@ impl AOResponse {
     pub fn into_aos_response(self) -> AOSResponse {
         if !self.ok {
             return AOSResponse {
-                ok: false,
-                response: None,
-                error: self.error,
+                ok: true,
+                response: serde_json::json!({
+                    "Error": self.error.unwrap_or_else(|| "Unknown error".to_string()),
+                }),
             };
         }
 
@@ -199,14 +200,15 @@ impl AOResponse {
             .data
             .unwrap_or(serde_json::Value::String(String::new()));
 
+        let body = AOSResultBody {
+            output: AOSOutput { data },
+            messages,
+            spawns: Vec::new(),
+        };
         AOSResponse {
             ok: true,
-            response: Some(AOSResultBody {
-                output: AOSOutput { data },
-                messages,
-                spawns: Vec::new(),
-            }),
-            error: None,
+            response: serde_json::to_value(body)
+                .unwrap_or_else(|_| serde_json::json!({"Error": "serialization failure"})),
         }
     }
 }
@@ -341,9 +343,10 @@ mod tests {
         let json_str = serde_json::to_string(&aos).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
 
-        assert_eq!(parsed["ok"], false);
-        assert_eq!(parsed["error"], "something failed");
-        assert!(parsed.get("response").is_none());
+        // JSON-Iface aborts on ok=false, so errors stay ok=true with the
+        // `{"Error": ...}` shape understood by normalize_results.
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(parsed["response"]["Error"], "something failed");
     }
 
     #[test]
