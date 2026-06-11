@@ -9,20 +9,20 @@ use rsa::RsaPrivateKey;
 fn generate_test_jwk() -> ArweaveJWK {
     let private_key = RsaPrivateKey::new(&mut OsRng, 2048).unwrap();
     let public_key = private_key.to_public_key();
-    let n = URL_SAFE_NO_PAD.encode(public_key.n().to_bytes_be());
-    let e = URL_SAFE_NO_PAD.encode(public_key.e().to_bytes_be());
-    let d = URL_SAFE_NO_PAD.encode(private_key.d().to_bytes_be());
+    let modulus = URL_SAFE_NO_PAD.encode(public_key.n().to_bytes_be());
+    let public_exp = URL_SAFE_NO_PAD.encode(public_key.e().to_bytes_be());
+    let private_exp = URL_SAFE_NO_PAD.encode(private_key.d().to_bytes_be());
     let primes = private_key.primes();
-    let p = URL_SAFE_NO_PAD.encode(primes[0].to_bytes_be());
-    let q = URL_SAFE_NO_PAD.encode(primes[1].to_bytes_be());
+    let prime_p = URL_SAFE_NO_PAD.encode(primes[0].to_bytes_be());
+    let prime_q = URL_SAFE_NO_PAD.encode(primes[1].to_bytes_be());
 
     ArweaveJWK {
         kty: "RSA".to_string(),
-        n,
-        e,
-        d,
-        p,
-        q,
+        n: modulus,
+        e: public_exp,
+        d: private_exp,
+        p: prime_p,
+        q: prime_q,
         dp: String::new(),
         dq: String::new(),
         qi: String::new(),

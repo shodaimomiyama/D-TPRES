@@ -15,6 +15,15 @@ pub struct SignedMessage {
     pub signature_input_header: String,
 }
 
+// `duration_since(UNIX_EPOCH)` only fails when the system clock predates the
+// epoch; surface that as a signing error instead of panicking.
+fn unix_timestamp() -> Result<u64, AOCommunicationError> {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .map_err(|e| AOCommunicationError::signing_error(format!("system clock before epoch: {e}")))
+}
+
 pub fn sign_request(
     key: &RsaPrivateKey,
     body: &[u8],
@@ -25,10 +34,7 @@ pub fn sign_request(
         format!("sha-256=:{}:", STANDARD.encode(hash))
     };
 
-    let created = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let created = unix_timestamp()?;
 
     let keyid = STANDARD.encode(key.n().to_bytes_be());
     let covered_components = "\"content-digest\"";
@@ -70,10 +76,7 @@ pub fn sign_message(
         None
     };
 
-    let created = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
+    let created = unix_timestamp()?;
 
     let keyid = STANDARD.encode(key.n().to_bytes_be());
 

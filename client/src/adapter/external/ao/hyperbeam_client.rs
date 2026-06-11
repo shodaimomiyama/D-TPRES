@@ -16,7 +16,7 @@ pub struct HyperBEAMClient {
 }
 
 impl HyperBEAMClient {
-    pub fn new(config: AOConfig, wallet: ArweaveJWK) -> Result<Self, AOCommunicationError> {
+    pub fn new(config: AOConfig, wallet: &ArweaveJWK) -> Result<Self, AOCommunicationError> {
         let http = reqwest::Client::builder()
             .timeout(std::time::Duration::from_millis(config.timeout_ms()))
             .build()
@@ -83,7 +83,7 @@ impl HyperBEAMClient {
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
             .collect();
-        let body_text = resp.text().await.map_err(|e| {
+        let body_text = Box::pin(resp.text()).await.map_err(|e| {
             AOCommunicationError::connection_error(format!("read schedule body: {e}"))
         })?;
 
@@ -110,7 +110,7 @@ impl HyperBEAMClient {
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
             .collect();
-        let body = resp.text().await.map_err(|e| {
+        let body = Box::pin(resp.text()).await.map_err(|e| {
             AOCommunicationError::connection_error(format!("read compute body: {e}"))
         })?;
 
@@ -135,8 +135,7 @@ impl HyperBEAMClient {
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
             .collect();
-        let body = resp
-            .text()
+        let body = Box::pin(resp.text())
             .await
             .map_err(|e| AOCommunicationError::connection_error(format!("read now body: {e}")))?;
 
@@ -190,7 +189,8 @@ impl AOClient for HyperBEAMClient {
         process_id: &str,
         msg: AOExecuteMsg,
     ) -> Result<AONativeResponse, AOCommunicationError> {
-        let (sched_status, sched_body, sched_headers) = self.schedule(process_id, &msg).await?;
+        let (sched_status, sched_body, sched_headers) =
+            Box::pin(self.schedule(process_id, &msg)).await?;
 
         if sched_status >= 400 {
             return Err(AOCommunicationError::execution_error(
@@ -205,7 +205,8 @@ impl AOClient for HyperBEAMClient {
 
         let slot = Self::extract_slot(&sched_headers, &sched_body).unwrap_or(1);
 
-        let (comp_status, comp_body, comp_headers) = self.compute(process_id, slot).await?;
+        let (comp_status, comp_body, comp_headers) =
+            Box::pin(self.compute(process_id, slot)).await?;
 
         Ok(Self::parse_response(comp_status, &comp_body, &comp_headers))
     }
@@ -215,7 +216,7 @@ impl AOClient for HyperBEAMClient {
         process_id: &str,
         _msg: AOQueryMsg,
     ) -> Result<Binary, AOCommunicationError> {
-        let (status, body, _headers) = self.now(process_id).await?;
+        let (status, body, _headers) = Box::pin(self.now(process_id)).await?;
         if status >= 400 {
             return Err(AOCommunicationError::execution_error(
                 process_id,

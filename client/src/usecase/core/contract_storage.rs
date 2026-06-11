@@ -117,7 +117,7 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
             let kfrag_bytes = bincode::serialize(&payload).map_err(|e| {
                 ServiceError::validation_error(format!("kFrag serialization failed: {e}"))
             })?;
-            let msg = AOExecuteMsg::delegate_kfrag(&kfrag_id, kfrag_bytes, holder);
+            let msg = AOExecuteMsg::delegate_kfrag(&kfrag_id, &kfrag_bytes, holder);
             let resp = self
                 .ao_client
                 .execute(contract_id, msg)
@@ -151,8 +151,7 @@ impl<A: AOClient> ContractStorage for ContractStorageImpl<A> {
             self.holder_process_id.clone()
         };
 
-        let msg =
-            AOExecuteMsg::delegate_capsule(kfrag_id, capsule_id, capsule_data.to_vec(), holder);
+        let msg = AOExecuteMsg::delegate_capsule(kfrag_id, capsule_id, capsule_data, holder);
         let resp = self
             .ao_client
             .execute(contract_id, msg)
@@ -302,7 +301,7 @@ mod tests {
         let (kfrag_bytes, capsule_bytes) = create_test_crypto_data("kfrag-0");
 
         // Pre-register kfrag with valid Umbral data
-        let kfrag_msg = AOExecuteMsg::delegate_kfrag("kfrag-0", kfrag_bytes, "owner-process");
+        let kfrag_msg = AOExecuteMsg::delegate_kfrag("kfrag-0", &kfrag_bytes, "owner-process");
         mock.execute("owner-process", kfrag_msg).await.unwrap();
 
         cs.delegate_capsule(&capsule_bytes, "owner-process", "kfrag-0", "cap-001")
@@ -331,7 +330,7 @@ mod tests {
         let (kfrag_bytes, capsule_bytes) = create_test_crypto_data("kfrag-0");
 
         // Pre-register kfrag with valid Umbral data
-        let kfrag_msg = AOExecuteMsg::delegate_kfrag("kfrag-0", kfrag_bytes, "holder-process");
+        let kfrag_msg = AOExecuteMsg::delegate_kfrag("kfrag-0", &kfrag_bytes, "holder-process");
         mock.execute("owner-process", kfrag_msg).await.unwrap();
 
         cs.delegate_capsule(&capsule_bytes, "owner-process", "kfrag-0", "cap-001")
@@ -422,14 +421,14 @@ mod tests {
         let (kfrag_bytes, capsule_bytes) = create_test_crypto_data("secret-1_0");
 
         // DelegateKFrag → stores kfrag at holder-process
-        let msg = AOExecuteMsg::delegate_kfrag("secret-1_0", kfrag_bytes, "holder-process");
+        let msg = AOExecuteMsg::delegate_kfrag("secret-1_0", &kfrag_bytes, "holder-process");
         mock.execute("holder-process", msg).await.unwrap();
 
         // DelegateCapsule → triggers real re-encryption → cFrag stored
         let msg = AOExecuteMsg::delegate_capsule(
             "secret-1_0",
             "cap-001",
-            capsule_bytes,
+            &capsule_bytes,
             "holder-process",
         );
         mock.execute("holder-process", msg).await.unwrap();
@@ -451,13 +450,13 @@ mod tests {
         // Only create data for kfrag index 1 (out of 3)
         let (kfrag_bytes, capsule_bytes) = create_test_crypto_data("secret-1_1");
 
-        let msg = AOExecuteMsg::delegate_kfrag("secret-1_1", kfrag_bytes, "holder-process");
+        let msg = AOExecuteMsg::delegate_kfrag("secret-1_1", &kfrag_bytes, "holder-process");
         mock.execute("holder-process", msg).await.unwrap();
 
         let msg = AOExecuteMsg::delegate_capsule(
             "secret-1_1",
             "cap-001",
-            capsule_bytes,
+            &capsule_bytes,
             "holder-process",
         );
         mock.execute("holder-process", msg).await.unwrap();
@@ -488,14 +487,14 @@ mod tests {
     #[test]
     fn delegate_kfrag_action_name_matches_contract() {
         use crate::adapter::external::ao::AOExecuteMsg;
-        let msg = AOExecuteMsg::delegate_kfrag("kfrag-0", vec![1, 2, 3], "holder-0");
+        let msg = AOExecuteMsg::delegate_kfrag("kfrag-0", &[1, 2, 3], "holder-0");
         assert_eq!(msg.action(), "DelegateKFrag");
     }
 
     #[test]
     fn delegate_capsule_action_name_matches_contract() {
         use crate::adapter::external::ao::AOExecuteMsg;
-        let msg = AOExecuteMsg::delegate_capsule("kfrag-0", "cap-001", vec![1, 2], "holder");
+        let msg = AOExecuteMsg::delegate_capsule("kfrag-0", "cap-001", &[1, 2], "holder");
         assert_eq!(msg.action(), "DelegateCapsule");
     }
 
@@ -523,7 +522,7 @@ mod tests {
     #[test]
     fn delegate_kfrag_includes_holder_process_id() {
         use crate::adapter::external::ao::AOExecuteMsg;
-        let msg = AOExecuteMsg::delegate_kfrag("kfrag-0", vec![1, 2, 3], "holder-0");
+        let msg = AOExecuteMsg::delegate_kfrag("kfrag-0", &[1, 2, 3], "holder-0");
         let data = msg.data();
         assert_eq!(data["holder_process_id"].as_str(), Some("holder-0"));
     }

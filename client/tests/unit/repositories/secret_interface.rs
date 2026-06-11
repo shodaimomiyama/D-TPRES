@@ -52,7 +52,7 @@ impl Repository<Secret, SecretId> for MockSecretRepository {
 #[async_trait]
 impl SecretRepository for MockSecretRepository {}
 
-fn assert_send_sync<T: Send + Sync>() {}
+const fn assert_send_sync<T: Send + Sync>() {}
 
 #[test]
 fn secret_repository_is_send_sync() {

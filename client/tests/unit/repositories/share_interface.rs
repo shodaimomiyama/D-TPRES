@@ -74,7 +74,7 @@ fn create_test_share_collection(secret_id: SecretId) -> ShareCollection {
     ShareCollection::new(secret_id, 2, 3, shares).unwrap()
 }
 
-fn assert_send_sync<T: Send + Sync>() {}
+const fn assert_send_sync<T: Send + Sync>() {}
 
 #[test]
 fn share_collection_repository_is_send_sync() {

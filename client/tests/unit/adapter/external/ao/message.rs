@@ -28,7 +28,7 @@ fn test_binary_serialization() {
 
 #[test]
 fn test_ao_execute_msg_delegate_kfrag() {
-    let msg = AOExecuteMsg::delegate_kfrag("kfrag-001", vec![1, 2, 3, 4], "holder-1");
+    let msg = AOExecuteMsg::delegate_kfrag("kfrag-001", &[1, 2, 3, 4], "holder-1");
     assert_eq!(msg.action(), "DelegateKFrag");
     assert_eq!(msg.data()["kfrag_id"].as_str(), Some("kfrag-001"));
     assert_eq!(msg.data()["holder_process_id"].as_str(), Some("holder-1"));
@@ -36,8 +36,7 @@ fn test_ao_execute_msg_delegate_kfrag() {
 
 #[test]
 fn test_ao_execute_msg_delegate_capsule() {
-    let msg =
-        AOExecuteMsg::delegate_capsule("kfrag-001", "capsule-001", vec![5, 6, 7, 8], "holder-1");
+    let msg = AOExecuteMsg::delegate_capsule("kfrag-001", "capsule-001", &[5, 6, 7, 8], "holder-1");
     assert_eq!(msg.action(), "DelegateCapsule");
     assert_eq!(msg.data()["capsule_id"].as_str(), Some("capsule-001"));
     assert_eq!(msg.data()["holder_process_id"].as_str(), Some("holder-1"));
@@ -68,8 +67,7 @@ fn test_ao_query_msg_get_cfrag() {
 
 #[test]
 fn test_ao_query_msg_list_capsules() {
-    let msg =
-        AOQueryMsg::list_capsules_by_kfrag("kfrag-001", Some("cap-000".to_string()), Some(10));
+    let msg = AOQueryMsg::list_capsules_by_kfrag("kfrag-001", Some("cap-000"), Some(10));
     assert_eq!(msg.action(), "ListCapsules");
     assert_eq!(msg.data()["kfrag_id"].as_str(), Some("kfrag-001"));
     assert_eq!(msg.data()["start_after"].as_str(), Some("cap-000"));
@@ -106,7 +104,7 @@ fn test_get_cfrag_response_serialization() {
 
 #[test]
 fn test_ao_execute_msg_serialization_roundtrip() {
-    let msg = AOExecuteMsg::delegate_kfrag("kfrag-001", vec![1, 2, 3], "holder-1");
+    let msg = AOExecuteMsg::delegate_kfrag("kfrag-001", &[1, 2, 3], "holder-1");
     let json = serde_json::to_string(&msg).unwrap();
     assert!(json.contains("DelegateKFrag"));
     let deserialized: AOExecuteMsg = serde_json::from_str(&json).unwrap();

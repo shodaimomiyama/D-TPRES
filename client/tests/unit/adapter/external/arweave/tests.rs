@@ -209,10 +209,7 @@ mod integration_tests {
 
     #[allow(dead_code)]
     fn try_load_wallet_from_env() -> Option<ArweaveWallet> {
-        match ArweaveWallet::from_env() {
-            Ok(wallet) => Some(wallet),
-            Err(_) => None,
-        }
+        ArweaveWallet::from_env().ok()
     }
 
     #[tokio::test]

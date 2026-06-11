@@ -5,6 +5,9 @@
 #[cfg(target_arch = "wasm32")]
 getrandom::register_custom_getrandom!(ao_getrandom);
 
+// Only registered on wasm32; gating the fn the same way keeps host builds free
+// of dead code under -D warnings.
+#[cfg(target_arch = "wasm32")]
 pub fn ao_getrandom(buf: &mut [u8]) -> Result<(), getrandom::Error> {
     // TODO: replace with entropy from message context
     for (i, byte) in buf.iter_mut().enumerate() {

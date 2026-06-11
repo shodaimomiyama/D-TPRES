@@ -103,7 +103,7 @@ impl AOExecuteMsg {
     /// Delegate a kFrag to the Holder-Process.
     pub fn delegate_kfrag(
         kfrag_id: impl Into<String>,
-        kfrag: Vec<u8>,
+        kfrag: &[u8],
         holder_process_id: impl Into<String>,
     ) -> Self {
         Self {
@@ -120,7 +120,7 @@ impl AOExecuteMsg {
     pub fn delegate_capsule(
         kfrag_id: impl Into<String>,
         capsule_id: impl Into<String>,
-        capsule: Vec<u8>,
+        capsule: &[u8],
         holder_process_id: impl Into<String>,
     ) -> Self {
         Self {
@@ -187,7 +187,7 @@ impl AOQueryMsg {
     /// See `ao/contracts/src/handlers.rs` for the authoritative list.
     pub fn list_capsules_by_kfrag(
         kfrag_id: impl Into<String>,
-        start_after: Option<String>,
+        start_after: Option<&str>,
         limit: Option<u32>,
     ) -> Self {
         Self {
@@ -205,7 +205,7 @@ impl AOQueryMsg {
 
 /// Response from AO-native contract (HyperBEAM format).
 /// Mirrors `ao/contracts/src/message.rs :: AOResponse`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AONativeResponse {
     pub ok: bool,
     #[serde(skip_serializing_if = "Option::is_none")]

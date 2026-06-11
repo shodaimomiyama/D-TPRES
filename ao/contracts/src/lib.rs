@@ -1,11 +1,17 @@
-/// FORMIX AO-native WASM Contract for HyperBEAM (JSON-Iface)
-///
-/// Entry point ABI: handle(msg_ptr, env_ptr) -> *const u8
-/// Memory exports: malloc(size) -> *mut u8, free(ptr)
-///
-/// State lives in global Rust statics. HyperBEAM replays all messages
-/// from genesis within a single WASM instance per compute request,
-/// so globals accumulate correctly (O(n) cost, acceptable for PoC).
+// In test builds the `handle` export is compiled out, which makes the whole
+// dispatch chain (handlers, state, entry plumbing) unreachable — allow it
+// there so -D warnings only bites in production targets.
+#![cfg_attr(test, allow(dead_code, unused_imports))]
+
+//! FORMIX AO-native WASM Contract for HyperBEAM (JSON-Iface)
+//!
+//! Entry point ABI: handle(msg_ptr, env_ptr) -> *const u8
+//! Memory exports: malloc(size) -> *mut u8, free(ptr)
+//!
+//! State lives in global Rust statics. HyperBEAM replays all messages
+//! from genesis within a single WASM instance per compute request,
+//! so globals accumulate correctly (O(n) cost, acceptable for PoC).
+
 mod getrandom_impl;
 mod handlers;
 mod message;
@@ -88,9 +94,8 @@ unsafe fn read_cstr(ptr: *const u8) -> &'static [u8] {
 /// Convert AOResponse to AOS format, serialize, null-terminate, and store.
 fn write_aos_response(response: AOResponse) -> *const u8 {
     let aos = response.into_aos_response();
-    let mut json = serde_json::to_vec(&aos).unwrap_or_else(|_| {
-        br#"{"ok":false,"error":"Internal serialization error"}"#.to_vec()
-    });
+    let mut json = serde_json::to_vec(&aos)
+        .unwrap_or_else(|_| br#"{"ok":false,"error":"Internal serialization error"}"#.to_vec());
     json.push(0);
     write_response(json)
 }

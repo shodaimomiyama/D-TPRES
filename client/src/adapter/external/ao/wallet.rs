@@ -52,21 +52,21 @@ impl ArweaveJWK {
     }
 
     pub fn to_rsa_private_key(&self) -> Result<RsaPrivateKey, AOCommunicationError> {
-        let n = decode_biguint(&self.n)
+        let modulus = decode_biguint(&self.n)
             .map_err(|e| AOCommunicationError::wallet_error(format!("decoding n: {e}")))?;
-        let e = decode_biguint(&self.e)
+        let public_exponent = decode_biguint(&self.e)
             .map_err(|e| AOCommunicationError::wallet_error(format!("decoding e: {e}")))?;
-        let d = decode_biguint(&self.d)
+        let private_exponent = decode_biguint(&self.d)
             .map_err(|e| AOCommunicationError::wallet_error(format!("decoding d: {e}")))?;
-        let p = decode_biguint(&self.p)
+        let prime_p = decode_biguint(&self.p)
             .map_err(|e| AOCommunicationError::wallet_error(format!("decoding p: {e}")))?;
-        let q = decode_biguint(&self.q)
+        let prime_q = decode_biguint(&self.q)
             .map_err(|e| AOCommunicationError::wallet_error(format!("decoding q: {e}")))?;
 
-        let primes = vec![p, q];
-        RsaPrivateKey::from_components(n, e, d, primes).map_err(|e| {
-            AOCommunicationError::wallet_error(format!("constructing RSA private key: {e}"))
-        })
+        let primes = vec![prime_p, prime_q];
+        RsaPrivateKey::from_components(modulus, public_exponent, private_exponent, primes).map_err(
+            |e| AOCommunicationError::wallet_error(format!("constructing RSA private key: {e}")),
+        )
     }
 
     pub fn address(&self) -> Result<String, AOCommunicationError> {
@@ -89,7 +89,12 @@ impl ArweaveJWK {
             )));
         }
         let slice = &raw[1..9];
-        let hex: String = slice.iter().map(|b| format!("{b:02x}")).collect();
+        let hex = slice.iter().fold(String::new(), |mut acc, byte| {
+            use std::fmt::Write;
+            // write! to a String cannot fail
+            let _ = write!(acc, "{byte:02x}");
+            acc
+        });
         Ok(format!("http-sig-{hex}"))
     }
 }

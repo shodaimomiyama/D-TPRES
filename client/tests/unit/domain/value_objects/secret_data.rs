@@ -25,5 +25,5 @@ fn test_secret_data_debug_redacted() {
     let secret = SecretData::new(vec![1, 2, 3]).unwrap();
     let debug_str = format!("{:?}", secret);
     assert!(debug_str.contains("REDACTED"));
-    assert!(!debug_str.contains("1"));
+    assert!(!debug_str.contains('1'));
 }

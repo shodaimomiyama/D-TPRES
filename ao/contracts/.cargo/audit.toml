@@ -1,0 +1,15 @@
+# cargo-audit policy for the formix-ao-contract crate.
+# CI runs `cargo audit --deny warnings`, so every entry here must explain why
+# the advisory cannot be fixed by a dependency upgrade right now.
+
+[advisories]
+ignore = [
+    # bincode 1.x is unmaintained but is the project's pinned serialization
+    # format for payload data shared with the client (see serialization
+    # conventions). Migrating formats invalidates stored payloads — out of
+    # PoC scope.
+    "RUSTSEC-2025-0141",
+    # paste is unmaintained; transitive proc-macro dependency of the crypto
+    # stack, compile-time only.
+    "RUSTSEC-2024-0436",
+]
