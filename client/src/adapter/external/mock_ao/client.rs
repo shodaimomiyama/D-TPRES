@@ -18,7 +18,8 @@ use umbral_pre::{DefaultDeserialize, DefaultSerialize};
 
 use crate::adapter::errors::AOCommunicationError;
 use crate::adapter::external::ao::{
-    AOClient, AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary, GetCFragResponse,
+    AOClient, AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary, CFragEntry, GetCFragResponse,
+    GetCFragsResponse,
 };
 
 // ─── Local structs mirroring contract's StoredKeyFrag / VerificationData ──────
@@ -496,6 +497,37 @@ impl AOClient for MockAOClient {
                     kfrag_id: kfrag_id.to_string(),
                     capsule_id: capsule_id.to_string(),
                     cfrag: cfrag_data,
+                };
+                let json = serde_json::to_vec(&response).map_err(|e| {
+                    AOCommunicationError::SerializationError {
+                        details: e.to_string(),
+                    }
+                })?;
+                Ok(Binary::from(json))
+            }
+            "GetCFrags" => {
+                let capsule_id = data_str(d, "capsule_id")?;
+                let s = self.cfrag_storage.read().unwrap();
+                // mock key format: "{kfrag_id}:{capsule_id}"
+                let suffix = format!(":{capsule_id}");
+                let mut cfrags: Vec<CFragEntry> = s
+                    .get(process_id)
+                    .map(|m| {
+                        m.iter()
+                            .filter_map(|(key, bytes)| {
+                                let kfrag_id = key.strip_suffix(&suffix)?;
+                                Some(CFragEntry {
+                                    kfrag_id: kfrag_id.to_string(),
+                                    cfrag: bytes.clone(),
+                                })
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                cfrags.sort_by(|a, b| a.kfrag_id.cmp(&b.kfrag_id));
+                let response = GetCFragsResponse {
+                    capsule_id: capsule_id.to_string(),
+                    cfrags,
                 };
                 let json = serde_json::to_vec(&response).map_err(|e| {
                     AOCommunicationError::SerializationError {

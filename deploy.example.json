@@ -5,5 +5,10 @@
     "ao_mu": "https://mu.ao-testnet.xyz",
     "ao_cu": "https://cu.ao-testnet.xyz",
     "arweave": "https://arweave.net"
+  },
+  "hyperbeam": {
+    "url": "http://localhost:10000",
+    "module_id": "YOUR_CACHED_WASM_ID",
+    "process_id": "YOUR_HYPERBEAM_PROCESS_ID"
   }
 }

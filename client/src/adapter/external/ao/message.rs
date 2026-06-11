@@ -181,6 +181,20 @@ impl AOQueryMsg {
         }
     }
 
+    /// Get all cFrags for a Capsule in one response.
+    ///
+    /// Single-compute recovery path: HyperBEAM cannot restore wasm-64
+    /// snapshots across requests, so recovery must read everything from one
+    /// computed slot.
+    pub fn get_cfrags(capsule_id: impl Into<String>) -> Self {
+        Self {
+            action: "GetCFrags".to_string(),
+            data: serde_json::json!({
+                "capsule_id": capsule_id.into(),
+            }),
+        }
+    }
+
     /// List Capsules associated with a kFrag (with optional pagination).
     ///
     /// Action name: `"ListCapsules"` — must match the contract handler.
@@ -245,6 +259,19 @@ impl AONativeResponse {
 }
 
 // ─── Response sub-types (for GetCFrag deserialization) ───────────────────────
+
+/// Parsed response for a GetCFrags batch query.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetCFragsResponse {
+    pub capsule_id: String,
+    pub cfrags: Vec<CFragEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CFragEntry {
+    pub kfrag_id: String,
+    pub cfrag: Vec<u8>,
+}
 
 /// Parsed response for a GetCFrag query.
 #[derive(Debug, Clone, Serialize, Deserialize)]

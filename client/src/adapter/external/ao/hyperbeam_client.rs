@@ -40,12 +40,12 @@ impl HyperBEAMClient {
     async fn schedule(
         &self,
         process_id: &str,
-        msg: &AOExecuteMsg,
+        action: &str,
+        payload_data: &serde_json::Value,
     ) -> Result<(u16, String, Vec<(String, String)>), AOCommunicationError> {
         let url = format!("{}/{}/schedule", self.base_url(), process_id);
 
-        let action = msg.action();
-        let payload = serde_json::to_string(msg.data()).map_err(|e| {
+        let payload = serde_json::to_string(payload_data).map_err(|e| {
             AOCommunicationError::serialization_error(format!("serialize msg data: {e}"))
         })?;
         let body = payload.as_bytes();
@@ -90,12 +90,19 @@ impl HyperBEAMClient {
         Ok((status, body_text, headers))
     }
 
-    async fn compute(
+    // Drills into a sub-field of the computed slot (e.g. "results/data") and
+    // asks for the JSON codec so the response is plain JSON instead of TABM.
+    async fn compute_subpath(
         &self,
         process_id: &str,
         slot: u64,
+        subpath: &str,
     ) -> Result<(u16, String, Vec<(String, String)>), AOCommunicationError> {
-        let url = format!("{}/{}/compute", self.base_url(), process_id);
+        let url = if subpath.is_empty() {
+            format!("{}/{}/compute", self.base_url(), process_id)
+        } else {
+            format!("{}/{}/compute/{}", self.base_url(), process_id, subpath)
+        };
         let resp = self
             .http
             .get(&url)
@@ -117,31 +124,6 @@ impl HyperBEAMClient {
         Ok((status, body, headers))
     }
 
-    async fn now(
-        &self,
-        process_id: &str,
-    ) -> Result<(u16, String, Vec<(String, String)>), AOCommunicationError> {
-        let url = format!("{}/{}/now", self.base_url(), process_id);
-        let resp = self
-            .http
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| AOCommunicationError::connection_error(format!("now GET: {e}")))?;
-
-        let status = resp.status().as_u16();
-        let headers: Vec<(String, String)> = resp
-            .headers()
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
-            .collect();
-        let body = Box::pin(resp.text())
-            .await
-            .map_err(|e| AOCommunicationError::connection_error(format!("read now body: {e}")))?;
-
-        Ok((status, body, headers))
-    }
-
     fn extract_slot(headers: &[(String, String)], body: &str) -> Option<u64> {
         for (key, val) in headers {
             if key.to_lowercase() == "slot" {
@@ -155,42 +137,18 @@ impl HyperBEAMClient {
         }
         None
     }
-
-    fn parse_response(status: u16, body: &str, _headers: &[(String, String)]) -> AONativeResponse {
-        if status >= 400 {
-            return AONativeResponse::error_response(format!(
-                "HTTP {status}: {}",
-                &body[..body.len().min(200)]
-            ));
-        }
-        if let Ok(v) = serde_json::from_str::<serde_json::Value>(body) {
-            let ok = v.get("ok").and_then(|o| o.as_bool()).unwrap_or(true);
-            let error = v
-                .get("error")
-                .and_then(|e| e.as_str())
-                .map(|s| s.to_string());
-            if let Some(err) = error {
-                return AONativeResponse::error_response(err);
-            }
-            if !ok {
-                return AONativeResponse::error_response("Process returned ok=false");
-            }
-            AONativeResponse::success(v)
-        } else {
-            AONativeResponse::success(serde_json::Value::String(body.to_string()))
-        }
-    }
 }
 
-#[async_trait]
-impl AOClient for HyperBEAMClient {
-    async fn execute(
+impl HyperBEAMClient {
+    async fn schedule_and_compute(
         &self,
         process_id: &str,
-        msg: AOExecuteMsg,
-    ) -> Result<AONativeResponse, AOCommunicationError> {
+        action: &str,
+        payload_data: &serde_json::Value,
+        subpath: &str,
+    ) -> Result<(u16, String, Vec<(String, String)>), AOCommunicationError> {
         let (sched_status, sched_body, sched_headers) =
-            Box::pin(self.schedule(process_id, &msg)).await?;
+            Box::pin(self.schedule(process_id, action, payload_data)).await?;
 
         if sched_status >= 400 {
             return Err(AOCommunicationError::execution_error(
@@ -205,23 +163,57 @@ impl AOClient for HyperBEAMClient {
 
         let slot = Self::extract_slot(&sched_headers, &sched_body).unwrap_or(1);
 
-        let (comp_status, comp_body, comp_headers) =
-            Box::pin(self.compute(process_id, slot)).await?;
-
-        Ok(Self::parse_response(comp_status, &comp_body, &comp_headers))
+        Box::pin(self.compute_subpath(process_id, slot, subpath)).await
     }
+}
 
-    async fn query(
+#[async_trait]
+impl AOClient for HyperBEAMClient {
+    // Schedule-only: computing intermediate slots leaves broken wasm-64
+    // snapshots on the node (cross-request restore loses all state), so the
+    // process is computed exactly once — when query() reads the results.
+    async fn execute(
         &self,
         process_id: &str,
-        _msg: AOQueryMsg,
-    ) -> Result<Binary, AOCommunicationError> {
-        let (status, body, _headers) = Box::pin(self.now(process_id)).await?;
+        msg: AOExecuteMsg,
+    ) -> Result<AONativeResponse, AOCommunicationError> {
+        let (status, body, _headers) =
+            Box::pin(self.schedule(process_id, msg.action(), msg.data())).await?;
+
         if status >= 400 {
             return Err(AOCommunicationError::execution_error(
                 process_id,
                 format!(
-                    "now query failed (HTTP {}): {}",
+                    "schedule failed (HTTP {}): {}",
+                    status,
+                    &body[..body.len().min(200)]
+                ),
+            ));
+        }
+        Ok(AONativeResponse::success(serde_json::Value::Null))
+    }
+
+    // Read-only queries are still AO messages on HyperBEAM: schedule the
+    // query action and read the contract's JSON response from compute.
+    async fn query(
+        &self,
+        process_id: &str,
+        msg: AOQueryMsg,
+    ) -> Result<Binary, AOCommunicationError> {
+        let (status, body, _headers) = Box::pin(self.schedule_and_compute(
+            process_id,
+            msg.action(),
+            msg.data(),
+            // JSON-Iface stores the contract's response payload at results/data;
+            // the trailing device call renders it as a plain JSON body.
+            "results/data/serialize~json@1.0",
+        ))
+        .await?;
+        if status >= 400 {
+            return Err(AOCommunicationError::execution_error(
+                process_id,
+                format!(
+                    "query compute failed (HTTP {}): {}",
                     status,
                     &body[..body.len().min(200)]
                 ),

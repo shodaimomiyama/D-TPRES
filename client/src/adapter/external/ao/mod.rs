@@ -28,6 +28,6 @@ pub use config::AOConfig;
 #[cfg(feature = "hyperbeam")]
 pub use hyperbeam_client::HyperBEAMClient;
 pub use message::{
-    validate_binary, validate_id, AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary,
-    GetCFragResponse, MAX_BINARY_SIZE, MAX_ID_LENGTH,
+    validate_binary, validate_id, AOExecuteMsg, AONativeResponse, AOQueryMsg, Binary, CFragEntry,
+    GetCFragResponse, GetCFragsResponse, MAX_BINARY_SIZE, MAX_ID_LENGTH,
 };
