@@ -64,7 +64,7 @@ fn create_test_capsule(secret_id: SecretId) -> Capsule {
     Capsule::new(secret_id, vec![1, 2, 3, 4], vec![5, 6, 7, 8]).unwrap()
 }
 
-fn assert_send_sync<T: Send + Sync>() {}
+const fn assert_send_sync<T: Send + Sync>() {}
 
 #[test]
 fn capsule_repository_is_send_sync() {

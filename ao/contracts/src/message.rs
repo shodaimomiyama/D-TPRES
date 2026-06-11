@@ -8,7 +8,9 @@ pub struct AOMessage {
     pub action: String,
     /// Sender address / AO process ID
     pub from: Option<String>,
-    /// Message ID (from AO network)
+    /// Message ID (from AO network). Unread for now, but kept so the struct
+    /// mirrors the full AO message shape.
+    #[allow(dead_code)]
     pub id: Option<String>,
     /// Action-specific payload
     pub data: Option<serde_json::Value>,
@@ -58,11 +60,16 @@ pub struct AOIncomingMessage {
     pub tags: Option<Vec<Tag>>,
     #[serde(rename = "Data")]
     pub data: Option<serde_json::Value>,
+    // The remaining fields are part of the JSON-Iface wire format; they are
+    // accepted but currently unread by the contract.
     #[serde(rename = "Target")]
+    #[allow(dead_code)]
     pub target: Option<String>,
     #[serde(rename = "Module")]
+    #[allow(dead_code)]
     pub module: Option<String>,
     #[serde(rename = "Block-Height")]
+    #[allow(dead_code)]
     pub block_height: Option<serde_json::Value>,
 }
 

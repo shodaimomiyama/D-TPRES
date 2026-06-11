@@ -66,8 +66,10 @@ impl CFragRepository for MockCFragRepository {
     }
 
     async fn delete_by_secret_id(&self, secret_id: &SecretId) -> DomainResult<()> {
-        let mut storage = self.storage.write().unwrap();
-        storage.retain(|_, v| v.secret_id() != secret_id);
+        self.storage
+            .write()
+            .unwrap()
+            .retain(|_, v| v.secret_id() != secret_id);
         Ok(())
     }
 
@@ -84,7 +86,7 @@ fn create_test_cfrag(secret_id: SecretId, kfrag_id: KFragId, holder_index: u8) -
     CFrag::new(secret_id, kfrag_id, holder_index, vec![1, 2, 3, 4]).unwrap()
 }
 
-fn assert_send_sync<T: Send + Sync>() {}
+const fn assert_send_sync<T: Send + Sync>() {}
 
 #[test]
 fn cfrag_repository_is_send_sync() {

@@ -11,7 +11,7 @@ pub struct HbMultipart {
 pub fn encode_hb_nested_body(part_name: &str, items: &[(&str, &str)]) -> HbMultipart {
     let disposition = format!("form-data;name=\"{part_name}\"");
 
-    let mut kv: Vec<(&str, String)> = items.iter().map(|(k, v)| (*k, v.to_string())).collect();
+    let mut kv: Vec<(&str, String)> = items.iter().map(|(k, v)| (*k, (*v).to_string())).collect();
     kv.push(("content-disposition", disposition));
     kv.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
 
@@ -39,6 +39,7 @@ pub fn encode_hb_multipart(parts: &[(&str, &str)]) -> HbMultipart {
     assemble_multipart(&encoded)
 }
 
+#[non_exhaustive]
 pub enum BodyPart<'a> {
     Nested {
         name: &'a str,
@@ -57,7 +58,7 @@ pub fn encode_hb_mixed_body(parts: &[BodyPart]) -> HbMultipart {
             BodyPart::Nested { name, items } => {
                 let disposition = format!("form-data;name=\"{name}\"");
                 let mut kv: Vec<(&str, String)> =
-                    items.iter().map(|(k, v)| (*k, v.to_string())).collect();
+                    items.iter().map(|(k, v)| (*k, (*v).to_string())).collect();
                 kv.push(("content-disposition", disposition));
                 kv.sort_by(|a, b| a.0.as_bytes().cmp(b.0.as_bytes()));
                 let bytes: Vec<u8> = kv
@@ -66,13 +67,13 @@ pub fn encode_hb_mixed_body(parts: &[BodyPart]) -> HbMultipart {
                     .collect::<Vec<_>>()
                     .join("\r\n")
                     .into_bytes();
-                (name.to_string(), bytes)
+                ((*name).to_string(), bytes)
             }
             BodyPart::Binary { name, content } => {
                 let header = format!("content-disposition: form-data;name=\"{name}\"\r\n\r\n");
                 let mut bytes = header.into_bytes();
                 bytes.extend_from_slice(content);
-                (name.to_string(), bytes)
+                ((*name).to_string(), bytes)
             }
         })
         .collect();

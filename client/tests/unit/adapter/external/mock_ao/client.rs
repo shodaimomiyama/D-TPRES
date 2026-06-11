@@ -88,7 +88,7 @@ async fn test_mock_ao_client_new() {
 #[tokio::test]
 async fn test_execute_delegate_kfrag() {
     let client = MockAOClient::new();
-    let msg = AOExecuteMsg::delegate_kfrag("kfrag-1", vec![1, 2, 3, 4], "holder-1");
+    let msg = AOExecuteMsg::delegate_kfrag("kfrag-1", &[1, 2, 3, 4], "holder-1");
 
     let result = client.execute("process-1", msg).await;
     assert!(result.is_ok());
@@ -108,13 +108,13 @@ async fn test_execute_delegate_capsule_with_reencryption() {
     let td = create_test_kfrag_and_capsule();
 
     // Step 1: DelegateKFrag
-    let msg = AOExecuteMsg::delegate_kfrag(&td.kfrag_id, td.kfrag_bytes, "holder-1");
+    let msg = AOExecuteMsg::delegate_kfrag(&td.kfrag_id, &td.kfrag_bytes, "holder-1");
     let result = client.execute("process-1", msg).await;
     assert!(result.is_ok());
 
     // Step 2: DelegateCapsule — triggers real re-encryption
     let msg =
-        AOExecuteMsg::delegate_capsule(&td.kfrag_id, "capsule-1", td.capsule_bytes, "holder-1");
+        AOExecuteMsg::delegate_capsule(&td.kfrag_id, "capsule-1", &td.capsule_bytes, "holder-1");
     let result = client.execute("process-1", msg).await;
     assert!(result.is_ok());
 
@@ -137,16 +137,12 @@ async fn test_execute_reencrypt() {
     let td = create_test_kfrag_and_capsule();
 
     // Store kfrag at process-1
-    let msg = AOExecuteMsg::delegate_kfrag(&td.kfrag_id, td.kfrag_bytes, "holder-1");
+    let msg = AOExecuteMsg::delegate_kfrag(&td.kfrag_id, &td.kfrag_bytes, "holder-1");
     client.execute("process-1", msg).await.unwrap();
 
     // Store capsule at process-1 (Reencrypt looks up both from same process)
-    let msg = AOExecuteMsg::delegate_capsule(
-        &td.kfrag_id,
-        "capsule-1",
-        td.capsule_bytes.clone(),
-        "process-1",
-    );
+    let msg =
+        AOExecuteMsg::delegate_capsule(&td.kfrag_id, "capsule-1", &td.capsule_bytes, "process-1");
     client.execute("process-1", msg).await.unwrap();
 
     // Reencrypt on process-1
@@ -162,7 +158,7 @@ async fn test_execute_reencrypt() {
     assert!(response.ok);
 
     let cfrags = client.get_stored_cfrags("process-1");
-    assert!(cfrags.len() >= 1);
+    assert!(!cfrags.is_empty());
 }
 
 #[tokio::test]
@@ -171,11 +167,11 @@ async fn test_query_get_cfrag() {
     let td = create_test_kfrag_and_capsule();
 
     // DelegateKFrag + DelegateCapsule → triggers re-encryption → cFrag stored
-    let msg = AOExecuteMsg::delegate_kfrag(&td.kfrag_id, td.kfrag_bytes, "process-1");
+    let msg = AOExecuteMsg::delegate_kfrag(&td.kfrag_id, &td.kfrag_bytes, "process-1");
     client.execute("process-1", msg).await.unwrap();
 
     let msg =
-        AOExecuteMsg::delegate_capsule(&td.kfrag_id, "capsule-1", td.capsule_bytes, "process-1");
+        AOExecuteMsg::delegate_capsule(&td.kfrag_id, "capsule-1", &td.capsule_bytes, "process-1");
     client.execute("process-1", msg).await.unwrap();
 
     // Query the generated cFrag
@@ -210,12 +206,12 @@ async fn test_query_list_capsules_by_kfrag() {
     let client = MockAOClient::new();
 
     // Pre-register kfrag
-    let msg = AOExecuteMsg::delegate_kfrag("kfrag-1", vec![1, 2, 3], "process-1");
+    let msg = AOExecuteMsg::delegate_kfrag("kfrag-1", &[1, 2, 3], "process-1");
     client.execute("process-1", msg).await.unwrap();
 
     for i in 1..=5u8 {
         let msg =
-            AOExecuteMsg::delegate_capsule("kfrag-1", format!("capsule-{i}"), vec![i], "process-1");
+            AOExecuteMsg::delegate_capsule("kfrag-1", format!("capsule-{i}"), &[i], "process-1");
         // Will fail re-encryption (dummy kfrag), but capsule still gets stored
         let _ = client.execute("process-1", msg).await;
     }
@@ -237,7 +233,7 @@ async fn test_query_list_capsules_by_kfrag() {
 #[tokio::test]
 async fn test_dry_run() {
     let client = MockAOClient::new();
-    let msg = AOExecuteMsg::delegate_kfrag("kfrag-1", vec![1, 2, 3, 4], "holder-1");
+    let msg = AOExecuteMsg::delegate_kfrag("kfrag-1", &[1, 2, 3, 4], "holder-1");
 
     let result = client.dry_run("process-1", msg).await;
     assert!(result.is_ok());
@@ -257,7 +253,7 @@ async fn test_error_injection() {
     let result = client
         .execute(
             "process-1",
-            AOExecuteMsg::delegate_kfrag("kfrag-1", vec![1, 2, 3], "holder-1"),
+            AOExecuteMsg::delegate_kfrag("kfrag-1", &[1, 2, 3], "holder-1"),
         )
         .await;
 
@@ -272,7 +268,7 @@ async fn test_error_injection() {
     let result2 = client
         .execute(
             "process-1",
-            AOExecuteMsg::delegate_kfrag("kfrag-1", vec![1, 2, 3], "holder-1"),
+            AOExecuteMsg::delegate_kfrag("kfrag-1", &[1, 2, 3], "holder-1"),
         )
         .await;
     assert!(result2.is_ok());
@@ -287,7 +283,7 @@ async fn test_clear_error() {
     let result = client
         .execute(
             "process-1",
-            AOExecuteMsg::delegate_kfrag("kfrag-1", vec![1, 2, 3], "holder-1"),
+            AOExecuteMsg::delegate_kfrag("kfrag-1", &[1, 2, 3], "holder-1"),
         )
         .await;
 
@@ -297,7 +293,7 @@ async fn test_clear_error() {
 #[tokio::test]
 async fn test_empty_process_id_error() {
     let client = MockAOClient::new();
-    let msg = AOExecuteMsg::delegate_kfrag("kfrag-1", vec![1, 2, 3], "holder-1");
+    let msg = AOExecuteMsg::delegate_kfrag("kfrag-1", &[1, 2, 3], "holder-1");
 
     let result = client.execute("", msg).await;
     assert!(result.is_err());
@@ -314,7 +310,7 @@ async fn test_clear_storage() {
     client
         .execute(
             "process-1",
-            AOExecuteMsg::delegate_kfrag("kfrag-1", vec![1, 2, 3], "holder-1"),
+            AOExecuteMsg::delegate_kfrag("kfrag-1", &[1, 2, 3], "holder-1"),
         )
         .await
         .unwrap();
@@ -333,7 +329,7 @@ async fn test_multiple_processes() {
     client
         .execute(
             "process-1",
-            AOExecuteMsg::delegate_kfrag("kfrag-1", vec![1, 2, 3], "holder-1"),
+            AOExecuteMsg::delegate_kfrag("kfrag-1", &[1, 2, 3], "holder-1"),
         )
         .await
         .unwrap();
@@ -341,7 +337,7 @@ async fn test_multiple_processes() {
     client
         .execute(
             "process-2",
-            AOExecuteMsg::delegate_kfrag("kfrag-2", vec![4, 5, 6], "holder-2"),
+            AOExecuteMsg::delegate_kfrag("kfrag-2", &[4, 5, 6], "holder-2"),
         )
         .await
         .unwrap();

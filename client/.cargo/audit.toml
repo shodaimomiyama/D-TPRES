@@ -1,0 +1,32 @@
+# cargo-audit policy for the formix client crate.
+# CI runs `cargo audit --deny warnings`, so every entry here must explain why
+# the advisory cannot be fixed by a dependency upgrade right now.
+
+[advisories]
+ignore = [
+    # rsa: Marvin Attack timing sidechannel. No patched release exists
+    # (advisory lists no fixed version). FORMIX uses `rsa` only for local
+    # Arweave JWK signing — the attack requires a remote decryption timing
+    # oracle, which this usage does not expose. Revisit when rsa publishes a fix.
+    "RUSTSEC-2023-0071",
+    # curve25519-dalek 3.x timing variability in Scalar sub. Pulled in via
+    # cosmwasm-crypto (ed25519-zebra) for legacy CWAO compatibility; FORMIX
+    # does not call cosmwasm ed25519 verification. Fix requires the cosmwasm
+    # 2.x migration, deferred with the CWAO runtime.
+    "RUSTSEC-2024-0344",
+    # bincode 1.x is unmaintained but is the project's pinned serialization
+    # format for PublicKey/Payload data (see serialization conventions).
+    # Migrating formats invalidates stored payloads — out of PoC scope.
+    "RUSTSEC-2025-0141",
+    # derivative is unmaintained; transitive dev/test-harness dependency.
+    "RUSTSEC-2024-0388",
+    # instant is unmaintained; transitive dependency, no direct usage.
+    "RUSTSEC-2024-0384",
+    # rand unsoundness only affects `rand::rng()` combined with a custom
+    # logger that itself calls rng() re-entrantly; FORMIX does not install
+    # such a logger.
+    "RUSTSEC-2026-0097",
+    # http-types informational notice (unmaintained); transitive via the
+    # wiremock test harness only.
+    "RUSTSEC-2026-0174",
+]

@@ -652,18 +652,17 @@ fn test_full_pre_roundtrip_phase1_phase2_phase3() {
 // E2E Tests: Phase 1 → Phase 2 → Phase 3 via Workflow Services (GAP-5)
 // ============================================================================
 
-/// Wire up both sharing and recovery workflow services with shared MockAOClient + Arweave.
-fn setup_e2e_services() -> (
+type E2eCryptoService = ServiceCryptoServiceImpl<CoreCryptoServiceImpl>;
+type E2eStorageService =
+    ServiceStorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<MockAOClient>>;
+type E2eServices = (
     Arc<CoreCryptoServiceImpl>,
-    SecretSharingWorkflowServiceImpl<
-        ServiceCryptoServiceImpl<CoreCryptoServiceImpl>,
-        ServiceStorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<MockAOClient>>,
-    >,
-    SecretRecoveryWorkflowServiceImpl<
-        ServiceCryptoServiceImpl<CoreCryptoServiceImpl>,
-        ServiceStorageServiceImpl<ArweaveStorageServiceImpl, ContractStorageImpl<MockAOClient>>,
-    >,
-) {
+    SecretSharingWorkflowServiceImpl<E2eCryptoService, E2eStorageService>,
+    SecretRecoveryWorkflowServiceImpl<E2eCryptoService, E2eStorageService>,
+);
+
+/// Wire up both sharing and recovery workflow services with shared MockAOClient + Arweave.
+fn setup_e2e_services() -> E2eServices {
     let core_crypto = Arc::new(CoreCryptoServiceImpl::new());
     let service_crypto = Arc::new(ServiceCryptoServiceImpl::new(Arc::clone(&core_crypto)));
     let mock_ao = Arc::new(MockAOClient::new());
