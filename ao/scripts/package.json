@@ -1,0 +1,8 @@
+{
+  "name": "formix-ao-scripts",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@ardrive/turbo-sdk": "^1.20.0"
+  }
+}
