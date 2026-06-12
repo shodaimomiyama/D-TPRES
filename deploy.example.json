@@ -7,8 +7,9 @@
     "arweave": "https://arweave.net"
   },
   "hyperbeam": {
-    "url": "http://localhost:10000",
-    "module_id": "YOUR_CACHED_WASM_ID",
-    "process_id": "YOUR_HYPERBEAM_PROCESS_ID"
+    "url": "https://YOUR_PUBLIC_OR_LOCAL_HYPERBEAM_URL",
+    "image_id": "YOUR_CACHED_WASM_IMAGE_ID",
+    "process_id": "YOUR_HYPERBEAM_PROCESS_ID",
+    "deployed_at": "1970-01-01T00:00:00Z"
   }
 }

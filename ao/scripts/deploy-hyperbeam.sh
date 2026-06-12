@@ -4,10 +4,15 @@ set -euo pipefail
 # HyperBEAM E2E test runner
 # Prerequisites: running HyperBEAM node, WALLET_PATH, WASM target installed
 #
-# Usage: WALLET_PATH=/path/to/wallet.json ./ao/scripts/deploy-hyperbeam.sh
+# Usage:
+#   WALLET_PATH=/path/to/wallet.json ./ao/scripts/deploy-hyperbeam.sh
+#   # Against a public endpoint (image caching still happens over local RPC):
+#   WALLET_PATH=... HYPERBEAM_URL=https://node.example.com ./ao/scripts/deploy-hyperbeam.sh
 
 HB_PORT="${HB_PORT:-10000}"
 HB_URL="http://localhost:${HB_PORT}"
+# Endpoint the E2E test talks to; defaults to the local node.
+HYPERBEAM_URL="${HYPERBEAM_URL:-${HB_URL}}"
 
 echo "=== HyperBEAM E2E Test Runner ==="
 
@@ -29,7 +34,14 @@ if ! curl -sf "${HB_URL}/~meta@1.0/info" > /dev/null 2>&1; then
     echo "  Start it with: cd hyperbeam-sandbox && ./scripts/start.sh"
     exit 1
 fi
-echo "[OK] HyperBEAM: ${HB_URL}"
+echo "[OK] HyperBEAM (local): ${HB_URL}"
+if [ "$HYPERBEAM_URL" != "$HB_URL" ]; then
+    if ! curl -sf "${HYPERBEAM_URL}/~meta@1.0/info" > /dev/null 2>&1; then
+        echo "ERROR: public endpoint not reachable at ${HYPERBEAM_URL}"
+        exit 1
+    fi
+    echo "[OK] HyperBEAM (public endpoint): ${HYPERBEAM_URL}"
+fi
 
 # Repo has no root cargo workspace — client/ and ao/contracts/ are standalone crates,
 # so each cargo invocation needs an explicit manifest path.
@@ -74,7 +86,27 @@ echo "[OK] Image ID: $WASM_IMAGE_ID"
 
 # 5. Run E2E test
 echo "Running E2E test..."
-export WASM_IMAGE_ID
+export WASM_IMAGE_ID HYPERBEAM_URL
+TEST_LOG="$(mktemp -t formix-e2e).log"
 cargo test --manifest-path "${REPO_ROOT}/client/Cargo.toml" \
-    --features hyperbeam test_hyperbeam_e2e -- --ignored --nocapture
+    --features hyperbeam test_hyperbeam_e2e -- --ignored --nocapture \
+    2>&1 | tee "$TEST_LOG"
+
+# 6. Record the deployment so the run is reproducible (DoD: ao/deploy.json)
+PROCESS_ID="$(grep -oE 'Process spawned: [A-Za-z0-9_-]+' "$TEST_LOG" | tail -1 | awk '{print $3}')"
+if [ -n "$PROCESS_ID" ]; then
+    DEPLOYED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    cat > "${REPO_ROOT}/ao/deploy.json" <<JSON
+{
+  "hyperbeam": {
+    "url": "${HYPERBEAM_URL}",
+    "image_id": "${WASM_IMAGE_ID}",
+    "process_id": "${PROCESS_ID}",
+    "deployed_at": "${DEPLOYED_AT}"
+  }
+}
+JSON
+    echo "[OK] Recorded deployment to ao/deploy.json (process_id: ${PROCESS_ID})"
+fi
+rm -f "$TEST_LOG"
 echo "=== DONE ==="
