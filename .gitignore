@@ -22,3 +22,7 @@ ao/logs
 .mcp.json
 
 discuss/
+
+# FORMIX anchor exports (generated)
+ao/anchor-export/
+ao/scripts/node_modules/
