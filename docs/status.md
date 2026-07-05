@@ -1,6 +1,6 @@
 ---
 title: "FORMIX Development Status"
-version: "2.2.0"
+version: "2.4.0"
 last_updated: "2026-05-06"
 author: "FORMIX Development Team"
 status: "active"
@@ -169,6 +169,8 @@ status: "active"
 | ArweaveClient Tests | ✅ | ✅ | Arweave transaction signing/verification |
 | E2E arlocal Investigation | 🟡 | 🟡 | Local Arweave testing setup |
 | HyperBEAM E2E (`test_hyperbeam_e2e`) | ✅ | ✅ | share() → recover() against a real local HyperBEAM node; run via `ao/scripts/deploy-hyperbeam.sh` |
+| Public endpoint E2E | ✅ | ✅ | Same E2E via a public tunnel (`HYPERBEAM_URL`); deployment recorded in `ao/deploy.json` |
+| Arweave anchoring (`anchor-arweave.mjs`) | ✅ | ✅ | Module + scheduler-signed assignment log anchored to Arweave L1 (Turbo/L1 fallback) |
 
 ---
 
@@ -211,6 +213,7 @@ status: "active"
 
 | Version | Date | Changes | Author |
 |---------|------|---------|--------|
+| 2.4.0 | 2026-07-05 | PoC MVP production: public-endpoint E2E (`HYPERBEAM_URL` + `ao/deploy.json` record), Arweave L1 anchoring of module + assignment log (`anchor-arweave.mjs`), README "Production Setup (HyperBEAM)", legacy `deploy.js` removed, dep audit bumps (#104/#105/#108/#110/#91) | FORMIX Development Team |
 | 2.3.0 | 2026-06-11 | Local HyperBEAM E2E green: signer keyid fix, WASM canonicalization (wasm-tools), schedule-only execute + single-compute batch GetCFrags recovery, Combined-role inline submit delivery, CI/lint/audit green (#95-#102) | FORMIX Development Team |
 | 2.2.0 | 2026-05-06 | AO Contract ABI migration: JSON-Iface compatible handle(msg_ptr, env_ptr), AO Tags message parsing, AOS response format, removed dead CosmWasm code | FORMIX Development Team |
 | 2.1.0 | 2026-02-23 | Extract all inline tests from client/src/ to client/tests/unit/ (273 unit tests, 0 inline tests remaining) | FORMIX Development Team |

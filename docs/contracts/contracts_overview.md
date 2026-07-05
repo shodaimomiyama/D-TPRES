@@ -40,7 +40,8 @@ InstantiateMsg { process_id: String }
 
 | バリアント | フィールド | 説明 |
 |----------|----------|------|
-| `GetCFrag` | kfrag_id, capsule_id | 暗号フラグメントを取得 |
+| `GetCFrag` | kfrag_id, capsule_id | 単一の暗号フラグメントを取得 |
+| `GetCFrags` | capsule_id | capsuleに紐づく全cFragを一括取得（single-compute recovery用） |
 | `ListCapsulesByKFrag` | kfrag_id, start_after, limit | kFragに対応するカプセル一覧（ページネーション付き） |
 
 ### バリデーション（`ValidateMessage`トレイト）
