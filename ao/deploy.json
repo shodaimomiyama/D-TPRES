@@ -1,8 +1,12 @@
 {
   "hyperbeam": {
-    "url": "https://beliefs-apartments-tackle-forgotten.trycloudflare.com",
+    "url": "https://260e5186856076.lhr.life",
     "image_id": "AaxzQClpMJdaQEl9pG-1yIaZnh4oBOLqkgs04BzTF4o",
-    "process_id": "lElBQEIMiAw57vRV3fvirpBlcbPO1amXLwa_a1pah-o",
-    "deployed_at": "2026-06-12T00:25:31Z"
+    "process_id": "lQjYYokaQimZqwYMWc8srp6f0oghPs5lTIB64oNfCLw",
+    "deployed_at": "2026-07-05T04:46:12Z",
+    "anchor": {
+      "schedule-export": "MKN8VQ2UZkgZ4YuGQGmKsm-qI4x7GDkC54_v559jeeU",
+      "wasm-module": "5nOd_VPMRM_I-jIwPDjd3vwdIxGY9HVFyfpE5AUhMFI"
+    }
   }
 }
