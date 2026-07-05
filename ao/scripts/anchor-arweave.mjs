@@ -122,20 +122,13 @@ async function main() {
   }
   const jwk = JSON.parse(await readFile(walletPath, "utf8"));
 
-  const { TurboFactory } = await import("@ardrive/turbo-sdk");
-  const turbo = TurboFactory.authenticated({ privateKey: jwk });
-
-  const uploaded = [];
-  for (const item of items) {
-    console.log(`[anchor] uploading ${item.label} (${item.data.length} bytes)...`);
-    const result = await turbo.uploadFile({
-      fileStreamFactory: () => Readable.from(item.data),
-      fileSizeFactory: () => item.data.length,
-      dataItemOpts: { tags: item.tags },
-    });
-    console.log(`[anchor]   -> ${item.label}: ${result.id}`);
-    uploaded.push({ label: item.label, id: result.id });
-  }
+  // Upload method: `turbo` (bundled, needs Turbo credits) or `l1` (direct
+  // top-level Arweave transactions, paid in AR). `auto` (default) uses Turbo
+  // when the account has enough credits, otherwise falls back to L1 — L1 is
+  // also the stronger attribution (permanent on-chain txs, no bundler).
+  const method = (process.env.ANCHOR_METHOD ?? "auto").toLowerCase();
+  const uploaded =
+    (await tryTurbo(jwk, items, method)) ?? (await uploadL1(jwk, items, method));
 
   // 2. Record the anchor IDs next to the deployment record.
   const deployJson = await loadDeployJson();
@@ -154,6 +147,83 @@ async function main() {
     const found = await pollGateway(id);
     console.log(`[anchor] gateway ${found ? "indexed" : "NOT YET indexed"}: ${label} (${id})`);
   }
+}
+
+// Upload via Turbo if the account has enough credits (or method forces it).
+// Returns the uploaded list, or null to signal "fall back to L1".
+async function tryTurbo(jwk, items, method) {
+  if (method === "l1") return null;
+
+  const { TurboFactory } = await import("@ardrive/turbo-sdk");
+  const turbo = TurboFactory.authenticated({ privateKey: jwk });
+  const totalBytes = items.reduce((n, it) => n + it.data.length, 0);
+
+  const [{ winc: costWinc }] = await turbo.getUploadCosts({ bytes: [totalBytes] });
+  const { winc: balanceWinc } = await turbo.getBalance();
+  const enough = BigInt(balanceWinc) >= BigInt(costWinc);
+  console.log(`[anchor] Turbo balance ${balanceWinc} winc, need ${costWinc} winc`);
+
+  if (!enough) {
+    if (method === "turbo") {
+      throw new Error(
+        `insufficient Turbo credits (${balanceWinc} < ${costWinc}); top up or use ANCHOR_METHOD=l1`,
+      );
+    }
+    console.log("[anchor] insufficient Turbo credits — falling back to direct L1 upload");
+    return null;
+  }
+
+  const uploaded = [];
+  for (const item of items) {
+    console.log(`[anchor] uploading ${item.label} via Turbo (${item.data.length} bytes)...`);
+    const result = await turbo.uploadFile({
+      fileStreamFactory: () => Readable.from(item.data),
+      fileSizeFactory: () => item.data.length,
+      dataItemOpts: { tags: item.tags },
+    });
+    console.log(`[anchor]   -> ${item.label}: ${result.id}`);
+    uploaded.push({ label: item.label, id: result.id });
+  }
+  return uploaded;
+}
+
+// Upload each item as a direct top-level Arweave transaction, paid in AR.
+async function uploadL1(jwk, items, method) {
+  const { default: Arweave } = await import("arweave");
+  const arweave = Arweave.init({ host: "arweave.net", port: 443, protocol: "https" });
+
+  const address = await arweave.wallets.jwkToAddress(jwk);
+  const balanceWinston = await arweave.wallets.getBalance(address);
+
+  let totalCost = 0n;
+  for (const item of items) {
+    totalCost += BigInt(await arweave.transactions.getPrice(item.data.length));
+  }
+  console.log(
+    `[anchor] L1 wallet ${address}: balance ${balanceWinston} winston, tx cost ~${totalCost} winston`,
+  );
+  if (BigInt(balanceWinston) < totalCost) {
+    throw new Error(
+      `insufficient AR for L1 upload (${balanceWinston} < ${totalCost} winston). Fund ${address}.`,
+    );
+  }
+
+  const uploaded = [];
+  for (const item of items) {
+    console.log(`[anchor] uploading ${item.label} via L1 (${item.data.length} bytes)...`);
+    const tx = await arweave.createTransaction({ data: item.data }, jwk);
+    for (const tag of item.tags) tx.addTag(tag.name, tag.value);
+    await arweave.transactions.sign(tx, jwk);
+    const uploader = await arweave.transactions.getUploader(tx);
+    while (!uploader.isComplete) {
+      await uploader.uploadChunk();
+      process.stdout.write(`\r[anchor]   ${item.label}: ${uploader.pctComplete}%   `);
+    }
+    process.stdout.write("\n");
+    console.log(`[anchor]   -> ${item.label}: ${tx.id}`);
+    uploaded.push({ label: item.label, id: tx.id });
+  }
+  return uploaded;
 }
 
 async function pollGateway(id, attempts = 10, intervalMs = 15_000) {

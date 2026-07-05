@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@ardrive/turbo-sdk": "^1.20.0"
+    "@ardrive/turbo-sdk": "^1.20.0",
+    "arweave": "^1.15.7"
   }
 }
