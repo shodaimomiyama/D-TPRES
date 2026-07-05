@@ -171,45 +171,74 @@ cargo run --example basic_usage
 > Phase 3 (recover) requires cFrags from AO Holder processes,
 > so `recover()` will return `ResourceNotFound` with the mock backend.
 
-### Production Setup
+### Production Setup (HyperBEAM)
 
-#### 1. Deploy the FORMIX WASM module and spawn a process
+FORMIX runs its AO-native contract on a [HyperBEAM](https://github.com/permaweb/HyperBEAM)
+node via the `~wasm64@1.0` device (JSON-Iface stack). The end-to-end
+`share()` → `recover()` flow is exercised by
+[`ao/scripts/deploy-hyperbeam.sh`](ao/scripts/deploy-hyperbeam.sh), which builds
+the contract, caches the image on the node, spawns a process, and runs the E2E
+test against it.
 
-FORMIX AO processes use [cwao](https://github.com/nicholasgasior/cwao) (CosmWasm on AO). Use the scripts in the `ao/` directory:
+#### Prerequisites
+
+- A running HyperBEAM node (see the node's own docs to start one; the E2E was
+  validated against the sandbox-pinned build). The deploy script talks to it at
+  `http://localhost:10000` by default.
+- The node **operator** Arweave JWK (used to sign the cache write — HyperBEAM
+  only accepts cache writes from wallets in its `cache_writers` list).
+- [`wasm-tools`](https://github.com/bytecodealliance/wasm-tools)
+  (`cargo install wasm-tools`) — the release build carries overlong
+  `call_indirect` LEB encodings from Rust ≥1.82 std that HyperBEAM's WAMR
+  rejects; the script canonicalizes the module with a `wasm-tools` round-trip.
+- `escript` (ships with Erlang/OTP) — used to cache the image over the node's
+  RPC (raw `~cache@1.0` HTTP writes store binaries at `data/<hash>`, which
+  `dev_wasm:init` cannot resolve as an image).
+
+#### 1. Deploy + run E2E
 
 ```bash
-cd ao
-yarn install
+# Against a local node:
+WALLET_PATH=/path/to/operator-jwk.json ./ao/scripts/deploy-hyperbeam.sh
 
-# Generate a wallet (if you don't have one)
-yarn keygen my-wallet
-
-# Deploy the WASM module to Arweave → outputs module_id
-yarn deploy --wallet my-wallet
-
-# Spawn an AO process → outputs process_id
-yarn instantiate --wallet my-wallet --module_id <MODULE_ID> --scheduler <SCHEDULER_ADDRESS>
+# Against a public endpoint (image caching still uses the local RPC):
+WALLET_PATH=/path/to/operator-jwk.json \
+HYPERBEAM_URL=https://your-node.example.com \
+  ./ao/scripts/deploy-hyperbeam.sh
 ```
 
-#### 2. Create config files
-
-**`deploy.json`** — Save the IDs from step 1 ([example](deploy.example.json)):
+On success the script prints `E2E SUCCESS: recovered secret matches original`
+and records the deployment to [`ao/deploy.json`](deploy.example.json):
 
 ```json
 {
-  "module_id": "MODULE_ID_FROM_DEPLOY",
-  "process_id": "PROCESS_ID_FROM_INSTANTIATE",
-  "gateways": {
-    "ao_mu": "https://mu.ao-testnet.xyz",
-    "ao_cu": "https://cu.ao-testnet.xyz",
-    "arweave": "https://arweave.net"
+  "hyperbeam": {
+    "url": "https://your-node.example.com",
+    "image_id": "CACHED_WASM_IMAGE_ID",
+    "process_id": "SPAWNED_PROCESS_ID",
+    "deployed_at": "2026-07-05T00:00:00Z"
   }
 }
 ```
 
-The `gateways` field is optional — testnet defaults are used when omitted.
+#### 2. Anchor to Arweave (optional but recommended)
 
-**`wallet.json`** — Your Arweave JWK wallet file (the same one used in step 1, located at `ao/.cwao/accounts/<name>.json`).
+AO's trust model derives process state deterministically from the WASM module
+plus the ordered, scheduler-signed assignment log. Anchoring both to Arweave
+makes the deployment re-executable and verifiable by anyone running the same
+HyperBEAM build, independent of your node's availability:
+
+```bash
+# Reads process_id / image_id from ao/deploy.json; wallet pays for the upload.
+ANCHOR_WALLET_PATH=/path/to/funded-jwk.json node ao/scripts/anchor-arweave.mjs
+
+# Preview without uploading (no funds needed):
+node ao/scripts/anchor-arweave.mjs --dry-run
+```
+
+`ANCHOR_METHOD=auto` (default) uploads via Turbo when the account has credits,
+otherwise falls back to direct top-level Arweave transactions paid in AR
+(`ANCHOR_METHOD=l1`). The resulting tx IDs are written back to `ao/deploy.json`.
 
 #### 3. Initialize the production client
 
@@ -217,7 +246,7 @@ The `gateways` field is optional — testnet defaults are used when omitted.
 use formix::actions::ProductionFormixClient;
 
 let client = ProductionFormixClient::from_deploy_file(
-    "deploy.json",
+    "ao/deploy.json",
     "wallet.json",
 )?;
 ```
@@ -301,15 +330,16 @@ match result {
 
 ### Environment Variables
 
-For production deployments, gateway URLs can be configured in `deploy.json` or passed directly when constructing the AO client:
+The HyperBEAM deploy / anchor scripts read the following:
 
-| Variable | Default | Description |
+| Variable | Used by | Description |
 |----------|---------|-------------|
-| `ao_mu` | `https://mu.ao-testnet.xyz` | AO Messenger Unit URL |
-| `ao_cu` | `https://cu.ao-testnet.xyz` | AO Compute Unit URL |
-| `arweave` | `https://arweave.net` | Arweave gateway URL |
+| `WALLET_PATH` | `deploy-hyperbeam.sh` | Node operator Arweave JWK (signs the cache write) |
+| `HYPERBEAM_URL` | `deploy-hyperbeam.sh` | Endpoint the E2E targets (default `http://localhost:10000`) |
+| `ANCHOR_WALLET_PATH` | `anchor-arweave.mjs` | Arweave JWK that pays for the anchor upload |
+| `ANCHOR_METHOD` | `anchor-arweave.mjs` | `auto` (default) / `turbo` / `l1` |
 
-These are set in the `gateways` field of `deploy.json`. The timeout defaults to 30,000ms.
+The endpoint and IDs of the last deployment are recorded in `ao/deploy.json`.
 
 ### Feature Flags
 

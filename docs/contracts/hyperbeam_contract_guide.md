@@ -199,6 +199,7 @@ pub fn dispatch(state: &mut ProcessState, msg: AOMessage) -> AOResponse {
 
         // 全ロール（Query）
         (_, "GetCFrag")      => handle_get_cfrag(state, msg),
+        (_, "GetCFrags")     => handle_get_cfrags(state, msg),   // capsule の全 cFrag を一括返却
         (_, "ListCapsules")  => handle_list_capsules(state, msg),
 
         _ => error("Action not permitted for role"),
@@ -211,13 +212,23 @@ pub fn dispatch(state: &mut ProcessState, msg: AOMessage) -> AOResponse {
 | ハンドラー | やること | 認可 | 冪等 |
 |------------|----------|------|------|
 | `handle_init` | ロール設定 + owner_id 登録 | from が必須 | No (二重初期化は拒否) |
-| `handle_delegate_kfrag` | kFrag 保存 + Holder に SubmitKFrag 転送 | owner_id 一致 | No |
-| `handle_delegate_capsule` | Capsule 保存 + Holder に SubmitCapsule 転送 | owner_id 一致 | No |
+| `handle_delegate_kfrag` | kFrag 保存 + Holder に SubmitKFrag 転送（Combined は後述のインライン配送） | owner_id 一致 | No |
+| `handle_delegate_capsule` | Capsule 保存 + Holder に SubmitCapsule 転送（Combined は後述のインライン配送） | owner_id 一致 | No |
 | `handle_submit_kfrag` | bincode 検証 → kFrag 保存 | owner_id 一致 | **Yes** (既存なら skip) |
 | `handle_submit_capsule` | Capsule 保存 → **即座に再暗号化** | owner_id 一致 | **Yes** (cFrag 既存なら skip) |
 | `handle_reencrypt` | 既存 Capsule の再暗号化リトライ | owner_id 一致 | No |
-| `handle_get_cfrag` | cFrag を返す | 認可不要 | - |
+| `handle_get_cfrag` | 単一 cFrag を返す | 認可不要 | - |
+| `handle_get_cfrags` | capsule に紐づく全 cFrag を一括返却 | 認可不要 | - |
 | `handle_list_capsules` | kFrag に紐づく capsule ID 一覧 | 認可不要 | - |
+
+#### Combined ロールのインライン配送
+
+Single-process (Combined) モデルでは、このプロセス自身が Holder も兼ねる。
+HyperBEAM のこのフローでは process の outbox が push されないため、
+`DelegateKFrag`/`DelegateCapsule` は outgoing メッセージを発行せず、
+同一メッセージ処理内で `handle_submit_kfrag`/`handle_submit_capsule` を
+**インラインで直接呼び出す**。これにより再暗号化が実際に走り、cFrag が生成される。
+(Owner/Holder が別プロセスの構成では従来どおり outgoing メッセージを発行する。)
 
 ### 再暗号化の中身 (`perform_reencryption`)
 
@@ -234,10 +245,30 @@ Step 5: KeyFrag::from_bytes → key_frag.verify(verifying_pk, delegating_pk, rec
         → 検証失敗なら拒否（改竄検知）
 Step 6: Capsule::from_bytes
 Step 7: umbral_pre::reencrypt(&capsule, verified_kfrag) → cFrag 生成
-Step 8: cFrag を bincode シリアライズして返す
+Step 8: cFrag を rmp_serde (cfrag.to_bytes()) の raw bytes として保存
+        ※ クライアントは CapsuleFrag::from_bytes で直接復元するため、
+          bincode でラップしない（ラップすると復元が壊れる）
 ```
 
 ---
+
+## HyperBEAM 実行モデル固有の注意
+
+E2E 検証で判明した、`~wasm64@1.0` / JSON-Iface スタック固有の制約:
+
+- **エラーも `ok: true` で返す**: `dev_json_iface` は WASM 出力を
+  `{"ok": true, "response": ...}` の形でしか受け付けず、`ok: false` を返すと
+  compute の replay 全体が `try_clause` で異常終了する。そのため
+  `AOResponse::error(...)` も AOS 形式では `ok: true` + `{"Error": "..."}` として
+  シリアライズする（`message.rs::into_aos_response`）。
+- **snapshot がリクエスト間で復元されない**: `~wasm64@1.0` の
+  serialize/deserialize は memory64 で linear memory を正しく復元できない
+  (sandbox M4 findings)。そのためクライアントは 1 回の compute で
+  全メッセージを genesis から replay させる設計になっており、recovery では
+  `GetCFrags` バッチクエリで全 cFrag を単一 compute から取得する。
+- **クエリ結果の取り出し**: JSON-Iface はコントラクト応答を
+  `results/data` に格納する。クライアントは
+  `compute/results/data/serialize~json@1.0` サブパスで JSON として取得する。
 
 ## 5. getrandom_impl.rs — WASM 用乱数
 
