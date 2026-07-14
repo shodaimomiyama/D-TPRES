@@ -71,7 +71,7 @@ jobs:
           printf "Codex workspace prepared at %s with %s tracked files.\n" "${WORKDIR}" "$(wc -l < "${CHANGED_LIST}")"
 
       - name: Collect Codex conversation context
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           CONVERSATION_MD_PATH: .codex/pr-changes/.github/codex-conversations.md
         with:
@@ -239,7 +239,7 @@ jobs:
 
       - name: Post Codex review comment
         if: ${{ steps.codex.outputs.final-message != '' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           CODEX_REVIEW_COMMENT: ${{ steps.codex.outputs.final-message }}
           CODEX_CONVERSATION_JSON: .codex/pr-changes/.github/codex-conversations.json
